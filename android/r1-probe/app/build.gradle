@@ -77,13 +77,13 @@ def generateEsphomeApi = tasks.register("generateEsphomeApi", Exec) {
 }
 tasks.named("preBuild").configure { dependsOn(generateEsphomeApi) }
 
-// Public clones build an isolated host-check package. Home builds require private assets.
+// Public clones build an isolated host-check package. Device builds require private assets.
 def verifyPrompts = tasks.register("verifyPrompts") {
     doLast {
         def base = file(hostCheck ? "../../../local-deps/host-prompts/assets" : "../../../local-deps/private-prompts/assets")
         def paths = new groovy.json.JsonSlurper().parse(file("../../../tools/dev/prompt-layout.json"))
         if (!paths.every { new File(base, it).isFile() }) {
-            throw new GradleException("Missing prompt assets: run tools/dev/prepare.py for -PhostCheck=true; home builds need local private-prompts assets.")
+            throw new GradleException("Missing prompt assets: run tools/dev/prepare.py for -PhostCheck=true; device builds need local private-prompts assets.")
         }
     }
 }

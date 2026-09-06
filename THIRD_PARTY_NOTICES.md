@@ -13,7 +13,7 @@
 | pymicro-features / TensorFlow microfrontend | `96bd69cfad79aa67697e176570d3dd87052c3def`；源码中各自 Apache-2.0/BSD 声明 | 固定提交下载，保留下载源码的许可与版权头 |
 | TensorFlow Lite | 2.10.0；Apache-2.0 | AAR 固定 SHA-256 下载，不入 Git |
 | Alexa microWakeWord v2 | 固定来源见 `docs/2026-09-05-alexa-pretrained.md`；仓库声明 Apache-2.0，完整训练数据审计未完成 | 权重及构建 APK 不公开上传，不宣称完整分发审核已通过 |
-| Piper huayan 合成提示音 | 模型卡的数据集许可为 Unknown | 原中文素材只留家中 `local-deps/private-prompts/`，不上传；原模型卡保留审计用途 |
+| Piper huayan 合成提示音 | 模型卡的数据集许可为 Unknown | 原中文素材只保留在本地 `local-deps/private-prompts/`，不上传；原模型卡保留审计用途 |
 | 主机测试提示音 | 本项目生成的 440 Hz 正弦音 | 准备脚本生成到忽略目录，不包含语音；仅用于隔离包名的 hostcheck 构建 |
 
 公开仓库不包含原厂 APK、固件、音频底层库、家庭录音、HA 私有路由源码或签名密钥。公开源码不等于已授权分发包含全部依赖的产品 APK；本次不创建二进制 Release。

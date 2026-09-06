@@ -11,7 +11,7 @@ python3 tools/dev/prepare.py
 bash tools/dev/check.sh
 ```
 
-主机包使用 `-PhostCheck=true`、独立包名 `dev.sewellzhong.r1probe.hostcheck` 与合成测试音，不用于部署。家中部署构建省略此参数，必须有原签名和 `local-deps/private-prompts/assets/`。JDK 17 与 Android SDK 通过环境变量配置。
+主机包使用 `-PhostCheck=true`、独立包名 `dev.sewellzhong.r1probe.hostcheck` 与合成测试音，不用于部署。设备部署构建省略此参数，必须有原签名和 `local-deps/private-prompts/assets/`。JDK 17 与 Android SDK 通过环境变量配置。
 
 固定依赖由准备脚本校验与重建，Gradle 自动生成 ESPHome 协议 Java 代码。
 

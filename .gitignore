@@ -28,7 +28,7 @@ local-models/
 # Local bounded diagnostic recordings and exports
 test-results/**/*.r1diag
 
-# Public repository: raw evidence stays on the home workstation.
+# Public repository: raw evidence stays on the local workstation.
 /test-results/*
 !/test-results/README.md
 !/test-results/public/

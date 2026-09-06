@@ -61,7 +61,7 @@
 
 原始音频、旧 APK 和源码副本的校验索引及恢复方法见[归档说明](../test-results/README.md)。
 
-## 跨地点开发
+## 开发与验证
 
 - [Linux 开发与自动检查](development.md)
 - [实机待验证清单](device-validation.md)

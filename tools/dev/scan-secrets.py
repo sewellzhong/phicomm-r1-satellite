@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scan only the proposed public worktree, never ignored household files."""
+"""Scan only the proposed public worktree, never ignored private local files."""
 from pathlib import Path
 import shutil
 import subprocess

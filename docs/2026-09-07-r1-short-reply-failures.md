@@ -16,7 +16,7 @@
 
 HA 已部署源码与本地一致。普通“好”被分类器无条件归为操作确认，是可以复现的对话路由缺陷。已在 Home AI 项目修正并部署 domestic_ai 2.1.3 / conversation_router 2.0.2：无待确认操作的“是/是的/好/好的”进入现有会话且不带工具，有待确认操作时仍走原校验。“确认/确定/执行”仍为显式确认；不把“4”全局替换为“是”。R1 APK 仍是 v62。
 
-同版本 HA 环境 58 项测试、配置检查、真实 HA 六项基础验证及意图到 TTS 均通过；R1 重连后 listening、last_error=null。完整实现、命令、回退与边界见 Home AI 修复记录（关联项目文档，仅家中可用）。本轮证据在 `test-results/2026-09-07-r1-sample01-short-replies/`。
+同版本 HA 环境 58 项测试、配置检查、真实 HA 六项基础验证及意图到 TTS 均通过；R1 重连后 listening、last_error=null。完整实现、命令、回退与边界见 Home AI 修复记录（关联项目文档，仅本地可用）。本轮证据在 `test-results/2026-09-07-r1-sample01-short-replies/`。
 
 ## 后续统一验证时恢复的项目（当前暂停）
 
