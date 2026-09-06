@@ -251,6 +251,3 @@ for source_name in voice_communication voice_recognition mic; do
 done
 
 echo "Controlled capture and AudioTrack playback completed; audible and intelligibility confirmation remain manual."
-
-
-

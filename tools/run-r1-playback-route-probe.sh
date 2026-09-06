@@ -110,6 +110,3 @@ adb_target logcat -d -s R1Audio:V '*:S' >"$EVIDENCE_DIR/playback-logcat.txt"
 grep -F "nonce=${NONCE}" "$EVIDENCE_DIR/playback-logcat.txt" \
     | grep -F R1_AUDIO_PLAYBACK_COMPLETE >"$EVIDENCE_DIR/playback-complete.txt"
 snapshot after-playback
-
-
-

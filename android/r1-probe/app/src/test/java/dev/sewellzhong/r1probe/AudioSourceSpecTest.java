@@ -17,4 +17,3 @@ public final class AudioSourceSpecTest {
         AudioSourceSpec.nameOf(99);
     }
 }
-

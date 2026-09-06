@@ -103,6 +103,3 @@ adb_target pull "$metadata_path" "$AUDIO_DIR/java-processed.meta.txt" >/dev/null
     >"$AUDIO_DIR/python-java-comparison.json"
 completed=true
 echo "R1 Java processing benchmark completed."
-
-
-

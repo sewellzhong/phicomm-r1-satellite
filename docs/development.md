@@ -16,7 +16,7 @@ docker pull ghcr.io/home-assistant/home-assistant@sha256:56690a89c79a0de98035e17
 bash tools/dev/check.sh
 ```
 
-准备流程需要互联网；HA 测试容器禁网，不连接家中服务。SDK/依赖下载失败或校验失败会中止。Gradle wrapper 固定 8.9，协议/TFLite/原生源码版本不随环境自动升级。依赖在 `local-deps/` 重建，不复制家中密钥。
+准备流程需要互联网；Gitleaks 8.30.1 也按固定 SHA-256 下载，检查只扫描公开文件，不读取被忽略的家庭资料。HA 测试容器禁网，不连接家中服务。SDK/依赖下载失败或校验失败会中止。Gradle wrapper 固定 8.9，协议/TFLite/原生源码版本不随环境自动升级。依赖在 `local-deps/` 重建，不复制家中密钥。
 
 `check.sh` 构建包名为 `dev.sewellzhong.r1probe.hostcheck`，提示音是短测试音，不是中文回答。所有原生运行库和 Alexa 权重仍参与编译打包。该包只作主机构建检查，不安装到 R1，也不作为可交付 APK。GitHub Actions 使用相同入口，仅保留测试报告。
 

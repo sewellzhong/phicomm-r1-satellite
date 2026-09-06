@@ -142,6 +142,3 @@ grep -q '^clipped_samples=0$' "$AUDIO_DIR/processed-stream.meta.txt"
 snapshot after
 completed=true
 echo "R1 bounded streaming processing probe completed."
-
-
-

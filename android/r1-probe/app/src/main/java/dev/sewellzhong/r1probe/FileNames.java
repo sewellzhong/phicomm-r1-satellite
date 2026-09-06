@@ -31,4 +31,3 @@ final class FileNames {
         return requestedCanonical;
     }
 }
-

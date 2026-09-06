@@ -7,7 +7,7 @@
 ## 实施前核对与保留项
 
 - HA Core 2026.8.2；Whisper 3.5.1与Piper 2.3.3运行。
-- 默认助手现在名为“中文语音助手（本地＋AI）”，ID仍为 `521e6fbe73fe8a496b1a84e559`；另一个为“中文语音助手（纯本地）”。
+- 默认助手现在名为“中文语音助手（本地＋AI）”，ID仍为 `[本地管线 ID 已脱敏]`；另一个为“中文语音助手（纯本地）”。
 - 两者仍使用 `stt.faster_whisper`，中文；Piper音色 `zh_CN-huayan-medium`。Whisper的model/stt_library为auto，vad_clip=false。
 - AI助手使用 `conversation.jia_ting_ai_lu_you`（家庭助手〔自动分流〕），转交 `conversation.dui_hua`（AI对话〔模型中心〕）。模型自动选择、工具开启、设备控制关闭；相关配置均保留。
 - 现有 `stt.r1_shu_ru_guo_lu` 名为“语音识别（Whisper＋无效输入过滤）”，没有被两个助手选用。其行为、实体ID和你改过的名称不变。

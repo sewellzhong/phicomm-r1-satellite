@@ -12,4 +12,3 @@ public final class ProbeInfoTest {
                 ProbeInfo.format("rk322x-box", 22, "armeabi-v7a", "test/fingerprint"));
     }
 }
-

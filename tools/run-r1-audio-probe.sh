@@ -188,6 +188,3 @@ fi
 if [[ $r1_capture_failures -ne 0 || $r1_playback_failures -ne 0 ]]; then
     exit 2
 fi
-
-
-

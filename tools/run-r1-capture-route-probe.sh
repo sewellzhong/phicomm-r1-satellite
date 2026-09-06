@@ -141,6 +141,3 @@ adb_target pull "${device_wav}.meta.txt" "${host_wav}.meta.txt"
 "$REPO_ROOT/tools/analyze-wav.py" "$host_wav" >"$AUDIO_DIR/${SOURCE_NAME}.analysis.json"
 adb_target shell rm -f "$device_wav" "${device_wav}.meta.txt"
 snapshot isolated-after-capture
-
-
-

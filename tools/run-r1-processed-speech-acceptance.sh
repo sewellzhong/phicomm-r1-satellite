@@ -163,6 +163,3 @@ capture_pair speech 10 "$DEVICE_CUE"
     "$AUDIO_DIR/speech-processed.wav" >"$AUDIO_DIR/processed.comparison.json"
 completed=true
 echo "Same-capture raw/processed controlled speech recording completed."
-
-
-

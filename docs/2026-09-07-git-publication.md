@@ -24,13 +24,13 @@ bash -n tools/install-r1-probe.sh tools/dev/check.sh tools/build-r1-microfronten
 
 两个安装入口分别使用 `no-device` 与 hostcheck APK 调用，均直接返回 `host_check_apk_not_deployable`，没有创建指定部署证据目录或连接 ADB。
 
-独立执行 `tools/ha/local_tests/` 的两项测试使用原有私有路由源码、禁网 HA 容器和内存设备替身；其结果另记，公开 CI 不运行或静默跳过这两项测试。没有连接家庭 HA。
+独立执行 `tools/ha/local_tests/` 的两项测试使用原有私有路由源码、禁网 HA 容器和内存设备替身；两项通过，公开 CI 不运行或静默跳过这两项测试。没有连接家庭 HA。
 
 ## 干净环境与公开审计
 
 通过 `git checkout-index` 导出仅公开文件的副本，未复制 `local-deps/`、私有素材或证据。依赖重新下载、原生库重新编译，使用独立 `GRADLE_USER_HOME` 运行完整主机套件。首次 Gradle 下载遇到 TLS `AEADBadTagException`；保留失败日志，重试标准命令后下载成功。未关闭 TLS 校验或添加本机仓库镜像。
 
-Gitleaks 8.30.1 归档 SHA-256 校验后扫描公开文件。初次三个 generic-api-key 命中均为固定上游 SHA-256；`.gitleaks.toml` 仅针对确切文件与这三个哈希设置例外，复查无命中。自有公开文件审计同时检查禁止路径、二进制/密钥扩展名和常见凭据形式。此扫描不读取被忽略的家庭资料。
+Gitleaks 8.30.1 归档 SHA-256 校验后扫描公开文件。初次三个 generic-api-key 命中均为固定上游 SHA-256；`.gitleaks.toml` 仅针对确切文件与这三个哈希设置例外，复查无命中。自有公开文件审计同时检查禁止路径、二进制/密钥扩展名、常见凭据形式和公开 Markdown 链接。首次 Git 空白检查发现历史文件末尾空行及 Markdown 行尾空格；已整理末尾空行，Markdown 硬换行改用反斜杠保留排版。此扫描不读取被忽略的家庭资料。
 
 整理前 649 个源码/文档/素材文件建立仓库外受保护快照，清单哈希回读通过；迁移后的私有提示素材与原件逐文件一致。原厂备份和旧部署基线保留原位。
 
@@ -38,4 +38,12 @@ Gitleaks 8.30.1 归档 SHA-256 校验后扫描公开文件。初次三个 generi
 
 本次没有安装或操作 R1，家中设备仍为原 v63。当前源码的家中构建、签名检查及最小实机验证列入待验证清单，不继承历史通过状态。不恢复语音回归、网络/IP 恢复、72 小时验收或 KWS 专项测试。
 
-远程首次推送与 GitHub Actions 结果在执行后补记；不把本机通过当成云端通过。
+## GitHub 与最终交接
+
+公开仓库已创建并推送：[sewellzhong/phicomm-r1-satellite](https://github.com/sewellzhong/phicomm-r1-satellite)。首次提交为 `fcd463483ea867526dc26f4392f077eef718a31c`，使用 GitHub noreply 提交邮箱。
+
+[首次 GitHub Actions](https://github.com/sewellzhong/phicomm-r1-satellite/actions/runs/34049773759) 全部通过，实际完成依赖准备、公开文件/Gitleaks 扫描、Android 构建与测试、Python 和 HA 检查。云端只上传 Android 测试/lint XML，没有上传 APK、权重或签名。
+
+公开仓库已重新 clone，提交与远程一致；只含公开文件的干净副本使用全新依赖和独立 Gradle 缓存执行最终统一检查通过。公开链接检查亦经故意缺失链接的负例验证，能够失败退出；临时负例已移除。
+
+完整日志与初次 TLS 失败记录保存在家中被忽略的 `test-results/2026-09-07-host-git-publication/`。此次仅整理代码与开发流程，首台设备验证仍为待验证。后续文档整理提交不更改上述首次 CI 所对应的 SHA；最新运行可在仓库 Actions 查看。

@@ -26,4 +26,3 @@ final class AudioEffectCapabilities {
                 + " agc_available=" + agcAvailable();
     }
 }
-

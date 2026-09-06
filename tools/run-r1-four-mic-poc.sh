@@ -388,6 +388,3 @@ done
 snapshot after-recordings
 completed=true
 echo "Four-microphone PoC capture completed; intelligibility review remains manual."
-
-
-

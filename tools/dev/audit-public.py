@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parents[2]
 PATTERNS = {
     'private-key': rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----',
@@ -15,6 +16,7 @@ ALLOWED_EVIDENCE = {'test-results/README.md','test-results/public/index.json','t
 
 def main():
     files = subprocess.check_output(['git','ls-files','-z','--cached','--others','--exclude-standard'],cwd=ROOT).decode().split('\0')
+    public_files = set(files) - {""}
     errors=[]
     for name in sorted(set(files)-{''}):
         path=ROOT/name
@@ -26,6 +28,17 @@ def main():
         if path.suffix.lower() in {'.apk','.aar','.so','.tflite','.onnx','.wav','.pcm','.r1diag','.keystore','.jks','.pem','.key','.p12','.pfx'}:
             errors.append((name,'binary-or-private-material'))
         data=path.read_bytes()
+        if path.suffix == '.md':
+            for target in re.findall(r'\]\(([^)]+)\)', data.decode()):
+                if target.startswith(('https:', 'http:', '#', 'mailto:')):
+                    continue
+                resolved = (path.parent / unquote(target.split('#')[0])).resolve()
+                if not resolved.is_relative_to(ROOT):
+                    errors.append((name, 'non-public-document-link'))
+                    continue
+                relative = resolved.relative_to(ROOT).as_posix()
+                if relative not in public_files and not any(item.startswith(relative.rstrip('/') + '/') for item in public_files):
+                    errors.append((name, 'missing-public-document-link'))
         if len(data)>5*1024*1024:errors.append((name,'oversize'))
         for rule,pattern in PATTERNS.items():
             if re.search(pattern,data):errors.append((name,rule))

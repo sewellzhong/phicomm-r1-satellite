@@ -120,6 +120,3 @@ for _ in $(seq 1 20); do
 done
 echo "Timed out waiting for diagnostic playback" >&2
 exit 1
-
-
-

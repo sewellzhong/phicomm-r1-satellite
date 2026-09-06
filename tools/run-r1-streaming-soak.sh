@@ -177,6 +177,3 @@ adb_target pull "$metadata_path" "$METADATA_DIR/processed-soak.meta.txt" >/dev/n
 snapshot after "$(( $(date +%s) - started_epoch ))" false
 completed=true
 echo "R1 bounded streaming processing ${MODE} completed."
-
-
-

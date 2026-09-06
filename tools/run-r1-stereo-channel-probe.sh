@@ -261,6 +261,3 @@ fi
 snapshot after
 completed=true
 echo "Stereo channel probe completed."
-
-
-
