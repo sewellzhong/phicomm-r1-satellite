@@ -1,0 +1,2065 @@
+{
+  "policy": "Numeric/boolean fields, result enums and hashes only; strings and identifying fields omitted. Original files remain local. These are historical results, not acceptance for new commits.",
+  "sources": [
+    {
+      "source": "2026-09-01T234530-r1-sample01/stage1/audio-probe/audio/synthetic-1khz-2s.analysis.json",
+      "sha256": "05067351ac2ebad4cd09439fd0662040ca234c2c1fb26954b035a5828457968d"
+    },
+    {
+      "source": "2026-09-01T235327-r1-sample01/stage1/audio-probe/audio/mic.analysis.json",
+      "sha256": "d180f57f16464605bb83367b535c6899ffb44695538e365acd6a313c3a96f887"
+    },
+    {
+      "source": "2026-09-01T235327-r1-sample01/stage1/audio-probe/audio/synthetic-1khz-2s.analysis.json",
+      "sha256": "05067351ac2ebad4cd09439fd0662040ca234c2c1fb26954b035a5828457968d"
+    },
+    {
+      "source": "2026-09-01T235327-r1-sample01/stage1/audio-probe/audio/voice_communication.analysis.json",
+      "sha256": "6c18aff9105ec0fde176623d7c8b879023ca287689b29e9f12c61862178e0cd0"
+    },
+    {
+      "source": "2026-09-01T235327-r1-sample01/stage1/audio-probe/audio/voice_recognition.analysis.json",
+      "sha256": "f2c7a60bc79cda4fc32abd99c33a96e786d1578e31be9e5c53080bf079282513"
+    },
+    {
+      "source": "2026-09-02T001602-r1-sample01/stage1/audio-acceptance/audio/acceptance-cue.analysis.json",
+      "sha256": "5440a63b73ff89668a8031bbe7044462d517960b376c68be2f872944589942a3"
+    },
+    {
+      "source": "2026-09-02T001602-r1-sample01/stage1/audio-acceptance/audio/mic.comparison.json",
+      "sha256": "04312b8469e299ea827bd28bdd2ff4f940d1832d7c7d28bf5bd5424f2e522055"
+    },
+    {
+      "source": "2026-09-02T001602-r1-sample01/stage1/audio-acceptance/audio/silence-mic.analysis.json",
+      "sha256": "1abbbd20d5cdf1841816e23f87eefa1a00459f0fdb4c3faeb64ecfe321ac201e"
+    },
+    {
+      "source": "2026-09-02T001602-r1-sample01/stage1/audio-acceptance/audio/silence-voice_communication.analysis.json",
+      "sha256": "cb257f754c09d6d2772b9280b26c121f931d86a41330670bd0e455186328cf32"
+    },
+    {
+      "source": "2026-09-02T001602-r1-sample01/stage1/audio-acceptance/audio/silence-voice_recognition.analysis.json",
+      "sha256": "4427566093a62c7cdf12dd6ffb2339ca0e5c3889d1764a6cf6c2d3b375a6726f"
+    },
+    {
+      "source": "2026-09-02T001602-r1-sample01/stage1/audio-acceptance/audio/speech-mic.analysis.json",
+      "sha256": "d953c333f7cc3816c36cb02206fecf3597eef33486a7f5939a8bb0cf6548dbc8"
+    },
+    {
+      "source": "2026-09-02T001602-r1-sample01/stage1/audio-acceptance/audio/speech-voice_communication.analysis.json",
+      "sha256": "0e8f5e456994dba81963e26ca340e4c7490d07b4d022e427c34dde0b0e54b38b"
+    },
+    {
+      "source": "2026-09-02T001602-r1-sample01/stage1/audio-acceptance/audio/speech-voice_recognition.analysis.json",
+      "sha256": "27ed33bde8928de08448ca4e48b9d5ece6c70c16d8c75a75aded3e963d47aa79"
+    },
+    {
+      "source": "2026-09-02T001602-r1-sample01/stage1/audio-acceptance/audio/voice_communication.comparison.json",
+      "sha256": "8632fc045fc1c75669ece34f0345294103ac82bbf898f44ca6e69fd21ad887db"
+    },
+    {
+      "source": "2026-09-02T001602-r1-sample01/stage1/audio-acceptance/audio/voice_recognition.comparison.json",
+      "sha256": "35ad93789bd15bf2e9576bb020d320fd6db7a968a865aba59248b25713ba404f"
+    },
+    {
+      "source": "2026-09-02T001815-r1-sample01/stage1/audio-probe/audio/synthetic-1khz-2s.analysis.json",
+      "sha256": "05067351ac2ebad4cd09439fd0662040ca234c2c1fb26954b035a5828457968d"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/cue-finished.analysis.json",
+      "sha256": "70bf51c2aacdf03a6ca18f55d1c38b5950ddd888fe11182c606a39e9185f647d"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/cue-start-mic.analysis.json",
+      "sha256": "e13504b88aaf38407babc499d0ffc8c279f5b7f59bc94581c7f1841c35a1aa20"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/cue-start-voice_communication.analysis.json",
+      "sha256": "334963ad4445e8f626101758a5f91d8abee4a5785034d6bb1b547a1fdc2e1943"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/cue-start-voice_recognition.analysis.json",
+      "sha256": "299b6dc42cd1bf749e87ac37ebda2e66c26e2b1d86f26d2207cfa35e3b09e3e6"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/mic.comparison.json",
+      "sha256": "f4f8f47bb21e2d75d28473f44e1e3ed5be0b2c744e182f7a03b6f2be9e7912be"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/silence-mic.analysis.json",
+      "sha256": "c95bf0f2952f5e64a3839781af7d5e7c17dbbfcaa5a4d19e2ce2347c64595975"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/silence-voice_communication.analysis.json",
+      "sha256": "ff131c312cc4e6ffd7bd4723f606832e0caed6a26ca164969c715d2eb112849f"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/silence-voice_recognition.analysis.json",
+      "sha256": "094ae5239180effb3bae5ec9b2efe9c2c12f9548c756bdcc77dbe2d7c41d248b"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/speech-mic.analysis.json",
+      "sha256": "15e5575441f582f56cfcd884b3c2e79fcdecb8e6095bff526a430be746c8f59b"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/speech-voice_communication.analysis.json",
+      "sha256": "f196b314a56d9496745c72a3341cd3e0f216edcd8f16b6caddee1df78fe73fe5"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/speech-voice_recognition.analysis.json",
+      "sha256": "2534a8d8f8efb9dcd6c3cfdecb9863bd5765e1b2334a5dad186d5e9028da4ea0"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/voice_communication.comparison.json",
+      "sha256": "21d57d78ad6c5cd865b2a1614bc3e86b55c2583dd53370b34c1616ce8f50b27a"
+    },
+    {
+      "source": "2026-09-02T002737-r1-sample01/stage1/audio-acceptance/audio/voice_recognition.comparison.json",
+      "sha256": "9b0b88a4d3dab4c8681deeb780b5f4291b7e4cad70e2c45f425b54c5e89fff9e"
+    },
+    {
+      "source": "2026-09-02T003200-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "b67a87d441d3044b0f403a81ee1056f2df0c0ff5b2f589130d3c5b9d81d09684"
+    },
+    {
+      "source": "2026-09-02T003234-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "fd06f72bc3b324ac2651b7ab538b96072015f58989a4404858812d228231ecad"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/cue-finished.analysis.json",
+      "sha256": "70bf51c2aacdf03a6ca18f55d1c38b5950ddd888fe11182c606a39e9185f647d"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/cue-start-mic.analysis.json",
+      "sha256": "e13504b88aaf38407babc499d0ffc8c279f5b7f59bc94581c7f1841c35a1aa20"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/cue-start-voice_communication.analysis.json",
+      "sha256": "334963ad4445e8f626101758a5f91d8abee4a5785034d6bb1b547a1fdc2e1943"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/cue-start-voice_recognition.analysis.json",
+      "sha256": "299b6dc42cd1bf749e87ac37ebda2e66c26e2b1d86f26d2207cfa35e3b09e3e6"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/mic.comparison.json",
+      "sha256": "e9664d91bd97095202be807fdfa8c35474c3683c5c1dcf6c612f81f12b00f88a"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/silence-mic.analysis.json",
+      "sha256": "3387ba8649f98891f086bf80df174098635c25983768d18e2b616a430abc2066"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/silence-voice_communication.analysis.json",
+      "sha256": "6fe918e9ef07348693e1a4d20fc24f20181cd6686f76ca710492f43f18e9f05f"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/silence-voice_recognition.analysis.json",
+      "sha256": "04b084020c835d402c5d5756266e1bf1982971ea6b8a7875936b738def598ae7"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/speech-mic.analysis.json",
+      "sha256": "3a618bdcf677e95f17c7f92056e5f6e441736936074abf09362f17e168447f9d"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/speech-voice_communication.analysis.json",
+      "sha256": "a763f1e2ae988bed786ba0fafd6ccc21f7b6e3e0c8a954b51beb5ffdbf449d3e"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/speech-voice_recognition.analysis.json",
+      "sha256": "11c4e4079a97167a58111dde3cd18bedbb05538ea3f5392040291dfed014d42a"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/voice_communication.comparison.json",
+      "sha256": "ee3ad0451ddcccbb2a92313bc2166ccede51f072b131a3fedd562d1a2b404f91"
+    },
+    {
+      "source": "2026-09-02T003444-r1-sample01/stage1/audio-acceptance/audio/voice_recognition.comparison.json",
+      "sha256": "16271cc8d52dbb6ce033f569f4d911d6c8e9773725e179150482a4ff21455274"
+    },
+    {
+      "source": "2026-09-02T003703-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "6433c30297ef4f6c678e230685c6bcc38bbc423b4f6560a04fdd5732ed5d0716"
+    },
+    {
+      "source": "2026-09-02T011820-r1-sample01/stage0/provenance/reference.json",
+      "sha256": "c57c38da5a5f2bc7c6ac34eae49214d1f29dfe3455a6af0dda6e90c216f35305"
+    },
+    {
+      "source": "2026-09-02T011820-r1-sample01/stage0/provenance/report.json",
+      "sha256": "b7469e00593e9495f2dca375eb575b1843493d3ea519d9a871244c34be99afdc"
+    },
+    {
+      "source": "2026-09-02T011943-r1-sample01/stage1/capture-route-voice_communication/audio/voice_communication.analysis.json",
+      "sha256": "a332238bb5cdd36edf0cf86942bda77caee3bb6f981b2e347bae9084f3e892c9"
+    },
+    {
+      "source": "2026-09-02T012311-r1-sample01/stage0/provenance/reference.json",
+      "sha256": "c57c38da5a5f2bc7c6ac34eae49214d1f29dfe3455a6af0dda6e90c216f35305"
+    },
+    {
+      "source": "2026-09-02T012311-r1-sample01/stage0/provenance/report.json",
+      "sha256": "3e1b79520db8c61bf73d528fb4a7049f0bf1752ae792484bb75dd3039e52ee5d"
+    },
+    {
+      "source": "2026-09-02T012609-r1-sample01/stage0/provenance/reference.json",
+      "sha256": "c57c38da5a5f2bc7c6ac34eae49214d1f29dfe3455a6af0dda6e90c216f35305"
+    },
+    {
+      "source": "2026-09-02T012609-r1-sample01/stage0/provenance/report.json",
+      "sha256": "9e60bdda692a78b9564fb0fef46da512a29c892849da34341a1fb84da68f9672"
+    },
+    {
+      "source": "2026-09-02T014455-r1-sample01/stage0/provenance/reference.json",
+      "sha256": "c57c38da5a5f2bc7c6ac34eae49214d1f29dfe3455a6af0dda6e90c216f35305"
+    },
+    {
+      "source": "2026-09-02T014455-r1-sample01/stage0/provenance/report.json",
+      "sha256": "1ae750c03b71f1cd013a8526a12475694816b57032e958e8bde1183f33ead182"
+    },
+    {
+      "source": "2026-09-02T014719-r1-sample01/stage0/provenance/reference.json",
+      "sha256": "c57c38da5a5f2bc7c6ac34eae49214d1f29dfe3455a6af0dda6e90c216f35305"
+    },
+    {
+      "source": "2026-09-02T014719-r1-sample01/stage0/provenance/report.json",
+      "sha256": "9e60bdda692a78b9564fb0fef46da512a29c892849da34341a1fb84da68f9672"
+    },
+    {
+      "source": "2026-09-02T015059-r1-sample01/stage0/provenance/reference.json",
+      "sha256": "c57c38da5a5f2bc7c6ac34eae49214d1f29dfe3455a6af0dda6e90c216f35305"
+    },
+    {
+      "source": "2026-09-02T015059-r1-sample01/stage0/provenance/report.json",
+      "sha256": "1ae750c03b71f1cd013a8526a12475694816b57032e958e8bde1183f33ead182"
+    },
+    {
+      "source": "2026-09-02T015542-r1-sample01/stage0/provenance/reference.json",
+      "sha256": "c57c38da5a5f2bc7c6ac34eae49214d1f29dfe3455a6af0dda6e90c216f35305"
+    },
+    {
+      "source": "2026-09-02T015542-r1-sample01/stage0/provenance/report.json",
+      "sha256": "9e60bdda692a78b9564fb0fef46da512a29c892849da34341a1fb84da68f9672"
+    },
+    {
+      "source": "2026-09-02T015903-r1-sample01/stage0/provenance/reference.json",
+      "sha256": "c57c38da5a5f2bc7c6ac34eae49214d1f29dfe3455a6af0dda6e90c216f35305"
+    },
+    {
+      "source": "2026-09-02T015903-r1-sample01/stage0/provenance/report.json",
+      "sha256": "9e60bdda692a78b9564fb0fef46da512a29c892849da34341a1fb84da68f9672"
+    },
+    {
+      "source": "2026-09-02T022634-r1-sample01/stage1/stereo-channel-smoke/audio/smoke-average.analysis.json",
+      "sha256": "3a2c125033b3ed0576fe9b5b5413674bfae2fe7e5ca82188d8f50bd23c774746"
+    },
+    {
+      "source": "2026-09-02T022634-r1-sample01/stage1/stereo-channel-smoke/audio/smoke-difference.analysis.json",
+      "sha256": "40ebb73b188be182607dd7c215b356bf03af78ae6b6b76654d485eff7441ca6d"
+    },
+    {
+      "source": "2026-09-02T022634-r1-sample01/stage1/stereo-channel-smoke/audio/smoke-left.analysis.json",
+      "sha256": "6704f1741d408b1fd837c80d809049b8aa5ec68ef78fc34c6bc83b95c17136f8"
+    },
+    {
+      "source": "2026-09-02T022634-r1-sample01/stage1/stereo-channel-smoke/audio/smoke-right.analysis.json",
+      "sha256": "8b21e00a4434cf19df2d9f852aa10e81bb1363de9457ae704b30f44accb1b9d0"
+    },
+    {
+      "source": "2026-09-02T022634-r1-sample01/stage1/stereo-channel-smoke/audio/smoke-stereo.analysis.json",
+      "sha256": "8ea530274955fa3fd6b09a813c0204252e47a4916603dbeccaae6376b2f9c99b"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/average.comparison.json",
+      "sha256": "e3e0895ce24ad1bece80a43e924fa0c1c67b865a4e8741622d3050eae46969bc"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/difference.comparison.json",
+      "sha256": "f35864b85ec94875033c13acf433a483c65e773b5284475cc68230938b4c3f98"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/left.comparison.json",
+      "sha256": "9eeafb8192c695f2299807793effca188bd6670b699897fe2e744eb92e933e72"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/right.comparison.json",
+      "sha256": "b042982845d380845885fbb693aec5feb0b2edda83756d558aaaeb1017ede8c3"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/silence-average.analysis.json",
+      "sha256": "111ba6b37cac72508153d8228c7abad685c2c484b53dadf325d90d0384e30314"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/silence-difference.analysis.json",
+      "sha256": "fe92bfd2dba8925088f354ca609bb89d115c8aa4fe4165aeb3df1f313547ff81"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/silence-left.analysis.json",
+      "sha256": "cc131e2b23cc9092caa9935e3cb7c045a1719c92513402e4e16cdb24d0696ec1"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/silence-right.analysis.json",
+      "sha256": "13a1d468182456b4ce62c64f6b2fa293aa78df6d62f37a175dea1442989e2bd1"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/silence-stereo.analysis.json",
+      "sha256": "226ddaafccaac31f59c19cd0c18c7d92b95f4576e17aa3b29e5ae2dadb99dc0e"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/speech-average.analysis.json",
+      "sha256": "e75499e5d3a61276c61d0fead5fff82eb4cade9dae0fc3128f8db2ca6145469a"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/speech-difference.analysis.json",
+      "sha256": "51e48d647bb0ae67dddeb763cd5018175ad5a54cc9e96466150779d4c47e299b"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/speech-left.analysis.json",
+      "sha256": "e6e193ad38a47ba56799a39922260a3ebda9470d7db72c8913d9ceb0a15eaa5d"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/speech-right.analysis.json",
+      "sha256": "c12c459c4af0807b58dc7042f88ea08f208a5eddf06d253e347084b1d3243412"
+    },
+    {
+      "source": "2026-09-02T022714-r1-sample01/stage1/stereo-channel-controlled/audio/speech-stereo.analysis.json",
+      "sha256": "df761d252ac0c5a15fe2c8e02ea65eb7c82dedc46cf0bbf9c9b0efb609741489"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/average.comparison.json",
+      "sha256": "7f876aa71b4b90321cb5deae600d0f3885a34a5302a9cfdf5bc7ed3aadd7edf9"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/difference.comparison.json",
+      "sha256": "e23167963904dc1520f608892d7acf001e7da8630c14e25666e45b0b484b673e"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/left.comparison.json",
+      "sha256": "54b9a35d78edd745919e6e93072c7530850f90b615af134dd8e49ab2ff19ba5f"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/right.comparison.json",
+      "sha256": "6a07b1eca3f44e7d7fc6af8c4b94c17353bcf50c26339bff3d7643d43d523631"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/silence-average.analysis.json",
+      "sha256": "f9ef5779bfd5f6790f0a3b19b057ad99a976789bbc602124a260d7ed2cc77099"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/silence-difference.analysis.json",
+      "sha256": "0bb111367579fcdc83fcd687c57a7d7baf391265b14da50266dabb831f5900fe"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/silence-left.analysis.json",
+      "sha256": "df0abacaecacab39f607c006238b9cb25842a2682170cac6c4c66a159a14c2fa"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/silence-right.analysis.json",
+      "sha256": "5082ee7942d8e74b7189c78470f9ceaaed226354084900c6a40a6a0ff6265742"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/silence-stereo-channels.json",
+      "sha256": "e25c88139c66e518af7b7280dc8d0d7a0917fa3a0bb3ae5a0ca59f169dc4db80"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/silence-stereo.analysis.json",
+      "sha256": "82ef47932fba6c28f9a37174ba3e6ec87ffd526dfa88f570196de33118f3fed6"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/speech-average.analysis.json",
+      "sha256": "3e06a04fb349ce9a23ee44bdf1a57fc9246b2556e45cbc4bcf0706932fe19f89"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/speech-difference.analysis.json",
+      "sha256": "841c7a964de13ecc82312fa8c25d5ba72f2ade4f9e54b376e9efa8195a03a325"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/speech-left.analysis.json",
+      "sha256": "e5b92a7dd4ff77b5ed9133420d588ce3742154fd3daf96d8d5ed3ee6c539d2bc"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/speech-right.analysis.json",
+      "sha256": "064b1652937da82124dc56599213a370f6009c3256ea9681aa26087f7d4f096c"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/speech-stereo-channels.json",
+      "sha256": "fd7a955d46e04de084422d5cd371c6391f87a4456f0476c963e9e6ab814192d0"
+    },
+    {
+      "source": "2026-09-02T023041-r1-sample01/stage1/stereo-channel-controlled/audio/speech-stereo.analysis.json",
+      "sha256": "8cca68e20ee856238cc019799f9b5a9b53aaaf036f5829382bb2df6646b338e6"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/balanced.comparison.json",
+      "sha256": "85a726c0b247bb229155a8d54000a0af7209c514b8df0c8b8366c9287e0afb12"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/gentle.comparison.json",
+      "sha256": "54c5ea8549d560b89f25d24f8675d486c70dc9039c6e32d93203d5567580b31d"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/silence-balanced.analysis.json",
+      "sha256": "852ba44c2974088b8e6bd51a32b08d076697920f9e886f28693a05c00e7a3c6f"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/silence-balanced.processing.json",
+      "sha256": "983b613581adb5e3e3744cfb5621bebe77af4a335339fc4ce029d15bdbed6eb4"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/silence-gentle.analysis.json",
+      "sha256": "a72a7d5943037acfcbefd3a2329e9af31da167eef65db82d237b7c5249ed0706"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/silence-gentle.processing.json",
+      "sha256": "fbf11a1bd905dbf9a5aa1d95be5bd75f25040ded02426b46e4634de75adfaebc"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/silence-strong.analysis.json",
+      "sha256": "c2927e628cb4069cab7c70a1957d7b4318342d47819f3e71e051cb6afec22ccc"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/silence-strong.processing.json",
+      "sha256": "6258cd3c06ec191b019ae5026454727fd9ce5b06ce3cdc66435d1c1eea3136e5"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/speech-balanced.analysis.json",
+      "sha256": "e284239b0b1dd313cf4359171ec862f337b2bf1f5c7481657116e308aa7511b1"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/speech-balanced.processing.json",
+      "sha256": "a2840d9f26aad3152a6b114be725d64cea383f52431a8306a962b4319d0ac482"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/speech-gentle.analysis.json",
+      "sha256": "cd7521d3781ff1b05acb6d299b09598362aeaee25c05ad8257b301404f9d3a8c"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/speech-gentle.processing.json",
+      "sha256": "a45e5e70443bb50af735609cde76446ef8560f0cebde3818c921c94c4aff20e8"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/speech-strong.analysis.json",
+      "sha256": "fa77e55f460d4f3f05c4aad5fd3d3d9e52c6a410124c7786fc3d02e873b256e3"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/speech-strong.processing.json",
+      "sha256": "988c7fbd99260299c47c887325b9ef7678c8e97eebbab45b525f8741a89a7d13"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/audio/strong.comparison.json",
+      "sha256": "504d1d3a06f60c023e77929311391ac680ac970c51d1440f6b4df5362a6133b4"
+    },
+    {
+      "source": "2026-09-02T023918-r1-sample01/stage1/offline-processing-ab/summary.json",
+      "sha256": "9324364173b530a52f5cbdb72fd09fe4508af2d8eaa7732f7e7b9b5dbab7d828"
+    },
+    {
+      "source": "2026-09-02T024006-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "5ca911f30d1d814589d06cf8583faad246cba9f6903f6b0884f016f15bd01651"
+    },
+    {
+      "source": "2026-09-02T024205-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "7ab0bf0b02265e849ef0cd55727fe034bc0fcb2be6c9b5f65c0101bab512ca7a"
+    },
+    {
+      "source": "2026-09-02T024909-r1-sample01/stage1/offline-adaptive-gain/audio/balanced-agc.comparison.json",
+      "sha256": "6caec0f3bd4ee0f4ff061ab656a901e2784e85c8ca62175b428359787537997d"
+    },
+    {
+      "source": "2026-09-02T024909-r1-sample01/stage1/offline-adaptive-gain/audio/silence-balanced-agc.analysis.json",
+      "sha256": "116bbc5be5f53eea9a924b67b0577a4bf4d419f3864ae2901f1aa359183318a6"
+    },
+    {
+      "source": "2026-09-02T024909-r1-sample01/stage1/offline-adaptive-gain/audio/silence-balanced-agc.processing.json",
+      "sha256": "3cc5f624872c7aabe3b226ab6f3af58fcd8b6992c356fa04bf28f4b96540a215"
+    },
+    {
+      "source": "2026-09-02T024909-r1-sample01/stage1/offline-adaptive-gain/audio/speech-balanced-agc.analysis.json",
+      "sha256": "3311e82dd7f1c8fad9f4a4f78abb9e663f913a5f1a2d9eb8014a7956d56b8e3b"
+    },
+    {
+      "source": "2026-09-02T024909-r1-sample01/stage1/offline-adaptive-gain/audio/speech-balanced-agc.processing.json",
+      "sha256": "86c3207e54904cf5c5650e7b5e8c27846ae759eab06aba175f495590c04461a6"
+    },
+    {
+      "source": "2026-09-02T024909-r1-sample01/stage1/offline-adaptive-gain/summary.json",
+      "sha256": "2aea9c9d3d28617c66d007b23ba13e7977aec6d5773f65501e2240de6a206bf1"
+    },
+    {
+      "source": "2026-09-02T024924-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "a8be2f72bdbc38c17c154a1ed08757ac8f4533760699e3954f3df852ce399878"
+    },
+    {
+      "source": "2026-09-02T025911-r1-sample01/stage1/processing-benchmark/audio/java-processed.analysis.json",
+      "sha256": "7ffa0cfb78d9ad06abfe39644a841c1e5ff2377c802355f4d1aa01774e1a90bb"
+    },
+    {
+      "source": "2026-09-02T025911-r1-sample01/stage1/processing-benchmark/audio/python-java-comparison.json",
+      "sha256": "8e80f4e719e53a6691a13f69be7a03a28925ba8ac98c3a5ce07c5accbade02a4"
+    },
+    {
+      "source": "2026-09-02T030819-r1-sample01/stage1/streaming-processing/audio/processed-stream.analysis.json",
+      "sha256": "79bb21215de54df64b8d38a375ef13f5a701e6bc2541a7c49bec486a28794d51"
+    },
+    {
+      "source": "2026-09-03T031012-r1-sample01/stage1/streaming-smoke/soak-analysis.json",
+      "sha256": "21a3a31d7f3b6b9416baa37dd212e42624e0863452ac9c9cffc2cdcc3eba717f"
+    },
+    {
+      "source": "2026-09-03T031103-r1-sample01/stage1/streaming-soak/soak-analysis.json",
+      "sha256": "9314e14c4e51c913b01fef5b012b46f68c5620e0918ad8b0b6c8935b1efb41bd"
+    },
+    {
+      "source": "2026-09-03T034212-r1-sample01/stage1/streaming-soak/soak-analysis.json",
+      "sha256": "74d236419884586b191c03cddaa69a597e9065baab45d939cf4df32b5b8d9b71"
+    },
+    {
+      "source": "2026-09-03T043103-r1-sample01/stage1/processed-speech-acceptance/audio/processed.comparison.json",
+      "sha256": "8f117a82334a41844ececbfb9919e01d5e48b8b5e69e17441dcc0ef8043f1301"
+    },
+    {
+      "source": "2026-09-03T043103-r1-sample01/stage1/processed-speech-acceptance/audio/raw.comparison.json",
+      "sha256": "c5572799841a2904ee2bd54b5c4cc3c085bff98846357bbcc3f3676a90cea169"
+    },
+    {
+      "source": "2026-09-03T043103-r1-sample01/stage1/processed-speech-acceptance/audio/silence-processed.analysis.json",
+      "sha256": "d5aa2376200016381d76d8fc53c6322f7a117a7f4c162570848dc98761af4268"
+    },
+    {
+      "source": "2026-09-03T043103-r1-sample01/stage1/processed-speech-acceptance/audio/silence-raw.analysis.json",
+      "sha256": "3ee0be815ba3b79b5d41a3c4180e0616324a8af6f7cbe4afc11fe10e3ad3bb13"
+    },
+    {
+      "source": "2026-09-03T043103-r1-sample01/stage1/processed-speech-acceptance/audio/speech-processed.analysis.json",
+      "sha256": "66afeff1d4686f9e3b9535162e7e74ee123e6e78af5848f78aa292fb5d8b2aea"
+    },
+    {
+      "source": "2026-09-03T043103-r1-sample01/stage1/processed-speech-acceptance/audio/speech-raw.analysis.json",
+      "sha256": "00fb6fa37671a4b9f87bc65397e7799538f67cdbfb44e77cd88c27cd7c3d3d04"
+    },
+    {
+      "source": "2026-09-03T043209-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "b05433cde6b594c973937f0b26d38c05ee762ff9e83e4d5737a57cf45529bf51"
+    },
+    {
+      "source": "2026-09-03T043236-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "94be5a3e6d982263d26a1527b6bbc963c9e65d4c4724e7be3aca585173ab91f9"
+    },
+    {
+      "source": "2026-09-03T043541-r1-sample01/stage1/processed-speech-acceptance/audio/processed.comparison.json",
+      "sha256": "4d4e68905bb78de18366906c1ad7d718737313f7075672885d4c88df4dad96ea"
+    },
+    {
+      "source": "2026-09-03T043541-r1-sample01/stage1/processed-speech-acceptance/audio/raw.comparison.json",
+      "sha256": "3cb19b00e50990124198e2b5d2ddc021445d27abaaeeca39f4c7d392cf8f6378"
+    },
+    {
+      "source": "2026-09-03T043541-r1-sample01/stage1/processed-speech-acceptance/audio/silence-processed.analysis.json",
+      "sha256": "6a8e167162fab94b48f8c62bad2a57fbc601da65988395f8b6a47ab36c0ef7f8"
+    },
+    {
+      "source": "2026-09-03T043541-r1-sample01/stage1/processed-speech-acceptance/audio/silence-raw.analysis.json",
+      "sha256": "16a5c1affce6dde2240ad31ee8f15049a8b875ade7024fd0a4bf977666e24bc8"
+    },
+    {
+      "source": "2026-09-03T043541-r1-sample01/stage1/processed-speech-acceptance/audio/speech-processed.analysis.json",
+      "sha256": "54291e9dd5c0cdd6a3f1837c1ed38c9c65fb4dc1459afffbe77eb0afec3f2df0"
+    },
+    {
+      "source": "2026-09-03T043541-r1-sample01/stage1/processed-speech-acceptance/audio/speech-raw.analysis.json",
+      "sha256": "e8b05338d971428f860d60cff83ab0bd0e6c51aa14059cb4448d8f9f7c66db72"
+    },
+    {
+      "source": "2026-09-03T043704-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "66013bf874e73bc4cf95f5f4009333ae257b8f8211d3f91330f4524d7e65d193"
+    },
+    {
+      "source": "2026-09-03T043731-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "e25f967d9890bb336bff22f7ae5b308ba55e63430bcb3d868f0f2b125aedc63f"
+    },
+    {
+      "source": "2026-09-03T044732-r1-sample01/stage1/processed-speech-acceptance/audio/processed.comparison.json",
+      "sha256": "de3cb861871f826593964aff902a6b1bf2cf2b286bf11e589517bda01e69eec3"
+    },
+    {
+      "source": "2026-09-03T044732-r1-sample01/stage1/processed-speech-acceptance/audio/raw.comparison.json",
+      "sha256": "c2d17428aee9a2c5dd2841cfb2215f207fdd5eae9d2b68bd4d97954052987585"
+    },
+    {
+      "source": "2026-09-03T044732-r1-sample01/stage1/processed-speech-acceptance/audio/silence-processed.analysis.json",
+      "sha256": "5a159be5ebf0a14f4d6126f97bba686be74fed6c907b522af58c1a71179c9d59"
+    },
+    {
+      "source": "2026-09-03T044732-r1-sample01/stage1/processed-speech-acceptance/audio/silence-raw.analysis.json",
+      "sha256": "c56ded2b2d6968f80162f6b1de7bb80dd8f32c58c2bf8159e388123d24223f70"
+    },
+    {
+      "source": "2026-09-03T044732-r1-sample01/stage1/processed-speech-acceptance/audio/speech-processed.analysis.json",
+      "sha256": "b8a63344808ba1bc85e41fcb34cc87612b789bce80e6845553c81d18344cbe61"
+    },
+    {
+      "source": "2026-09-03T044732-r1-sample01/stage1/processed-speech-acceptance/audio/speech-raw.analysis.json",
+      "sha256": "4f1119014810f1c536f67af2ec3ba8fd74650a859e7c159e3555454ab89c24fe"
+    },
+    {
+      "source": "2026-09-03T044831-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "ad1c03876abec7e2817dd32b3328ee848bedf9ce64155dab921dadb9ceb1a90f"
+    },
+    {
+      "source": "2026-09-03T044859-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "049ea3a75e14ebac7d8673b99c046d1d196a49f46ac3e01e13a5644e74ff4b05"
+    },
+    {
+      "source": "2026-09-03T045222-r1-sample01/stage1/streaming-smoke/soak-analysis.json",
+      "sha256": "02aecb7f25bee5248216dd4a8d2fe718333012ca0013ab6742bf512d3217cffc"
+    },
+    {
+      "source": "2026-09-03T061549-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "758a2ad29133fa4f963ad746331282326d7875c36312ebecc66593b68bd7e1a9"
+    },
+    {
+      "source": "2026-09-03T064010-r1-sample01/stage1/manual-intelligibility/analysis.json",
+      "sha256": "758a2ad29133fa4f963ad746331282326d7875c36312ebecc66593b68bd7e1a9"
+    },
+    {
+      "source": "2026-09-05-ha-time-sentences/deployment.json",
+      "sha256": "85cb2cffafd8ca4237956c5a5119b285c97b7b6822dca7f37894a19ae2487122"
+    },
+    {
+      "source": "2026-09-05-ha-time-sentences/recognition.json",
+      "sha256": "59c5e4f97b69697d9b4e4d26cada0311758023f8ae7ef05c1f23ccb1819731ae"
+    },
+    {
+      "source": "2026-09-05-host-assist-foundation/access-observations.json",
+      "sha256": "4885c0d57908e9db5d4029c96a99fbbdcb883f2ecca22c1ee749c9404403739d"
+    },
+    {
+      "source": "2026-09-05-host-assist-foundation/build-result.json",
+      "sha256": "ec4d8c00988758c7b47cd676e20f038ed934e25e4e9fe9d4a3babdcce42d3fcc"
+    },
+    {
+      "source": "2026-09-05-host-assist-foundation/core-info.json",
+      "sha256": "6c08d469fe447d1dad82a2ad01e015d058143017e33e44fb7b04a203c08a16f6"
+    },
+    {
+      "source": "2026-09-05-host-assist-foundation/pipelines.json",
+      "sha256": "8cbd8510e1051b7fe3834ec9be0ad9cb5243ba29cf756575f47f9115eb8bf7a9"
+    },
+    {
+      "source": "2026-09-05-host-assist-foundation/unauthenticated-handshake.json",
+      "sha256": "334fd277e04f1ba9154b92589817539d93d9ce513ee49534c6d66ec157af0df2"
+    },
+    {
+      "source": "2026-09-05-host-model-cleanup/RESULT.json",
+      "sha256": "2eafd0115ce90799a101f8d1b8970d1b1ce7ddf0410a3e2bd02f35e840d62302"
+    },
+    {
+      "source": "2026-09-05-host-model-cleanup/deletion-manifest.json",
+      "sha256": "69ca6596a91e6b0f97d25a10dab5a244a33a990826841a125de087da4941a2d2"
+    },
+    {
+      "source": "2026-09-05-host-model-cleanup/protected-sha256.json",
+      "sha256": "70be8a1893ce6619a4911a168115716eeb4ecebe8c955f52125ec2c892ac1c04"
+    },
+    {
+      "source": "2026-09-05-r1-input-guard/android-tests.json",
+      "sha256": "0c78a63c283dd29f4fcf7d475d35894e4147a8b87debe52365f6e6167d8d0b8f"
+    },
+    {
+      "source": "2026-09-05-r1-input-guard/deployment.json",
+      "sha256": "e79fd9bd62b2a9f6e87c54ef811ca6e833110846a7de6c8682acb7566fcf9aef"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-acknowledgements/RESULT.json",
+      "sha256": "dc07e9217671e5b71ed64bd4b576852ff0154d751e3c856c95ff3e0a1a467b1f"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-acknowledgements/ack-manifest.json",
+      "sha256": "ebac264d24315b88829d74b9cd8afe81a86d0c8bcdeff69b83f5d0de8d4b5ca5"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-background/RESULT.json",
+      "sha256": "06c4340d88620c651b2b6e92a22debe067779e849e035ca626db56c03a9ac473"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-background/detached-status.json",
+      "sha256": "9cffa0de952c8a24895cc7e689c7f8017853b82a484f5f4e8fcc1330fe66f8a1"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-command-window/RESULT.json",
+      "sha256": "122e9079052f4242c53d1997a0a08cf9da77d691cfdec94a900d2e56aadb29a2"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-empty-command/RESULT.json",
+      "sha256": "3ec900bc4af4476f965d51edd954db2fd60bbc87cf7e1a156a2d957e8e7e70c6"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-empty-command/before-status.json",
+      "sha256": "b121c464ff38611a0f60f861bf5f44310836c277f76d58ac994bdc6c2ec673e9"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-events/RESULT.json",
+      "sha256": "3a1ea5a8ac2d20c476601e37d59508803afbe08a4ca583e0f2629a829db3361c"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-events/control-status-no-microphone.json",
+      "sha256": "2f614c5e7069bd187dbfdf75ed61f7eceac57dd46a61a64ba01a99cdbef73c39"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-events/live-first-reply-status.json",
+      "sha256": "f1efc5e6adc9227a80712dbabaa4ee0cf31a92ee37072e77e81b1e2ca7bcef17"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-input-policy/RESULT.json",
+      "sha256": "f21b1ed27bae7a2a29a3ecdb40573864a9badb1d2bff52e9e97a6593a85d51e4"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-input-policy/control-status-no-microphone.json",
+      "sha256": "90e6d93f36c34fc21f2f3f92bf18ffa2a924547328badc8fe137a9d6bf3c40eb"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-runtime/authenticated-listening.json",
+      "sha256": "e4b847f2072ece3714566d5aa162b9b98f4acc77c38ef0ec91f971cfa0ab2d6c"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-runtime/verification-summary.json",
+      "sha256": "8129979801ccec067a475c2abc1399ceaf487adc4e1cc51ea4a4506445625743"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-assist-wake-prefix/RESULT.json",
+      "sha256": "058de1f2d0be718d4a42685f6de0320cd91804aec77ccd3855335a2d15e7c0c1"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-native-api/device-interop.json",
+      "sha256": "0aec32216a3b3239a65e011774bb4ed76d6fc61d7e007b012650408d4d504185"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-native-api/host-interop.json",
+      "sha256": "e4505d9742ee4317a059bcd65b9ffdd266f00fc38ee547707c4f5ab29656de9e"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-native-voice/device-interop.json",
+      "sha256": "2771e0f977d443ae916bd6a3a2d9249f3a74ce5401ba910202ea1b85c3855747"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-native-voice/host-checks.json",
+      "sha256": "1233e6244dd0e8047b69424abcd3668b3ea01f9f00dae591cd361f71bf74c8d7"
+    },
+    {
+      "source": "2026-09-05-r1-sample01-native-voice/host-interop.json",
+      "sha256": "aaeaf16734ee9629f2119511df365651dc2291db474f866f4994e4cc76e06cdd"
+    },
+    {
+      "source": "2026-09-05T000422-host/stage1/camila-kws/runtime-smoke/openwakeword.json",
+      "sha256": "bd34aaf9dc83f0902e31a768851558a240cab4a9d053ae59d26efd782d6101a5"
+    },
+    {
+      "source": "2026-09-05T000422-host/stage1/camila-kws/runtime-smoke/pocketsphinx.json",
+      "sha256": "0cde1d73f70a254b91aa93e5a50d1d6ab363b0f1964e135817665362a48933fe"
+    },
+    {
+      "source": "2026-09-05T000422-host/stage1/camila-kws/runtime-smoke/sherpa.json",
+      "sha256": "10974a4cff8bff50fbd491f235bcc8754173f2638682fff20a7c98330d4d0f47"
+    },
+    {
+      "source": "2026-09-05T003526-r1-sample01/stage1/camila-kws/capture-training/audio-analysis.json",
+      "sha256": "18e70c3cf449dc9230bef30c12ef91ec0c119a8c203d06119b2b971540ab0137"
+    },
+    {
+      "source": "2026-09-05T004015-r1-sample01/stage1/camila-kws/capture-training/audio-analysis.json",
+      "sha256": "012737cf71cd0fa501cbd885b37468abc92b5f0f2ddde1e3f4a317b519856b86"
+    },
+    {
+      "source": "2026-09-05T004248-r1-sample01/stage1/camila-kws/capture-training/audio-analysis.json",
+      "sha256": "fd57b2d949a7be0f3917fd0be096a1a6510a817af18c3a3885bfcdf9698aa733"
+    },
+    {
+      "source": "2026-09-05T004613-r1-sample01/stage1/camila-kws/capture-validation/audio-analysis.json",
+      "sha256": "061adee9088256a2bb6071104e3e38fc8daf935908708c7ba100f6449a56fc9a"
+    },
+    {
+      "source": "2026-09-05T004848-r1-sample01/stage1/camila-kws/capture-validation/audio-analysis.json",
+      "sha256": "801aa3163d45783c1c6ad448d1ecf0b299a40dd0af5bbca2d2fc026eca7cf6fb"
+    },
+    {
+      "source": "2026-09-05T005556-r1-sample01/stage1/camila-kws/capture-confusables/audio-analysis.json",
+      "sha256": "022514b693510fad54758b9fa6037083e590871692f94bd6d9f79b2c8093766a"
+    },
+    {
+      "source": "2026-09-05T010113-r1-sample01/stage1/camila-kws/capture-confusables/audio-analysis.json",
+      "sha256": "8d13982d37b9726a16bbd0aa7507237af477dee3fd9f6950e6a7cf4919c89565"
+    },
+    {
+      "source": "2026-09-05T010440-r1-sample01/stage1/camila-kws/capture-confusables/audio-analysis.json",
+      "sha256": "0e5c5c0cf01dde877dc732678690cea45db25837a1b66dc0d4ec6e2e70dfd2dd"
+    },
+    {
+      "source": "2026-09-05T010835-r1-sample01/stage1/camila-kws/capture-confusables-a/audio-analysis.json",
+      "sha256": "5ac642909b93b60689c7959801d5e62fb871d73617061379fcba168746db4b4f"
+    },
+    {
+      "source": "2026-09-05T011249-r1-sample01/stage1/camila-kws/capture-confusables-carmela/audio-analysis.json",
+      "sha256": "11a60bc68a6c2c46fec3bb4dc8fce41c9fa12a84bd10115e2e3d7adf9af506b6"
+    },
+    {
+      "source": "2026-09-05T011546-r1-sample01/stage1/camila-kws/capture-confusables-b/audio-analysis.json",
+      "sha256": "b9e1a73771fcae141745a5a3157cbca0e6e152cda75b2e60895685e152a0205c"
+    },
+    {
+      "source": "2026-09-05T012454-host/stage1/camila-kws/mature-validation/results.json",
+      "sha256": "675f678905a37a99699d23d4b4dc0269612bbfbbed0487e945359267f422b4e3"
+    },
+    {
+      "source": "2026-09-05T034012-r1-sample01/stage1/camila-kws/microwakeword-validation/host-validation-results.json",
+      "sha256": "decd765c2cc88789747c36166d931e880f52e2142333510409e6038a67f57b78"
+    },
+    {
+      "source": "2026-09-05T034012-r1-sample01/stage1/camila-kws/microwakeword-validation/r1-validation-results.json",
+      "sha256": "0b2e1193db8df4ee47c60c1f182e9c09dc0ea8e7a819911dd86751ca220b5213"
+    },
+    {
+      "source": "2026-09-05T101318-r1-sample01/stage1/camila-kws/capture-testing/audio-analysis.json",
+      "sha256": "ec2c8d889acd6c4b80631f0b7fcda7928695d9bac69d7ce902e8916a981d7c37"
+    },
+    {
+      "source": "2026-09-05T101731-r1-sample01/stage1/camila-kws/capture-testing/audio-analysis.json",
+      "sha256": "deace365448da9ed2f98c6dbf94b9f6cb9831d95d8cf3e84f9a4c87b3631c464"
+    },
+    {
+      "source": "2026-09-05T102121-r1-sample01/stage1/camila-kws/capture-testing/audio-analysis.json",
+      "sha256": "06c642c495cc26ab8b9f6bb5e31be0573d37dd5378cf82a22a52314ae5019400"
+    },
+    {
+      "source": "2026-09-05T103044-host/stage1/camila-kws/blind-testing/results.json",
+      "sha256": "d9b58063bd51f344008405fcb561b1ab7d28d4631fde5d0c51e19a6f6f2ea209"
+    },
+    {
+      "source": "2026-09-05T103413-r1-sample01/stage1/camila-kws/blind-testing/results.json",
+      "sha256": "b72e3769137ed201511f17d34dedacc130e591dc2dc96349368374bc21a62574"
+    },
+    {
+      "source": "2026-09-05T112823-r1-sample01/stage1/alexa-kws/isolation/validation/plan.json",
+      "sha256": "2a693ab5773ee53e3560a44123c5ade0c91164d92b100683376ae6fe21127ba3"
+    },
+    {
+      "source": "2026-09-05T112823-r1-sample01/stage1/alexa-kws/isolation/validation/summary.json",
+      "sha256": "a25aa78ce55f28d11858afb27260b7a6a9d015685e1fcfa8ef502df9a9e94e5f"
+    },
+    {
+      "source": "2026-09-05T112823-r1-sample01/stage1/alexa-kws/isolation/validation/trials.json",
+      "sha256": "71918b4325f7b1839d1058b55474b8f647b9fb3966268187477be9e74250b2a4"
+    },
+    {
+      "source": "2026-09-06-r1-native-dialogue/android-checks.json",
+      "sha256": "57f3b3882cb9bcd13abc424ae0ec2ab8e9e1aa4ae7be7481f0346358a5183099"
+    },
+    {
+      "source": "2026-09-06-r1-native-dialogue/baseline-hashes.json",
+      "sha256": "448456bafd631d065832f13b4320db36ccd1727f3438455fc758697d16e5219c"
+    },
+    {
+      "source": "2026-09-06-r1-native-dialogue/deployment.json",
+      "sha256": "f5a1425303caf1119f8654d0d2acb1d5ae38c4d336b92ef28eae095880c3f319"
+    },
+    {
+      "source": "2026-09-06-r1-native-dialogue/device-interop.json",
+      "sha256": "d930ce342c918e78cfd66b7431b53681548945c7211f4e929b12d685847114f0"
+    },
+    {
+      "source": "2026-09-06-r1-native-dialogue/host-interop.json",
+      "sha256": "041c4e1df122bfa9d54f5f973d590dc302d81db3cddccfa6b541c07b2bbcbdc9"
+    },
+    {
+      "source": "2026-09-06-r1-native-dialogue/router-reference-hashes.json",
+      "sha256": "ce682dd6787bc1d4e567cfc69d3312f470ef60a6a05a86dfe94403911bca5b01"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-conversation-v54/deployment-baseline.json",
+      "sha256": "5e7029d299e851ff3809be2b94bb8e4f307075c0cff877b07bebb3417c2041da"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-conversation-v54/ha-expected-hashes.json",
+      "sha256": "f21dc39a80308b73890d9d0b9b30c3b518b6dc5beb510f2a4e488145e8d14955"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-conversation-v54/runtime-after-smoke.json",
+      "sha256": "7c155ac2b2ab9ee28f81e22fe18421224600c78bfcd4e5214bae59f5a5339b93"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-conversation-v54/runtime.json",
+      "sha256": "f3690392416bc8680383ee95e26c5daf7180a5a17e7ed96a2668cd0ef2a91c85"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-conversation-v54/silence-smoke.json",
+      "sha256": "88b3e9cee11ee987dccb0ae45cabf03b3662e832bdc9dfdfb409c3a285e08953"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-conversation-v54/summary.json",
+      "sha256": "7bb9481fb1c3adc3b641d8dd6f447ee7664ed8b4d8af457b7833677457d48920"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/after-final.json",
+      "sha256": "f6511dae7cab28525ded09061b851f6ef433cc5b56877676e64adf2c06b46bf0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/after.json",
+      "sha256": "a81f427e80937f9a64727e2c89d17f926b46790f8929235f08bb03ad9bace093"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/before.json",
+      "sha256": "46bb818106cf3735dcef6202c498dd1723e2eaba7b7277ef8d3b29f14a22ff1e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/deployment-baseline.json",
+      "sha256": "5dbaaee2dbf9516f3db3454b3d5edd952d558a06e1490340cf03583e5ba2a72f"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/diagnostic-disabled.json",
+      "sha256": "683651780705a0ecb926cb15ee8fe294db83e451434beb733f6edade6004e7d9"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/install.json",
+      "sha256": "de5ecf4b82bd9214701bee966875592cca34edc8589e575dc52325d7cae74c93"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-01/analysis.json",
+      "sha256": "c1b7ef7514367481f0a8c982caf150a7b003334d62f3249808510119f3125a3c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-01/before.json",
+      "sha256": "9f4b8040a86c8508a33258eb41fd979236186af951bd9bffc60e319d32f1560c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-01/capture.r1diag.json",
+      "sha256": "814c862217597e9dec5c69ada6a45251d1c8b99cac910593901838b7b9908b75"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-01/export.json",
+      "sha256": "3314652dd100180bcee3596cdea577c52fcf350bd4a58991717f637e5fffcf99"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-01/snapshots.json",
+      "sha256": "27d279b845574eed26d28769d8af6ff7798024bd1f5b67c20fcc4537983f462e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-02/analysis.json",
+      "sha256": "c5fc1460a1ff2aa092f8ffdd1b4333a126cf506c54dce6d1869335f2308feb1d"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-02/before.json",
+      "sha256": "0cf706bc6c689e722d3d580be5dd6688006b7740e9556a81cad9a2caee32d5e2"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-02/capture.r1diag.json",
+      "sha256": "6517402c4720b24f50f39652c3fc5270ce00b3b96e57bc46bbfb216427d40d48"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-02/export.json",
+      "sha256": "54a95196ba10c55a8046f305e2781c749b0e361e7a1ace619bde24249c4bd6f4"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-02/snapshots.json",
+      "sha256": "d47d7be1ca09764f7516c721395c3918cd37e390d440186e4f5ed6c2e7566e1e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-03/analysis.json",
+      "sha256": "ef98c77bf6572c9f2867f597738fbf0e8894bf4e183f4f2a6d96675703f06271"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-03/before.json",
+      "sha256": "79c9cd5a34616f4d851e4701fd038457ddf2076cd40c741e217f4834efab045a"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-03/capture.r1diag.json",
+      "sha256": "92cd592bd68884278270f8bd737922e7f7ffda89f068ba872784d83c66bc7d60"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-03/export.json",
+      "sha256": "c74c96f5a4bb1f6d4782f90ef886e0a714b64b24c3182b36ff0128bae7098fe8"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-03/snapshots.json",
+      "sha256": "1147c31f1770e2027d1120caa11ee37cc4ee964059087fd5d143d66e19805cbc"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-04/analysis.json",
+      "sha256": "b6193e38083dc2625a8023518fe087346a861810af84aa5ff6aa6ffbe557ebbc"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-04/before.json",
+      "sha256": "bcfdebdcefe0ead72e18232129060a21bfd855c5baa93828d80932991e585969"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-04/capture.r1diag.json",
+      "sha256": "8ddba32244e83458e9674c95e8e37ed7f647c66e1c0e98d8e22ea11dc7ce3edc"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-04/export.json",
+      "sha256": "4d7123c9e0cfbc3736bcd41a8c3713c08bd450e804b0de4e6e08b80a6a165100"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-04/snapshots.json",
+      "sha256": "9e530dd7567818253d11969c9c71633cf6871a400e34ddf955ee3914182036e4"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-05/analysis.json",
+      "sha256": "9ca767329a5fdc388fe0eef851ce1459226f9f0465516ef5c23df03d8950e7b1"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-05/before.json",
+      "sha256": "97a4bbe5fbcfebedd14acaca189aeabb7001c0086b66d397c869a21813a22137"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-05/capture.r1diag.json",
+      "sha256": "4dbb7893957b0d991c14051854e2071a61bc651cf923cc2e1e3fe44580c805b9"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-05/export.json",
+      "sha256": "daa4adc1791f06640e49ca2ae435fa5b209920d6bd1ad7038a95d50ff281c142"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-05/snapshots.json",
+      "sha256": "120d17db1f9ff492fabae616980b3bb5f61f0caafbb004686cd71dc5a6655694"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-06/analysis.json",
+      "sha256": "982b255eea5d1673acc67091dd8241c2633f3d542724282d598da34d078f5d7c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-06/before.json",
+      "sha256": "056fdd8cde350a753701c43616f8f414b99617de3aeb5ff58eb9473160ae8640"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-06/capture.r1diag.json",
+      "sha256": "e6710c40b9baf98e388f27187ab190bbc2635a8238d81c1beef36f04952f3661"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-06/export.json",
+      "sha256": "f9f67763a77c2a4669efc6cfaf47952817c3a1ab9ddd9f45c7fa50e339f65858"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-06/snapshots.json",
+      "sha256": "c8ff211c13ae7d2ea1042a2338362786c44df4131d1c41cb37e231b93b4b214e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/silence-summary.json",
+      "sha256": "d7e47ad1fdbba4683c19d1c0dff82aeec6c4b570e28d81f74eecb2de4be9237e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v59/summary.json",
+      "sha256": "fd5a598a1b915c0c234d57b256b26e76ad80eda3461c39f51d3448bedec5a465"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v60/after.json",
+      "sha256": "f8a770bfda371d497127a57d145aff0622de9c0b595445fcb24346ea91ab57b0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v60/before.json",
+      "sha256": "eeea5aa3f15e29555ea85b3a559c3e6b3b789fb8ba513c826d9b5b492330957a"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v60/deployment-baseline.json",
+      "sha256": "cf1b9e590fb7a96d67c25c1f798fd6ee46fa94a7ff204364cd2ac6da7a081e77"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v60/diagnostic-disabled.json",
+      "sha256": "9d9af24f6a79a96aba8d3d63bd1ff0addae7463815aa5b33cbb8caeebd957598"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v60/install.json",
+      "sha256": "c1c0147321968716ab3821ed5a5d613c7784264a56f9739ef95e14895a4df788"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v60/silence-01/analysis.json",
+      "sha256": "780ba30f510ce4e5b43303dd6d7bad69078a3efb6a7c8499e729ca50c697cf3b"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v60/silence-01/before.json",
+      "sha256": "9a496b8abd9d61b3e2221d13d639652a5982434119e82d8f8ee5afb9e35d6659"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v60/silence-01/capture.r1diag.json",
+      "sha256": "287e9db51e1fc41e442c5d7f54be3b3b1b925712f3e0635d6228bd1cf4551e6c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v60/silence-01/export.json",
+      "sha256": "7da75695aa7de2622eec1df454df003fb73761bc879a6c6c333b6691d472ffad"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v60/silence-01/snapshots.json",
+      "sha256": "57d04042d93cc84843a8431b37256b14b4afaef0ac37af41e4af9b36ede63fd2"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v60/summary.json",
+      "sha256": "1b562d8b9d68619d8e7d417e035f3ece3f966cd671b060e17bbc94d3021882fa"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/after.json",
+      "sha256": "f2d6f8b34339acd68d15ca4e22d4609afdf1bd586fb5ebfdff3aaf7143c6515f"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-01/analysis.json",
+      "sha256": "37e5cd08a8dc93fb50d98d725a3fb937d5165d58bddaad2d70ab60f97c69bc63"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-01/before.json",
+      "sha256": "2a59236f0a1777037d8a61d4d649a67f3f8fde7ec52ac1e206d1740ec3586888"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-01/capture-context.json",
+      "sha256": "aec01e5c2379d9a5d5a87295e82db761cbeaca644722a9690cf88c98ae377313"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-01/capture.r1diag.json",
+      "sha256": "9ed0aefe50edc64452a8ebcdaa336896914a205cf052adfc93ddac89580c2214"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-01/export.json",
+      "sha256": "61c610c9a423893a3b9a4a697999d3795b5a1f2ed26c7c824a6306a4336eb76e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-01/snapshots.json",
+      "sha256": "f31b765a8a18b234340928601379e8638b731a5eaab348f15864fcaddae2f32e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-02/after-user-report.json",
+      "sha256": "37269969749bedabf756de7af22a5ae8ec204f2a90d186078969507773febac4"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-02/after.json",
+      "sha256": "c615351e9e1095894fe08a8e03bbbbffd94bcb4c9c1b07ef070741d01efdc2bc"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-02/analysis.json",
+      "sha256": "b7f90442a1087f094b67081288255e72c4154613667ac6c6c31a96c5c72b8d81"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-02/before.json",
+      "sha256": "e6b88f13c22d0994a1cf2d9e7863e525f532445606e543b05657cd60cf1ab11e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-02/capture-context.json",
+      "sha256": "aec01e5c2379d9a5d5a87295e82db761cbeaca644722a9690cf88c98ae377313"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-02/capture.r1diag.json",
+      "sha256": "434d1f20c09312a2d1013dcb6a9b683a265828242636ab2c22d4d46191a95d9c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-02/export.json",
+      "sha256": "a6605657138b6c8e2c7a11f51ef307efa4c5f829665bdcc27b532c9f69e02b1f"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/alexa-silence-02/snapshots.json",
+      "sha256": "9356c5fd3091c96bcc13e154c8a3746b7d8f150b5ac789162b3150c8dad75797"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/before.json",
+      "sha256": "56ddccea830c41a5f51458abe32ef3f274695f63ecf1b019e86d8b2c03da7817"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/deployment-baseline.json",
+      "sha256": "d8ef8959cfcc892e74c08beaaf4bea652f239efcfaad7571c88a57d0cbb26750"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/install.json",
+      "sha256": "519b477a3b32dfaf41eadebc4a2c4656a223b5472cad32e2117f6ba1472dacc0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/prompt-1-round-01/after.json",
+      "sha256": "a49e14d147d728e4921c0e582224b920f3b02f7442c6ab4b6e02971791452823"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/prompt-1-round-01/analysis.json",
+      "sha256": "9f389aef0d1332caea65e8f3f2b84c90636a452e98ad0377f0a6fa5ed53817cd"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/prompt-1-round-01/before.json",
+      "sha256": "5f1d1a2e509a6ee55c2a194b692b236fa56d2632e8af22a3e4e11e88119ba789"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/prompt-1-round-01/capture.r1diag.json",
+      "sha256": "2b938e87bf358a5e23aa03e4ee0da5ff6a2579a598f6005ddad8719aabb97baf"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/prompt-1-round-01/diagnostic-after.json",
+      "sha256": "416e3ad31b8ae290ebad4784862ea58a7285b829c3a299c9d260a51fd05536f0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/prompt-1-round-01/export.json",
+      "sha256": "1942e3acfce5f718f5b80befda87b5f3fe191cb0886a4a558bbd88e3a729e792"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/prompt-1-round-01/late-window-comparison.json",
+      "sha256": "1da3f79d0ff0841cf9cb116c2df8617f90de1a581a580521e0f439846f5ab373"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/prompt-1-round-01/snapshots.json",
+      "sha256": "1425c8a00b52898c08ea6065ad5957acba2a5632cddc267982cc4f1de38fa1e4"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/real-alexa-summary.json",
+      "sha256": "858ad7275b1b53ad322e55041c8525c3e5fcec6dc89b1145675fbb9373496c35"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v61/summary.json",
+      "sha256": "5be0387b5a67b3305a948fdf77d579487953c52978075569c9e42b8915980e79"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/after-five-rounds.json",
+      "sha256": "f852a765ca60fc811861c7575c79fe8e0af2ded82fae0bf2407324ee82b058b7"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/after.json",
+      "sha256": "5d2ac97367683710a8b8ef3e2275f53df3fe4bb188dcdc328964504409fbf030"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-01/analysis-output.json",
+      "sha256": "55ca1f46ddc3fdef82547f3bc133d8d238c6278de33553e5ce9279813b9e361b"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-01/analysis.json",
+      "sha256": "55ca1f46ddc3fdef82547f3bc133d8d238c6278de33553e5ce9279813b9e361b"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-01/before.json",
+      "sha256": "64c1f0a18d9de88f36b164fd883cc4fe5d948617670056b13dde5b883580381b"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-01/capture-context.json",
+      "sha256": "9e5ac724431510b6fa3fd9e4d984b422bee6779baf722961c9959d12236670d0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-01/capture.r1diag.json",
+      "sha256": "2422d94a8acfb009e8e39c5768d3eee6134e0868c604d246dd76b31f90752c81"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-01/export.json",
+      "sha256": "240e4ef2e926aba07dd3479e480ea249ef49285431817552c1c3459adcce3adb"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-01/snapshots.json",
+      "sha256": "8c18b86c397fcc46ab44a4cf26e2e6c35b88cdda668e6ece95b00008442ea0e7"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-02/analysis-output.json",
+      "sha256": "ef4c350bd4a94869f79a1e3d287532eb01cda7300cb07f2142c830b3c94ae356"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-02/analysis.json",
+      "sha256": "ef4c350bd4a94869f79a1e3d287532eb01cda7300cb07f2142c830b3c94ae356"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-02/before.json",
+      "sha256": "d7af2bfcd136c7a6e53246ed8b8cd1657bf41f29d22dcb328de3840f6a47915b"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-02/capture-context.json",
+      "sha256": "9e5ac724431510b6fa3fd9e4d984b422bee6779baf722961c9959d12236670d0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-02/capture.r1diag.json",
+      "sha256": "cc8565a7d9d6b305a5b548afd629b17708f5bc9dd4009cbbd1d105a23a026b94"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-02/export.json",
+      "sha256": "67ca56abbe38581bc65b8ee31b8e428f43522b14d38e14f88e0f069c4093da3a"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-02/snapshots.json",
+      "sha256": "0ef3d67d899d5c53734bcdc1f003b74f682271770c7b9cc37e5c27d8f38cfdc0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-02/user-said-status.json",
+      "sha256": "5d8b46c889b2a3665616671d94a9831014716a39c19b7d7adaf4455f516943d8"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-03/analysis-output.json",
+      "sha256": "0290a39ec339053cba6763665f139477a4e9088dcc1fc81acebf435e825c61f2"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-03/analysis.json",
+      "sha256": "0290a39ec339053cba6763665f139477a4e9088dcc1fc81acebf435e825c61f2"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-03/before.json",
+      "sha256": "20382a9dd721dbdc01051a8ee2f8fa41c1b72d16497e1c2ea816ee5dec873d2b"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-03/capture-context.json",
+      "sha256": "9e5ac724431510b6fa3fd9e4d984b422bee6779baf722961c9959d12236670d0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-03/capture.r1diag.json",
+      "sha256": "2efbfcbc375b076438767b2c647f86f68ec63c34394893c000fc484d2a31bc6f"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-03/export.json",
+      "sha256": "e525acbb7c0199c253af88d3e736d936bf21369ee4baafb41e6ae1fb434e8a6b"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-03/snapshots.json",
+      "sha256": "884f0525340203ebe8741dac93c133e3abe44f0b3caf5ff579be9710b31a6b6f"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-04/analysis-output.json",
+      "sha256": "a84b3be5ce7ed4416db769c7fdd10b130ada3f95cec7b96034c7e6d4f499b21e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-04/analysis.json",
+      "sha256": "a84b3be5ce7ed4416db769c7fdd10b130ada3f95cec7b96034c7e6d4f499b21e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-04/before.json",
+      "sha256": "d002f2de2b3fd3c5ccdb5cd601a671188b70c771bacf0b81eef58a31c73149e8"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-04/capture-context.json",
+      "sha256": "9e5ac724431510b6fa3fd9e4d984b422bee6779baf722961c9959d12236670d0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-04/capture.r1diag.json",
+      "sha256": "403dde3a63cfa8437e602554f17a7c3c0e614d514d469f9ed1577de3827aa373"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-04/export.json",
+      "sha256": "87675dfd622649062109500b9e22cbae4278d5b7147dc628ccfa3260e57ffa99"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-04/snapshots.json",
+      "sha256": "8b0b86da0a77964ef13b3dd767bc624097d40c2e7a80a264e2bd176b40b69f72"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-05/analysis-output.json",
+      "sha256": "abd68a27e7c6bb69e85a004b61ff557a240143ca01c60af6d764a9801cea513c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-05/analysis.json",
+      "sha256": "abd68a27e7c6bb69e85a004b61ff557a240143ca01c60af6d764a9801cea513c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-05/before.json",
+      "sha256": "fabd710290b5f7c73bd82efcf9900ed548294ccba29570838ef49d15785cdd53"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-05/capture-context.json",
+      "sha256": "9e5ac724431510b6fa3fd9e4d984b422bee6779baf722961c9959d12236670d0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-05/capture.r1diag.json",
+      "sha256": "b925cc6ed81c27bd9a7b9d1d741255b56a35b713e8936d111d8fb3c7f9a60e92"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-05/export.json",
+      "sha256": "447d136f9fff276686032a4cc0db2e636c4022b6f4e998001521fe464ee94332"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-05/snapshots.json",
+      "sha256": "36d1b65801446e543279240c2c6e58a579c9e179049637ffe5136d98eb1547c9"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-06/analysis-output.json",
+      "sha256": "2dfcac6b6b4209f3bfb6b501f5e54992478b1bca984b1775664d13c6604ff399"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-06/analysis.json",
+      "sha256": "2dfcac6b6b4209f3bfb6b501f5e54992478b1bca984b1775664d13c6604ff399"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-06/before.json",
+      "sha256": "e86bf55063bd6ad5a2185308981a316d173fb512cf7e52d3d6993028fc04cb25"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-06/capture-context.json",
+      "sha256": "9e5ac724431510b6fa3fd9e4d984b422bee6779baf722961c9959d12236670d0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-06/capture.r1diag.json",
+      "sha256": "32f149fff3c67fd35e34c27a3ef88740a6656cfd04b4977cc5f856f152eff39c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-06/export.json",
+      "sha256": "3ac62708fd080a17c84855244c71cc61073cafce0588680362bd38e9969cb6aa"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/alexa-silence-06/snapshots.json",
+      "sha256": "23562f26a932a078bacce6d82d11921753da6c0c61300bc7a16caa8a3d6456c4"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/arm-observation.json",
+      "sha256": "6492de8ed9d4d664de9a56020df7c3e06e1f2bf6e06879adb9d1d6801c2efd25"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/before.json",
+      "sha256": "cf3f3aa195b064dd3735cd91bb928526b2c83c1cca9e7a8383356b39e511496f"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/deployment-baseline.json",
+      "sha256": "137d7e1e0383dcb001b01df2d477abca75550db4b01425d7ccdfb431ce25ee82"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/diagnostic-disabled.json",
+      "sha256": "6492de8ed9d4d664de9a56020df7c3e06e1f2bf6e06879adb9d1d6801c2efd25"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/install.json",
+      "sha256": "61762965c231452e465bc8540571db3e202a8d4c296db30d3bf8e052ea5761c5"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/real-alexa-five-round-summary.json",
+      "sha256": "db4943490a89ae3c485e9eea9d8a2d052de4fc872360c052645d18e068acc32e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-diagnostic-v62/summary.json",
+      "sha256": "6979004cf5e107d66cc3bf0056d7381e45b399e8837fbefeb976974fa2bd8b4f"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/deployment-baseline.json",
+      "sha256": "c94c9d8919fd0ae6eb13a5832559d082842c037601d034128e67438ff31bfda4"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/final-runtime.json",
+      "sha256": "1598eec33fd817444ed11f410577513c68305236d5bde9de7c062ebee897a79d"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/ha-before-device-fix.json",
+      "sha256": "f5e34f4eb5ffb808abad895a3c1264233183e4985a6c4c53140e4330d8329314"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/ha-before-final-hashes.json",
+      "sha256": "0aa4c77ff46b408e04bbfea8bb3314d7f091cae141ca7e35a7a303a7414bd29c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/ha-before-hashes.json",
+      "sha256": "feb43b68942874bcbfe3b7776adb12fc36b9916b270f2a74ad874229804f83d5"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/ha-before-volume-fix.json",
+      "sha256": "a94ce8e0214b88ba4544897f4d3af9b16c6de5b84e3a06234d18bc7309060730"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/ha-device-verification.json",
+      "sha256": "851eea946820318b3befb3453efd575179c2c9fd57ce65c635de91e87338a6df"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/ha-final-hashes.json",
+      "sha256": "6f548904d6c2db9c79ede33598bfb6213d0c95935cdbfc9ee12c24dc890974c2"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/ha-final-verification.json",
+      "sha256": "5463cf05e6f84c2655f8a5c08536c0dc5f75159b748ed2040eb0b36d878f6a0f"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/ha-intermediate-hashes.json",
+      "sha256": "9c077f207257433bbd0779158d98fbaac15c1b7c0890105b2fd8b68c2690f3e7"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/ha-live-verification.json",
+      "sha256": "ca37f5aec0aa10a38d400fa569f722696476f97fdbe1894f7c5c6fad2189b33c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/ha-ui-entities.json",
+      "sha256": "b272b27fc7a2f1968b517e4d934dd9edcb4e985b6bf5bd3a01acb56acdb135f6"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/ha-upgrade-verified.json",
+      "sha256": "1982290af408ca48b5e355c83a8383b9eae88ae00fda847faf7b43363f79c21a"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/ha-upgrade.json",
+      "sha256": "aa60349719c053fde086f2dd71a3eb97a10f509f69df443c658360f2eb8937d5"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/reboot.json",
+      "sha256": "9e4c6e784092cde7f7bde483aaed7cab44090fa724d817f4b37e2c01cd0d2a54"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction/summary.json",
+      "sha256": "a3aee3d6978461007536e8eecb496b9b03fe55a0e1a980bf2c818a613d5c4066"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/apk-deployment.json",
+      "sha256": "1e9d9b248dcbca6be7236b824cba1b61c869f518c4bf41bc679ae4ec5e8035b0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/apk-v49-deployment.json",
+      "sha256": "e774f258b9ae6357204e01e71a648a8d435e456f269ec1b521f392ad48de7711"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/apk-v50-deployment.json",
+      "sha256": "a0ff3c47e8b0a56617c9de4b1ef7350a91d981428de2b3e4fe0af783c8be37a8"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/apk-v51-deployment.json",
+      "sha256": "14217a74d92aaf95f24b54b060f66c38cdda6b1f4bd6c79d4891190912190983"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/apk-v53-deployment.json",
+      "sha256": "aa85dbe1ad75454d3a17d6386f573f83fa8753ccb03f4e408bfd90b9a2cb3517"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/deployment-baseline.json",
+      "sha256": "8363111d03c266234ec3076447e122af951cd3c69393b64a98895f92a07e4b51"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/frontend-format.json",
+      "sha256": "38d1cb48d3ccf53cb2146114d9dccba28c2dada58a18b957add8cf151e513464"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-before-final-hashes.json",
+      "sha256": "5249b15e323ccd6e9efb37c628a024d4f3b54eb43f89c110f202f12fbd45c2fc"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-before-hashes.json",
+      "sha256": "b7b5193b90f6c11bdaed2b540a06e85f596aae01b74a65c50b1745614440b48b"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-before-reply-fix-hashes.json",
+      "sha256": "a60de606418b80146225a4d180d8740e37bf1c3ab751681474b2eca9bc938d06"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-before-v49-hashes.json",
+      "sha256": "c2f2f760ab5e995226c9b4158d645587288626cfd5c6373d998ecd368a8b4fef"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-before-v53-hashes.json",
+      "sha256": "c8f7c3aa674c5d8a63d551e594903ffac329144398e3bb86ac960ce74c1f6074"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-before-vad-ui-hashes.json",
+      "sha256": "4517d124a83ae400c76f5b4cc61e38705d0fe3695ffc143cd917e3d105bf3417"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-final-live-verification.json",
+      "sha256": "8274815e10c7c2edd8633d408f9c37d9a427e56aed12ab37c03adc098fff8da8"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-human-latest.json",
+      "sha256": "47d07759464f980199bfe8f86ceb1ff78aeaadb40e8115190ac5891642109014"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-live-verification.json",
+      "sha256": "c55debefb0796e30fb86bfaa6ff93711d72689a5feece7b97d7326ac544cbeab"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-silence-observation.json",
+      "sha256": "bc5668e5997569f5be179aca7e6b01fc7d5451976fdd0bb4660c3c24be91db43"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-v49-live-verification.json",
+      "sha256": "73618a2ca7a058e535955ec16b06c6f26fc36f9b6fcbb3f657bc9bb8d12638e1"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-v53-entities.json",
+      "sha256": "9e9d2e8ca6d813558247d70b685886dd2cf2ee54c8a7f2447963ff1a4421ae07"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-v53-live-verification.json",
+      "sha256": "d105f8b3c18a06874a35f169bb4d6cddeb1313615fb0df445f3a49784d3cf56b"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/ha-vad-ui-live-verification.json",
+      "sha256": "35e55ccfc365350b11a890a468656656b249a5aa7b5e201c659956240f3ff04d"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/human-v48-failure.json",
+      "sha256": "6e9a6a1df4c503024216db18b48470e9f92b9696c0a4fe81c3ec5043c77d4848"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/human-v49-results.json",
+      "sha256": "ae7f4d61ea1bf27fae779eb5dafaa188a3b09e6b6bd1174cae6d3574fa623317"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/human-v50-failure.json",
+      "sha256": "a0ddeb0c65d48702bc1b8eb36c0fad8f99029e3795a4baca1a6bec83bdaf9b7c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/quiet-speech-reference.json",
+      "sha256": "802a65781fd04d1665334fbc5b1490f9886a88e85ed67c480c0c64041afca348"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/reboot-first-check.json",
+      "sha256": "b1ca07a2b92cd32a8db32c0dfa83f1e2707f1e0372e2393739d49c7236e4530f"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/reboot.json",
+      "sha256": "0b45f736fc5ea244a68389a4a86cc61a6b8828902cb226fc9726991572591bc3"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/runtime-before.json",
+      "sha256": "4c4cd29d4f955b9dab0a006a0ad9973833474ea6a4201be96c387d73e1ca77c0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/silence-windows.json",
+      "sha256": "4ed91f122a70bfb55e2ddaca7539f23fd4af6b5762625aaf082e598d4efe682a"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/summary.json",
+      "sha256": "1d9a39bdbb054efdff8224cf4fc6738c15693ca19a1e01d5caaefb45fa18cc82"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/v51-installed-check.json",
+      "sha256": "3852a82f35ab6c53f6605419295ab1c57e747609e6ee75c3379b2e9192813c2c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/v53-runtime.json",
+      "sha256": "66482352bf5ef256514418a3bd5935f968a1074e634369f60b800227e8cca1fb"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/vad-gain-reference.json",
+      "sha256": "caaa55f3f15e7130080d2942e1242c6019b67fbef2078cb0d5ef6268888fb5a7"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-interaction-fixes/verification-tool-failures.json",
+      "sha256": "d86a293e9b99a57040432fbf67a25084f4f58c3784f1fe2b1e2fe9b6bf461260"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-isolation/boot-guard-initial.json",
+      "sha256": "488b5cd2cbef068504235a3220d048f0221e3a8b6491da86d6d80c4dddc823f2"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-isolation/boot-guard.json",
+      "sha256": "8548927f1f53fe64bcbe9ae10c3a667e3f6717ca914a34f810d881ba58a94669"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-isolation/deployment-baseline.json",
+      "sha256": "e0c59e357a9a0d2ae52d90235dcbe882e18d2da7952126623a02aff205e01b20"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-isolation/final-runtime.json",
+      "sha256": "76439670e5f31ec37a671129c5f90767b070f9890ac7f9147bbc4a54e0363750"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-isolation/isolation-capabilities.json",
+      "sha256": "f8c449295abfbc583abbc223bfc2040ce0d037ae87b7328624eb75ca60489859"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-isolation/summary.json",
+      "sha256": "b2c103c9661322fa5338ba4ae0639592f5255ac64f6912569f75e24cf1fa36c6"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-isolation/temporary-capture.json",
+      "sha256": "7b0f36ea67c9d50e632fb77ffcbec48b5009bd18ed78a622fc45399ac92db75e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-isolation/temporary-isolate.json",
+      "sha256": "436ba53b262eac0270848339cd5f00ca531c9d6883703143728109d2eed62a2c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-isolation/temporary-restore.json",
+      "sha256": "5ee6f89ab20b56cc5433800f132a79c3e59dcf66df51fa3ca692211216d38d2a"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-audio/checks.json",
+      "sha256": "812bda9f8137d00d08dd745a5cab9926a3c76f06470bce7f252e553e582cc659"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-audio/device-interop.json",
+      "sha256": "67f3202cbc3bfd1825623e59df65b42805ee4ba59b27621358c4bbbe5d52d081"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-audio/host-interop.json",
+      "sha256": "5e9ac8150446a69669dab842306d29fade323a345821b3d95181c6f45ce6467f"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/after-boot.json",
+      "sha256": "4b7a28b9b816d7a08e5047f3b7f681c3311aff27ba9726002c29d7a195e62171"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/after-isolated-boot.json",
+      "sha256": "0fe009e4f2a19776a4cc6adb2d7c0c1ec0156b6e4fa6b0a468ebb835d0422bfb"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/audio-health.json",
+      "sha256": "d12ca54b5c01d6f307737e3c6faba17a731e6a24ce8914adb2162a027bd3a2b0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/before-isolated-boot.json",
+      "sha256": "25fa0a1511788c14713af806ea9c8ba30a3cef8dd79148ebc23254977d0afab4"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/deployment-baseline.json",
+      "sha256": "94731d84c46837c0eb6ec0b79e0ebc75606d9d4dd3c5b4bd4d8c26a5914468d6"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/device-dialogue.json",
+      "sha256": "36b69f8830feeff74d3a0d69e3655d0d42322233415782d6bc15630a88355296"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/device-initialized.json",
+      "sha256": "b5d821fb178ffeed4788abdc257735e120574f789438c12df2f70341b091d2b0"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/device-lifecycle.json",
+      "sha256": "d2d0e049b1d181319e31afcc85019ac22ae44fe1b13a23d966b29b9d40d5e4be"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/final-audio-health.json",
+      "sha256": "e18c2e260f186cdb04f380a06c893ba4e5ccacd765c9ce0766a82e1a5f52ff39"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/final-isolation.json",
+      "sha256": "436ba53b262eac0270848339cd5f00ca531c9d6883703143728109d2eed62a2c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/final-runtime.json",
+      "sha256": "0044401b308b27894a48f49501376a3a5570fbf1e8e4f949714c338b12738471"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/ha-baseline-hashes.json",
+      "sha256": "f1f3115e31079fab7305aa6ad06231db05dbf20bedfa62bb248db1d4cdbb7934"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/ha-deployed-source-hashes.json",
+      "sha256": "f0c4b8082fb1905581091b4633c65addda5c2116925cbd07edd3a38a1ac337c4"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/ha-pairing.json",
+      "sha256": "91fee9f4fb619fd1b5b371237ba71d176d13d345aabd4df8169b2383da78a744"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/ha-pre-report-update-hashes.json",
+      "sha256": "8e1a9cb035070db16487c56f822e7ad68e864626ee52181dbb47bdb07a4bd905"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/ha-restart-isolated.json",
+      "sha256": "81d252860d182526a42f55517d81346f8992806e3e7590b6302ff9f28a1805a8"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/ha-restart.json",
+      "sha256": "e4ed3f80e7c6385dcc96c224d503afa9662a104e3db3a48e865f582d24007ce4"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/host-dialogue.json",
+      "sha256": "7b492d63eaf28a1a73e95ec753514aa9d5aec541fa5200034dc336175b2cbfb3"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/host-metadata.json",
+      "sha256": "a026ae62f1509552f67e90230c8750e4bb4367517347a41182fffe5550d42660"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/isolated-recovery-after-fuse.json",
+      "sha256": "62a8ab00c4994a00ab99e6cfb5dca77efc4b3bee57ddb3528008486ebb3a680a"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/isolation-limit.json",
+      "sha256": "baac5587571432879b7f3c47a95b270cca8b3b1dab1aba221490a5a3236310c7"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/listen-start.json",
+      "sha256": "a9e035176d3cef8a26268e39db46774e3d9025a01341a34011a76cd9abd3a35c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/mdns.json",
+      "sha256": "7ad5049546d1e2a044fd6afedcb3fa2db2a5b95c756948efdd40a4c71d738578"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/pre-boot.json",
+      "sha256": "ea896ba2e9d7918db58ffb9c112dc5e88d5d58093c6aaac60c39c7c8ae6fdb5a"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/process-recovery.json",
+      "sha256": "1b8863eae602520e055fc33eb7c8c207965e203df5f752976ea133d11344d449"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/restore-check.json",
+      "sha256": "5ee6f89ab20b56cc5433800f132a79c3e59dcf66df51fa3ca692211216d38d2a"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/stall-guard.json",
+      "sha256": "7d1e682ce6f5e2cb0c48a11d1bb6824d366e91493e2f39c377bc0d972194a3eb"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/summary.json",
+      "sha256": "5ba90d5c331b8bfb067733bd48d957a1584730ae025bf2802e35f4a17175d274"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/switch-readiness.json",
+      "sha256": "755a5a874306222eea496208363ce3edf1ed5dcaa84c7d9d3beefcd41a442c9c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-native-runtime/temporary-isolation.json",
+      "sha256": "436ba53b262eac0270848339cd5f00ca531c9d6883703143728109d2eed62a2c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-nonroot-isolation/deployment-baseline.json",
+      "sha256": "5e6da5d15dbe274df0b85f36a03ab36a87e985357ae70de86934307c351e69f8"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-nonroot-isolation/exported-service-stop/service-stop.json",
+      "sha256": "84b7686a51caf2a94c490520456022ae6af8358a7dc3f3f83d5e295d4bd3bd11"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-nonroot-isolation/final-runtime.json",
+      "sha256": "51e5c7cea0cffe783ddc2b248a841fcff36e3f3f997bd9071ecb61a2ab727d41"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-nonroot-isolation/hidden-audio-health.json",
+      "sha256": "db6ce98541763df97ea19382129c1d200c2728369b7eb86dc803efeaf5116d5a"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-nonroot-isolation/hide-probe.json",
+      "sha256": "7b4d0a367fb1fc18a1a883dcfe953449252934d1038b0fc1462bdb0aa0aae8ab"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-nonroot-isolation/isolation-capabilities.json",
+      "sha256": "48cde492192b65d34d04ceaee12a25e5a1ccae900e2379a87d9d0e57a76cd1bc"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-nonroot-isolation/service-stop.json",
+      "sha256": "99eb2af389ca77f5e90eed055104c7cbb1a3711d7e425712db85b801833d682e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-nonroot-isolation/summary.json",
+      "sha256": "35d58b4f9701ff9271dbcefb64e3b340c18a5a7e530e661d9e2b6a76f7686f3b"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-nonroot-isolation/three-reboots.json",
+      "sha256": "3932f8376f8a4c05a61bde77ca1515a71c5fd04a77c2f03209937119280ff7e9"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-nonroot-isolation/tool-hide.json",
+      "sha256": "94baf75ffb18225d2c86b7ec096ab3bdb5c527d37398155c5dca2d55c7a7afa7"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-nonroot-isolation/tool-restore.json",
+      "sha256": "5ee6f89ab20b56cc5433800f132a79c3e59dcf66df51fa3ca692211216d38d2a"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-nonroot-isolation/voice-disable-restore.json",
+      "sha256": "654f71f87ff8e3a1d75371e49504c40ba2524e4abf25360edefb23f52501548e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-prompt-v55/deployment-baseline.json",
+      "sha256": "6bf9f819e6f32775effb4216011aefbaabf55e4cccc42ba66d80877539ec1b01"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-prompt-v55/ha-expected-hashes.json",
+      "sha256": "937b7ea045cc8ebbee1b97bd53e1d4a3107ad7c2d3b7b347d11f09fc8f0692fe"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-prompt-v55/runtime-after-smoke.json",
+      "sha256": "72548a5de6d1cbea4b0f1b38c1cc970183462f4490e0096493551d8d344b65de"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-prompt-v55/silence-smoke.json",
+      "sha256": "ef2e2151d2c3638d3b063362454b9468ee6c5e61a06a9721090711082c8b98c4"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-prompt-v55/summary.json",
+      "sha256": "861b823dd5c909a4e18528bb54246b7834f3dc4b3d89ad6ea179a44b5f7d5af9"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-reference-v56/deployment-baseline.json",
+      "sha256": "eab828638a7b261f31130b21ffcaa3d1a4afc97bb883bd4d577fb2b0b4607a0f"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-reference-v56/runtime-before.json",
+      "sha256": "5737cfa01cef3fe55c2fab98385e7fa9add5b9462b1a890324e55ac5173a03d7"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-reference-v56/runtime-v58-after-smoke.json",
+      "sha256": "7f58bdc9fb313de2e39cd6fd54dd64bde825bdc94ab1bfa0a48fa2735d784bef"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-reference-v56/silence-smoke.json",
+      "sha256": "71e63fc297f0112db2369e690f21ebc3e467db8c3f95dadfd0672e530c58c559"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-reference-v56/silence-v57-smoke.json",
+      "sha256": "fb5b68d1b8e328ea6a54586d9bddf132a0ff6f613a568d75203f7f8382c45e8e"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-reference-v56/silence-v58-smoke.json",
+      "sha256": "ee40137fe8089f3d9fd94dd4056dd08483582c3f81ab103873a42f90f9c1f5ff"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-reference-v56/summary.json",
+      "sha256": "841e3ec8caecb40f62311e6b93dc751f208b37abd0c43419f2f8ca858f0378d8"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-root-probe/after-reboot-runtime.json",
+      "sha256": "4118afebc43d5948013873f7c1d7bba5233cae45720ff188babcab54eeab1759"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-root-probe/final-runtime.json",
+      "sha256": "d71ca36076ae8f5d7f42a53fbf0016ab4d6bf42e37410da987f94866b7c61ad3"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-root-probe/isolation-capabilities.json",
+      "sha256": "f2bc314af56c8dc975b8a155c3f37fe34fda4e927f609ec15111aa6e59a813f9"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-root-probe/root-probe.json",
+      "sha256": "3025eae18361ce741e1768d927ab536cf9a799661bc2941f667c1b2bde0fc7c1"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/before.json",
+      "sha256": "b99d47ea459741f2150259b4c5284dcdccf63a6a06789077120069b90abe04b5"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/scenario-01-after.json",
+      "sha256": "89bcdda994c00a617c5574918c23b6d7d122320096380fff3aabd1c24ced3fd7"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/scenario-01.json",
+      "sha256": "bd70ef6c2c849d49ee0cc901ba30d69cfc73aa5bf19083af7e0d4b3e64593c55"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/scenario-02-after.json",
+      "sha256": "2186e81cb59a3227f6a8b4859f7da6007fc89952953701cfa47e7454ec469f6c"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/scenario-02.json",
+      "sha256": "b4d76518c8d188468f68a1d40640d7415b22ec34faacaa8b7d986ac5de52135d"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/scenario-03-after.json",
+      "sha256": "7b91352bdef1e10c0f62ad5859e551bd3c07c972949a875c3798617de248f46f"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/scenario-03.json",
+      "sha256": "79d8b72ed9609f2619f38f11bc5e3b865139687d9f896fa99908122d8cc32f92"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/scenario-04-after.json",
+      "sha256": "a8c4e7eb6da5cc849fcc6d2feb2bf9818684b8d3c2c3204c83ab1e7dc20bf1fe"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/scenario-04.json",
+      "sha256": "8be7084a8023b3a392a050b80442f8cf3909a3e8e93cdc99f510909c4a559657"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/scenario-05-after.json",
+      "sha256": "2fb4ab95546e3e44d50db0b66f46f2ac581e366fc7e3a944ae667cccd11a9577"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/scenario-05.json",
+      "sha256": "c2d79df41a340a1a4d5a1b74e392c658df6f610baf5570af3147e151b6220b0b"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/scenario-06-after.json",
+      "sha256": "5988216c686352b2af0e153353d55ce1b6d302f1224d1aa4d5e795d3343d17db"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/scenario-06.json",
+      "sha256": "9686c43384a3433c11375871cbaa97f2354cfcc2de3f5dfa5a340b51dacfe9e2"
+    },
+    {
+      "source": "2026-09-06-r1-sample01-v62-immediate-speech/summary.json",
+      "sha256": "341fc2285982f90e284a2645079eb13aaee56fb16e9ee885335b6b5e83a4be0d"
+    },
+    {
+      "source": "2026-09-07-host-repository-cleanup/android-test-summary.json",
+      "sha256": "aa2cc3250ea5d5fc613baa4bdc44a94974613707298d4425a52e90e2dd33c101"
+    },
+    {
+      "source": "2026-09-07-host-repository-cleanup/apk-audit.json",
+      "sha256": "f7141ea60b41b268797255187a762c4bf552701cedd147cb1e17e983a535acc1"
+    },
+    {
+      "source": "2026-09-07-host-repository-cleanup/archive-verification.json",
+      "sha256": "652f3e44765db0a219dbce41302be7d28008ca3193a1e19421bce5b63b96e0ab"
+    },
+    {
+      "source": "2026-09-07-host-repository-cleanup/before.json",
+      "sha256": "383cab3c5adcbab62af59f896afb8f99c5e74602ba581e6cde125decdba6d49a"
+    },
+    {
+      "source": "2026-09-07-host-repository-cleanup/device-before.json",
+      "sha256": "2cdaba8a2301fb23a32a735bd508482ef1f786a246c06034e5a1942508581243"
+    },
+    {
+      "source": "2026-09-07-host-repository-cleanup/link-audit.json",
+      "sha256": "446ed148369470e472d0ee94f0b2cadee3eaf16d154ffd89125e5dcf3f4e4255"
+    },
+    {
+      "source": "2026-09-07-host-repository-cleanup/manifest.json",
+      "sha256": "c6bde7aba121bba049ca228054b123f5a2c3421c430e9fe3f08317cf0ce69d41"
+    },
+    {
+      "source": "2026-09-07-host-repository-cleanup/source-changes.json",
+      "sha256": "07b5b3761884bf1d41d3f46bdcd90e9430b51e6c3178eba1917e8862d6bdb87d"
+    },
+    {
+      "source": "2026-09-07-host-repository-cleanup/space-summary.json",
+      "sha256": "36460a383c1ac1456cafa9b47a8eb0bf2a87c164410c5239ef9d1b3fb885b6fc"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-cleanup-v63/after-install.json",
+      "sha256": "3107f7229944f97d1f4a2e05a1e7c5e2c0a86587fde9f1309a5f962c1f1389d7"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-cleanup-v63/after-start.json",
+      "sha256": "bb62d5f35dd93ad0add32a9bb617b448daad24d5d785a66de367ed2ae0753338"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-cleanup-v63/attempt1-after-install.json",
+      "sha256": "11b19af704723b4d90ef2b48a4c80403e9ae79b499f9dd4f534ed2250383d1ce"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-cleanup-v63/audio-health.json",
+      "sha256": "446c8de44554e7b831052739c990a8fda66accff950e74fccda4bf9177df53f1"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-cleanup-v63/before.json",
+      "sha256": "19c8b4aaeff237773f42fbed766d97cc04ee59b3e4b1309664b5f6189c17f62b"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-cleanup-v63/deployment-baseline.json",
+      "sha256": "d3f9e09626063ed3ffed1c3517ba0e2ec301af904498476cd9c939ad72263e01"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-cleanup-v63/diagnostic.json",
+      "sha256": "6492de8ed9d4d664de9a56020df7c3e06e1f2bf6e06879adb9d1d6801c2efd25"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-cleanup-v63/final.json",
+      "sha256": "ed62f1731d0001600fc45ed938981a7864ef6272292db78d3a84101b3f6b034c"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-cleanup-v63/preflight.json",
+      "sha256": "632d2fe9282c1d7f28dd37ccd3b7867c7864a4feb0d18a434330a32807c33b5e"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-cleanup-v63/recovery-start.json",
+      "sha256": "58f0c52f460c6b1fc09e791bd9a6db395b6106129aaf26c5a91514b40cfd6f6e"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-cleanup-v63/summary.json",
+      "sha256": "d5522659e6486483c8dd48c36175d6f972174e3e8cde86c7257ef28571aa1a6d"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-short-replies/backup/custom_components/conversation_router/manifest.json",
+      "sha256": "5ed0c27c79b7db7c89abdf56d96bdf3df952f54ac6fea361c8fc123d24cab80d"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-short-replies/backup/custom_components/domestic_ai/manifest.json",
+      "sha256": "24d5fe48cfdf975c4fc3ae568167861c2e5d4aeb20c1b3eafc1023995975ee95"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-short-replies/diagnostic-disabled.json",
+      "sha256": "aa624ac79ed5b955c7367578dc54039efc1c01aa902619aa5b63f6832fc89870"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-short-replies/good-reply-retest.json",
+      "sha256": "abf67a417ba24a73cbc02a55fc0e51046c03109e99ae5909bd514999613ef8f6"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-short-replies/ha-deployment.json",
+      "sha256": "7edcb741cae0c5b5295c08ff4c8d57cc9fa3277b67b768484b3f46574ff6a147"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-short-replies/ha-runtime-verification.json",
+      "sha256": "a04b32ba96dbc0849f28c4d964d67e5d47060ca8d28ba34c6f10efd48225e535"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-short-replies/r1-after-ha-restart.json",
+      "sha256": "10795de046de842ab8ce1ddab92b0c8521aeec8482e2eaf9d3125c2c6e9ff894"
+    },
+    {
+      "source": "2026-09-07-r1-sample01-short-replies/summary.json",
+      "sha256": "a9ffb7900cf79c521de5170e5dda97dbbf0746626e5a1ec9b2252a7c7ccff2b4"
+    }
+  ]
+}

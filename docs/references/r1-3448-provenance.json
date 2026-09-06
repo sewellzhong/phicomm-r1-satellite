@@ -1,0 +1,74 @@
+{
+  "source": {
+    "repository": "https://github.com/pexcn/phicomm-r1-ota",
+    "commit": "2ce76756bfd9495370a5e82e46474032779654dc",
+    "ota_file": "firmware/incremental-ota-3415-3448.zip",
+    "ota_md5": "ffb637b235077752af7306567eae8ef4",
+    "ota_sha256": "581c1bdcb6313b9b9acf2ea545731816872298c97326005ab7a409f5efa89b88",
+    "ota_certificate_sha256": "e39252274f41f463d869a5e86d4c59c3c599a6bbd826b74fca7d1878943c90ba",
+    "post_build": "Android/rk322x_echo/rk322x_echo:5.1.1/LMY49F/3448:user/release-keys",
+    "post_timestamp": 1529984930
+  },
+  "official_files": [
+    {
+      "id": "echo_service",
+      "remote_path": "/system/app/EchoService/EchoService.apk",
+      "ota_target_sha1": "e496a0411591f8c9dbb4d2da6df54db49606c442",
+      "known_sha256": "6245d3632ca4530c28b8ab64ed5885870434afc8fc1ede84a795e855745cbdf8"
+    },
+    {
+      "id": "unisound",
+      "remote_path": "/system/app/Unisound/Unisound.apk",
+      "ota_target_sha1": "39588bb60dd0d05b6b4f93bbfe9471b58a8253b3",
+      "known_sha256": "a0548242414666d27df9b099e85ab69697cc5c1599f019ce34dd2460f8841bd7"
+    },
+    {
+      "id": "audio_primary_hal",
+      "remote_path": "/system/lib/hw/audio.primary.rk30board.so",
+      "ota_target_sha1": "4cae1fa452fac03ed52b156354ba5edeb7962c90",
+      "known_sha256": "765960a11af0569fe31ebdc55aca692ef80cb191369e0a451c01073bbed40c1f"
+    },
+    {
+      "id": "unisound_four_mic_hal",
+      "remote_path": "/system/lib/libuni4michal.so",
+      "ota_target_sha1": "c4e5000a1b4bfcc5e8cc8f077d87ecffcdea8ab9",
+      "known_sha256": "ce49904fd7e82446fed671f9ed8da398480ab7c3263bc6a29aafd0f13c1d504a"
+    },
+    {
+      "id": "unisound_four_mic_hal_chance",
+      "remote_path": "/system/lib/libuni4michalchance.so",
+      "ota_target_sha1": "a89b3639ace6e796c788304331de79e68e69c1fc",
+      "known_sha256": "24de008fc20cd60111c1ba33fd2743f193f8b5f71a93bcafac13497c8fcd72fb"
+    },
+    {
+      "id": "ak7755_cram_data2",
+      "remote_path": "/system/vendor/firmware/ak7755_cram_data2.bin",
+      "ota_target_sha1": "d96b73d65f590c871ff48b2e591f6d6fdba49354",
+      "known_sha256": "c92d623efdf2a3a25b529c08ae97c95491c7f1966c9ecc3a2b22feb08e3a93d4"
+    },
+    {
+      "id": "ak7755_pram_data2",
+      "remote_path": "/system/vendor/firmware/ak7755_pram_data2.bin",
+      "ota_target_sha1": "68cf5c0a3e0edc9b07619af065cfe1947078a76a",
+      "known_sha256": "c85ca43c9ee53febea15ffdd1b59b49d23c67b47ff7811862751bb6e528dce1a"
+    },
+    {
+      "id": "ak7755_ofreg_data2",
+      "remote_path": "/system/vendor/firmware/ak7755_ofreg_data2.bin",
+      "ota_target_sha1": "6061325826b3bbb22d589f911ad009531004dff5",
+      "known_sha256": "60651af8c30aa3b38feeee60588a8664ee80b4071953a4dd3d96158e5fc875ca"
+    }
+  ],
+  "current_overlays": [
+    {
+      "package": "com.phicomm.speaker.device",
+      "expected_sha256": "d98ff6aeab80c562498f42b45ddf4bb58eae318d64e47cecca7355799cee6542",
+      "classification": "third_party_modified_overlay"
+    },
+    {
+      "package": "com.phicomm.speaker.player",
+      "expected_sha256": "eee63585effda9697c6fb1da5ae82ddf0fc41566aa8462841e407f15aae6fdc8",
+      "classification": "third_party_modified_overlay"
+    }
+  ]
+}

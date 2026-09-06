@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "minimum_speakers": 3,
+  "minimum_clips_per_speaker": 30,
+  "sessions": [
+    {
+      "speaker_id": "spk01",
+      "session_id": "2026-09-03T220843-r1-sample01",
+      "manifest": "local-models/amity-training/r1-real-positive-20260903T220843/MANIFEST.json",
+      "content_and_privacy_confirmed": true,
+      "confirmation_evidence": "test-results/2026-09-03T220843-r1-sample01/stage1/amity-positive-capture/USER-CONFIRMATION.txt"
+    },
+    {
+      "speaker_id": "spk01",
+      "session_id": "2026-09-04T005228-r1-sample01",
+      "manifest": "local-models/amity-training/r1-real-positive-spk01-20260904T005228/MANIFEST.json",
+      "content_and_privacy_confirmed": true,
+      "confirmation_evidence": "test-results/2026-09-04T005228-r1-sample01/stage1/amity-positive-capture-spk02/USER-CONFIRMATION-CORRECTED.txt"
+    },
+    {
+      "speaker_id": "spk02",
+      "session_id": "2026-09-04T012152-r1-sample01",
+      "manifest": "local-models/amity-training/r1-real-positive-spk02-20260904T012152/MANIFEST.json",
+      "content_and_privacy_confirmed": true,
+      "confirmation_evidence": "test-results/2026-09-04T012152-r1-sample01/stage1/amity-positive-capture-spk02/USER-CONFIRMATION.txt"
+    },
+    {
+      "speaker_id": "spk03",
+      "session_id": "2026-09-04T012900-r1-sample01",
+      "manifest": "local-models/amity-training/r1-real-positive-spk03-20260904T012900/MANIFEST.json",
+      "content_and_privacy_confirmed": true,
+      "confirmation_evidence": "test-results/2026-09-04T012900-r1-sample01/stage1/amity-positive-capture-spk03/USER-CONFIRMATION.txt"
+    }
+  ]
+}

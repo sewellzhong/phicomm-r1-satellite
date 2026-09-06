@@ -1,0 +1,22 @@
+{
+  "domain": "r1_input_guard",
+  "name": "语音识别与无效输入过滤",
+  "version": "0.6.2",
+  "config_flow": true,
+  "dependencies": [
+    "stt",
+    "conversation"
+  ],
+  "after_dependencies": [
+    "wyoming",
+    "conversation_router",
+    "esphome",
+    "tts",
+    "media_player"
+  ],
+  "codeowners": [],
+  "documentation": "https://github.com/home-assistant/core/tree/2026.8.2/homeassistant/components/stt",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "requirements": []
+}

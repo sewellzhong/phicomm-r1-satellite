@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Audited upstream SHA-256 checksums, not API credentials"
+condition = "AND"
+paths = ['''(^|/)(protocol/esphome/manifest\.json|tools/dev/prepare\.py)$''']
+regexTarget = "secret"
+regexes = ['''^(76f22dc18991211f7ad727c6862c832a9876057476fa458080a1a2280b4177d7|099ecef0578ef90264dfa860f79def63a7b4894273b4c819dddc1d6392e9fe8c|c4ba32a9d34e8785442112aed5b202a1614a9d74d59a90c992cdb13902bd79f5)$''']

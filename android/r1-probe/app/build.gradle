@@ -1,0 +1,90 @@
+plugins {
+    id "com.android.application"
+}
+
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("63")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.63-native-cleanup")
+
+def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
+
+android {
+    namespace = "dev.sewellzhong.r1probe"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = hostCheck ? "dev.sewellzhong.r1probe.hostcheck" : "dev.sewellzhong.r1probe"
+        minSdk = 22
+        targetSdk = 22
+        versionCode = probeVersionCode.get().toInteger()
+        versionName = probeVersionName.get()
+        ndk {
+            abiFilters "armeabi-v7a"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    buildFeatures {
+        buildConfig = false
+    }
+
+    sourceSets {
+        main {
+            assets.srcDir(hostCheck ? "../../../local-deps/host-prompts/assets" : "../../../local-deps/private-prompts/assets")
+            jniLibs.srcDir("../../../local-deps/r1-microfrontend/jniLibs")
+            jniLibs.srcDir("../../../local-deps/r1-vad/jniLibs")
+            jniLibs.srcDir("../../../local-deps/r1-noise/jniLibs")
+            java.srcDir(layout.buildDirectory.dir("generated/esphome"))
+            if (providers.gradleProperty("includeMicroWakeWordProbe").orElse("true").get().toBoolean()) {
+                assets.srcDir("../../../local-deps/alexa-microwakeword-r1/assets")
+            }
+        }
+    }
+
+    lint {
+        abortOnError = true
+        checkDependencies = true
+        // This APK is side-loaded only onto the Android 5.1/API 22 R1. Its
+        // legacy targetSdk is intentional and is not a Google Play target.
+        disable += "ExpiredTargetSdkVersion"
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+dependencies {
+    // Selected Alexa runtime; legacy candidate engines have been removed.
+    implementation files("../../../local-deps/tensorflow-lite-api-2.10.0.aar")
+    implementation files("../../../local-deps/tensorflow-lite-2.10.0.aar")
+    implementation "com.google.protobuf:protobuf-javalite:3.25.5"
+    testImplementation "org.json:json:20240303"
+    testImplementation "junit:junit:4.13.2"
+}
+
+
+def generateEsphomeApi = tasks.register("generateEsphomeApi", Exec) {
+    workingDir rootProject.projectDir.parentFile.parentFile
+    commandLine "python3", "tools/esphome/generate-api.py"
+    inputs.files(fileTree("../../../protocol/esphome"), "../../../tools/esphome/generate-api.py")
+    outputs.dir(layout.buildDirectory.dir("generated/esphome"))
+}
+tasks.named("preBuild").configure { dependsOn(generateEsphomeApi) }
+
+// Public clones build an isolated host-check package. Home builds require private assets.
+def verifyPrompts = tasks.register("verifyPrompts") {
+    doLast {
+        def base = file(hostCheck ? "../../../local-deps/host-prompts/assets" : "../../../local-deps/private-prompts/assets")
+        def paths = new groovy.json.JsonSlurper().parse(file("../../../tools/dev/prompt-layout.json"))
+        if (!paths.every { new File(base, it).isFile() }) {
+            throw new GradleException("Missing prompt assets: run tools/dev/prepare.py for -PhostCheck=true; home builds need local private-prompts assets.")
+        }
+    }
+}
+tasks.named("preBuild").configure { dependsOn(verifyPrompts) }

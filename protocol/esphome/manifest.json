@@ -1,0 +1,20 @@
+{
+  "version": "2026.8.0",
+  "commit": "6f8dbb6fbc1b9c108df53e5cf78d5b2316ea3af2",
+  "files": {
+    "api.proto": "099ecef0578ef90264dfa860f79def63a7b4894273b4c819dddc1d6392e9fe8c",
+    "api_options.proto": "c4ba32a9d34e8785442112aed5b202a1614a9d74d59a90c992cdb13902bd79f5",
+    "descriptor.proto": "a39cb2a57423cf1e83a00dc7bcca4b1b74bcbebc28e95586977dbc2af636fabc"
+  },
+  "protoc": {
+    "version": "3.25.5",
+    "sha256": "d69b0a9ac8264bb3d464ae22742430943aa0a6cdf3734180af5a607c0bf8adaa"
+  },
+  "noise_c": {
+    "commit": "b3da54dc1020150237054004c5fdbffc63a23538",
+    "protocol": "Noise_NNpsk0_25519_ChaChaPoly_SHA256",
+    "backend": "reference",
+    "rng": "/dev/urandom"
+  },
+  "client": "aioesphomeapi 45.6.1"
+}

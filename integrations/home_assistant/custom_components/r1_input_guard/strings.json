@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "语音识别与无效输入过滤",
+        "description": "通用模式保持原行为。R1 原生模式仅供端侧结束收音的 R1 使用，同时建立持续对话入口；来源选择现有 Whisper，对话代理选择家庭助手（自动分流）。不会自动修改现有语音助手。",
+        "data": {
+          "source_entity_id": "原语音识别实体",
+          "mode": "使用方式",
+          "conversation_entity_id": "家庭助手对话代理（R1 原生模式必选）"
+        }
+      }
+    },
+    "error": {
+      "invalid_source": "请选择已注册的语音识别实体，不能选择其他过滤入口。",
+      "invalid_conversation": "请选择现有的家庭助手自动分流实体。"
+    },
+    "abort": {
+      "already_configured": "此识别实体已添加过滤入口。"
+    }
+  }
+}

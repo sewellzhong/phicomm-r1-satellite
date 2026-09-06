@@ -1,0 +1,56 @@
+# Android/Gradle build state
+.gradle/
+**/.gradle/
+**/build/
+**/__pycache__/
+*.pyc
+local.properties
+**/local.properties
+
+# Local Android SDKs and signing material
+.android-sdk/
+*.jks
+*.keystore
+
+# Temporary probe packages and device-side diagnostic audio
+*.apk
+test-results/**/*.wav
+test-results/**/*.pcm
+
+# Locally downloaded third-party runtimes and model weights
+local-deps/
+local-models/
+
+# One-shot local native credentials (never commit)
+.r1_native_commission.json
+*.psk
+
+# Local bounded diagnostic recordings and exports
+test-results/**/*.r1diag
+
+# Public repository: raw evidence stays on the home workstation.
+/test-results/*
+!/test-results/README.md
+!/test-results/public/
+/test-results/public/*
+!/test-results/public/index.json
+!/test-results/public/structured.json
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.r1diag
+*.aar
+*.so
+*.tflite
+*.onnx
+*.zip
+*.tar
+*.gz
+/local-secrets/
+/local-evidence/
+# Prompt speech has unresolved distribution provenance.
+/android/r1-probe/app/src/main/assets/ack/
+/android/r1-probe/app/src/main/assets/interaction/

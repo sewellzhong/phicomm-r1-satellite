@@ -1,0 +1,43 @@
+name: Host checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: host-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17.0.19+10'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake build-essential ripgrep
+          sdkmanager 'platforms;android-35' 'build-tools;34.0.0' 'ndk;27.0.12077973'
+      - name: Prepare pinned dependencies
+        run: python3 tools/dev/prepare.py
+      - name: Pull fixed HA test image
+        run: docker pull ghcr.io/home-assistant/home-assistant@sha256:56690a89c79a0de98035e1719f8324a92d5859c1192ff45adb0230ea81cb42a5
+      - name: Run device-free checks
+        run: bash tools/dev/check.sh
+      - name: Save Android test reports only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-host-reports
+          retention-days: 7
+          path: |
+            android/r1-probe/app/build/test-results/testDebugUnitTest/TEST-*.xml
+            android/r1-probe/app/build/reports/lint-results-debug.xml
