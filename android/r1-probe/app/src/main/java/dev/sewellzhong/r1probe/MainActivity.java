@@ -6,9 +6,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Gravity;
-import android.view.InputDevice;
-import android.view.KeyEvent;
-import android.view.MotionEvent;
 import android.widget.TextView;
 
 import java.io.File;
@@ -61,28 +58,6 @@ public final class MainActivity extends Activity {
         }
         Log.i(TAG, "R1_PROBE_NEW_INTENT nonce=" + nonce);
         handleAction(intent, nonce);
-    }
-
-    @Override public boolean dispatchKeyEvent(KeyEvent event) {
-        if (event.getKeyCode() == HardwareInputInterpreter.CENTRAL_KEY
-                && (event.getAction() == KeyEvent.ACTION_DOWN || event.getAction() == KeyEvent.ACTION_UP))
-            HardwareInputRelay.central(event.getAction() == KeyEvent.ACTION_DOWN ? 1 : 0, event.getEventTime());
-        return super.dispatchKeyEvent(event);
-    }
-
-    @Override public boolean dispatchTouchEvent(MotionEvent event) {
-        int action = event.getActionMasked();
-        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE
-                || action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-            float minimum = 0, maximum = 719;
-            InputDevice device = event.getDevice();
-            InputDevice.MotionRange range = device == null ? null
-                    : device.getMotionRange(MotionEvent.AXIS_X, event.getSource());
-            if (range != null && range.getRange() > 0) { minimum = range.getMin(); maximum = range.getMax(); }
-            int position = HardwareInputRelay.normalizePosition(event.getX(), minimum, maximum);
-            HardwareInputRelay.ring(action, position, event.getEventTime());
-        }
-        return super.dispatchTouchEvent(event);
     }
 
     private void handleAction(Intent intent, String nonce) {

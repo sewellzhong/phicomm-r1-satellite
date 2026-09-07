@@ -59,11 +59,29 @@ final class HotspotCapabilityProbe {
         try {
             Object result = method.invoke(wifi, configuration, true);
             if (result instanceof Boolean && !((Boolean) result)) throw new IllegalStateException("hotspot_rejected");
-            synchronized (this) { pending = false; active = true; untilMs = android.os.SystemClock.elapsedRealtime() + seconds * 1000L; }
+            main.postDelayed(() -> verifyActive(previousWifi, seconds), 3000L);
+        } catch (Exception e) {
+            synchronized (this) { pending = false; active = false; failure = "hotspot_start_failed"; }
+            restore(previousWifi);
+        }
+    }
+
+    private void verifyActive(boolean previousWifi, int seconds) {
+        try {
+            Method stateMethod = WifiManager.class.getDeclaredMethod("getWifiApState");
+            stateMethod.setAccessible(true);
+            int state = ((Integer) stateMethod.invoke(wifi)).intValue();
+            // Android's hidden WIFI_AP_STATE_ENABLED value is 13 on firmware 3448.
+            if (state != 13) throw new IllegalStateException("hotspot_not_enabled");
+            synchronized (this) {
+                pending = false;
+                active = true;
+                untilMs = android.os.SystemClock.elapsedRealtime() + seconds * 1000L;
+            }
             startWeb();
             main.postDelayed(() -> restore(previousWifi), seconds * 1000L);
         } catch (Exception e) {
-            synchronized (this) { pending = false; active = false; failure = "hotspot_start_failed"; }
+            synchronized (this) { pending = false; active = false; failure = "hotspot_not_enabled"; }
             restore(previousWifi);
         }
     }

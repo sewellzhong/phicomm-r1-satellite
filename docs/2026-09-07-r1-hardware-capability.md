@@ -27,4 +27,12 @@ v65 增加固件 3448 的 16 字节 ARMv7 `input_event` 解码、中央键/音�
 
 v65 提交 `199ba3ff9db5c9c597c3e81c88ea2a9fee684e81` 的设备 APK SHA-256 为 `5d4be8715a0d41ac712dcc4713746a0b83270561b811eddcd1776b652ab4956f`，签名与 v63 一致并已覆盖安装；安装后仍为 `listening`，原厂包隐藏状态、配置和身份保持。应用层确认蓝牙、BLE 广播器及旧热点 API 存在，LED 不可写。
 
-v65 同时证实普通应用域无法读取 event0/event1：`File.canRead()` 为 false，监听线程返回通用失败码；节点的 `0666` 模式没有越过 SELinux `input_device` 隔离。因此 v66 保留 evdev 探测用于诊断，实际输入改由保持前台的 `MainActivity` 接收 Android KeyEvent/MotionEvent并在同进程转给常驻服务；开机和 APK 更新后会恢复该 Activity。v66 新增显示坐标到 0～255 环位置的归一化测试，主机共 148 项 Android 测试通过，实机结果待复验。
+v65 同时证实普通应用域无法读取 event0/event1：`File.canRead()` 为 false，监听线程返回通用失败码；节点的 `0666` 模式没有越过 SELinux `input_device` 隔离。v66 尝试由前台 `MainActivity` 接收 Android KeyEvent/MotionEvent，但实机中央键短按和音量环顺时针手势的计数仍为零，说明固件框架在 Activity 之前消费了输入。v67 移除无效的开机 Activity 和事件转发，不再把已挂接 Activity 误报为输入监听运行。
+
+## v66 实机结果与 v67 配网入口
+
+v66 设备 APK SHA-256 为 `940364e67e7ade6fe38125fc3806f3ca8c7a70760fcbe9c0f5532510ce5c1ae1`。安卓和 iPhone 分别完成可发现、配对、A2DP 播放、断开及重连播放，播放期间卫星保持 `listening`，手机蓝牙音箱能力在首台 R1 上通过最小实测。BLE 广播和 GATT 服务在设备侧启动并出现连接计数，尚未用手机 BLE 客户端确认服务身份。
+
+普通 APK 的热点反射调用返回成功后，手机未发现临时 SSID，设备也没有 AP 接口或 hostapd，wlan0 仍为家庭网络客户端，因此热点网页方案本轮失败。v67 在启动网页前读取 `getWifiApState()`，只有真实进入 `WIFI_AP_STATE_ENABLED` 才报告 active；否则返回 `hotspot_not_enabled` 并恢复 Wi-Fi。
+
+固件 3448 的原厂日志与反编译类表明，中央键长按事件经 `MessageDispatchManager` 送出 `what=256,arg1=5`；SystemTool 再发送 `what=262144,arg1=1`。保留的 NetControl 收到后同时启动配网灯、BLE、`Phicomm_R1_*` SoftAP 和 8989 网页，并设置 300 秒退出任务。v67 新增 shell 管理入口，直接发送后一条系统消息以复用原厂 NetControl，不恢复已隐藏的原厂语音包，也不修改系统包或权限。该入口须在实机看到灯光/热点后才算通过。

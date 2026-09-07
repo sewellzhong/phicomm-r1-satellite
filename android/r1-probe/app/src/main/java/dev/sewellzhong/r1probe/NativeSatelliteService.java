@@ -35,6 +35,7 @@ public final class NativeSatelliteService extends Service {
     private HardwareInputMonitor hardware;
     private DeviceCapabilityProbe capabilities;
     private HotspotCapabilityProbe hotspot;
+    private R1MessageDispatchBridge originalProvisioning;
     private volatile boolean destroyed;
     private volatile Socket client;
     private volatile LocalSocket adminClient;
@@ -80,6 +81,8 @@ public final class NativeSatelliteService extends Service {
         hardware = new HardwareInputMonitor(this, settings);
         capabilities = new DeviceCapabilityProbe(this);
         hotspot = new HotspotCapabilityProbe(this, settings);
+        try { originalProvisioning = new R1MessageDispatchBridge(this); }
+        catch (Exception ignored) { originalProvisioning = null; }
         hardware.start();
         if (settings.enabled()) audioPermitted();
         main.postDelayed(renewLock, 60000L);
@@ -247,6 +250,14 @@ public final class NativeSatelliteService extends Service {
                         case "ble-close": capabilities.stopBle(); break;
                         case "hotspot-window": actionResponse = hotspot.open(command.optInt("seconds", 120)); break;
                         case "hotspot-close": hotspot.close(); break;
+                        case "original-provisioning-open":
+                            if (originalProvisioning == null) throw new IllegalStateException("message_dispatch_unavailable");
+                            originalProvisioning.openOriginalProvisioning();
+                            break;
+                        case "original-provisioning-close":
+                            if (originalProvisioning == null) throw new IllegalStateException("message_dispatch_unavailable");
+                            originalProvisioning.closeOriginalProvisioning();
+                            break;
                         case "status": case "pairing": break;
                         default: throw new IllegalArgumentException("unsupported_action");
                     }
@@ -254,7 +265,8 @@ public final class NativeSatelliteService extends Service {
                             ? diagnosticSnapshot() : snapshot();
                     if (action.equals("capability-status") || action.equals("hardware-reset")
                             || action.startsWith("bluetooth-") || action.startsWith("ble-")
-                            || action.startsWith("hotspot-")) response = capabilitySnapshot();
+                            || action.startsWith("hotspot-") || action.startsWith("original-provisioning-"))
+                        response = capabilitySnapshot();
                     if (actionResponse != null) {
                         java.util.Iterator<String> keys = actionResponse.keys();
                         while (keys.hasNext()) { String key = keys.next(); response.put(key, actionResponse.get(key)); }
@@ -305,7 +317,8 @@ public final class NativeSatelliteService extends Service {
     }
     private JSONObject capabilitySnapshot() throws org.json.JSONException {
         return new JSONObject().put("hardware", hardware.snapshot())
-                .put("capabilities", capabilities.snapshot()).put("hotspot", hotspot.snapshot());
+                .put("capabilities", capabilities.snapshot()).put("hotspot", hotspot.snapshot())
+                .put("original_provisioning_bridge", originalProvisioning != null);
     }
     private synchronized void publish() {
         if (registration != null || destroyed || !settings.enabled()) return;
@@ -314,7 +327,7 @@ public final class NativeSatelliteService extends Service {
         info.setAttribute("version", "2026.8.0"); info.setAttribute("mac", settings.mac().replace(":", "").toLowerCase(java.util.Locale.ROOT));
         info.setAttribute("platform", "R1"); info.setAttribute("network", "wifi");
         info.setAttribute("api_encryption", "Noise_NNpsk0_25519_ChaChaPoly_SHA256");
-        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "0.66-hardware-input-dispatch");
+        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "0.67-original-provisioning-bridge");
         registration = new NsdManager.RegistrationListener() {
             @Override public void onServiceRegistered(NsdServiceInfo serviceInfo) { }
             @Override public void onRegistrationFailed(NsdServiceInfo serviceInfo, int code) { error = "discovery_registration_failed"; }
