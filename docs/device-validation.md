@@ -11,7 +11,8 @@
 | v67 原厂配网消息桥 | `8cb1977278aa0774bb48ba0ae0a16308a774224b` | API 22 / Java 8、Android 146 项、lint、hostcheck APK SHA-256 `7a9e483dd97b8803bd3007e3a7db3692700722475a5842fb019c8c3725aa3f0b`、工具 32 项通过；HA 代码未变 | 部分通过 | 设备 APK SHA-256 `b44c120af2adcacf84896d7d2f1993be1ed2b51b6208c249036278874ac5488c`；消息桥可用，配网灯变化且手机发现 `Phicomm_R1_*` 热点 | 提示音未出现；热点连接、8989 网页及安卓/iPhone 完整配网待逐项验证；原厂 300 秒任务负责超时恢复 |
 | v68 自助配网页面 | `469bd4b21988ff5b14a729411ed35f8141171268` | API 22 / Java 8、Android 149 项、lint、hostcheck APK SHA-256 `b7d9013fa1ebdea02bdceada80aeb2698511515f2e5ee5c598cd226bc3ba233b`、工具 32 项通过；HA 代码未变 | 失败 | 设备 APK SHA-256 `e69acf77ccfed2572a7411398530009314eaf778ef60349b71fdb26109a0690e`；`http://192.168.43.1:8080/` 页面可打开 | 页面只解析 `{data:[]}`，未识别原厂 GET 接口返回的对象数组，错误显示没有扫描到 Wi-Fi；未提交凭据 |
 | v69 页面列表兼容与视觉优化 | `0414310ee432d57b4c71ab7b58186eaad1811b23` | API 22 / Java 8、Android 149 项、lint、hostcheck APK 和工具 32 项通过；430×900 本地主机渲染检查通过 | 部分通过 | 设备 APK SHA-256 `55bebe4a4141bd01ba0ac9196267cd2b90cf296cc11dfcacec7a7ad33b05df98`；卡片页面显示正常，附近 Wi-Fi 与 2.4 GHz 临时热点均可扫描，提交返回成功 | R1 未连上临时热点并自动回到原网络；页面把“请求已接收”误写为“设置完成” |
-| v70 配网连接确认与重试 | 待提交；实机前填写完整 SHA | API 22 / Java 8、Android 149 项、lint、hostcheck APK 和工具 32 项通过；HA 代码未变 | 待验证 | 原厂 AP 关闭后等待 2.5 秒，明确断开旧网络并最多三次选择目标网络；以 network ID 和 supplicant `COMPLETED` 判断连接 | 页面改为“信息已收到，正在连接”，不再把 HTTP 202 当作配网成功；使用可更换的临时热点凭据复验 |
+| v70 配网连接确认与重试 | `daa76751cef6c11f7a9f30e8fbf2ebda52205944` | API 22 / Java 8、Android 149 项、lint、hostcheck APK 和工具 32 项通过；HA 代码未变 | 阻断于页面 | 设备 APK SHA-256 `523e648c0b06cb2c6edc9b4d3d5f37dd1656f387e505c6db000e728acf2a1bf8`；原厂 AP 关闭后等待 2.5 秒，明确断开旧网络并最多三次选择目标网络 | 提前调用原厂 `/api/quit` 后再次开窗，旧 5 分钟定时器关闭了复用的 8080 服务；8989 原厂页仍可打开，连接重试未实际触发 |
+| v71 配网页面窗口重建 | 待提交；实机前填写完整 SHA | API 22 / Java 8、Android 149 项、lint、hostcheck APK 和工具 32 项通过；HA 代码未变 | 待验证 | 每次开窗先取消旧回调、关闭并等待旧服务线程退出，再创建新的 8080 监听及 5 分钟回调 | 先确认连续开窗页面稳定，再复验临时热点连接 |
 
 ## 优化任务的后续验证
 

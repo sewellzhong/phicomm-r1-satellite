@@ -27,6 +27,7 @@ final class R1MessageDispatchBridge {
     private final WifiManager wifi;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ProvisioningWebServer web;
+    private final Runnable closeWeb;
     private volatile String lastResult = "none";
 
     @SuppressLint("WrongConstant")
@@ -37,17 +38,21 @@ final class R1MessageDispatchBridge {
                 "sendMessage", int.class, int.class, int.class, Parcelable.class);
         wifi = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         web = new ProvisioningWebServer(context, this::configureWifi);
+        closeWeb = web::close;
     }
 
     void openOriginalProvisioning() throws Exception {
+        main.removeCallbacks(closeWeb);
+        web.close();
         web.start();
         try { send(TURN_ON); }
         catch (Exception error) { web.close(); throw error; }
         lastResult = "waiting_for_phone";
-        main.postDelayed(web::close, 300000L);
+        main.postDelayed(closeWeb, 300000L);
     }
 
     void closeOriginalProvisioning() throws Exception {
+        main.removeCallbacks(closeWeb);
         send(TURN_OFF);
         web.close();
     }

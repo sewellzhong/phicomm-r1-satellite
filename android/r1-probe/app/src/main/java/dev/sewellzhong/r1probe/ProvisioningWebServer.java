@@ -33,16 +33,17 @@ final class ProvisioningWebServer {
 
     synchronized void start() throws IOException {
         if (running) return;
-        server = new ServerSocket(8080);
+        ServerSocket listening = new ServerSocket(8080);
+        server = listening;
         running = true;
-        worker = new Thread(this::run, "r1-provisioning-page");
+        worker = new Thread(() -> run(listening), "r1-provisioning-page");
         worker.setDaemon(true);
         worker.start();
     }
 
-    private void run() {
-        while (running) {
-            try (Socket socket = server.accept()) { handle(socket); }
+    private void run(ServerSocket listening) {
+        while (running && server == listening) {
+            try (Socket socket = listening.accept()) { handle(socket); }
             catch (IOException ignored) { /* Closing the server ends the bounded window. */ }
         }
     }
@@ -128,10 +129,14 @@ final class ProvisioningWebServer {
     }
 
     synchronized void close() {
+        Thread previous = worker;
         running = false;
         if (server != null) try { server.close(); } catch (IOException ignored) { }
         server = null;
-        if (worker != null && worker != Thread.currentThread()) worker.interrupt();
+        if (previous != null && previous != Thread.currentThread()) {
+            previous.interrupt();
+            try { previous.join(1000L); } catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+        }
         worker = null;
     }
 }
