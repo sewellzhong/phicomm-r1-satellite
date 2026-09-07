@@ -13,5 +13,8 @@ public final class NativeBootReceiver extends BroadcastReceiver {
         Intent service = new Intent(context, NativeSatelliteService.class);
         if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(service);
         else context.startService(service);
+        Intent activity = new Intent(context, MainActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        context.startActivity(activity);
     }
 }

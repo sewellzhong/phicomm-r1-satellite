@@ -6,7 +6,8 @@
 | --- | --- | --- | --- | --- | --- |
 | Git 整理后的设备 APK 构建与素材路径 | 首个公开候选 `fcd463483ea867526dc26f4392f077eef718a31c`；若用更新代码，执行前记录其完整 SHA | 见 [Git 整理报告](2026-09-07-git-publication.md) | 待验证 | 用原签名/中文素材构建；核对包名、版本、APK 哈希和素材，再按既有部署流程做必要最小检查 | 本次不部署；旧 v63 结果不自动继承 |
 | v64 O1/O2 Assist TTS 统一取消基础 | 待提交；实机前填写完整 SHA | Temurin JDK 17.0.19 下 `prepare.py`、`check.sh` 通过：Java 8 目标、Android 138 项（相关 50 项）、lint、hostcheck APK、工具 30 项、HA 44 项及配置加载检查；hostcheck APK SHA-256 `917cd90140cd393ee1753893fab86ffe5dcf0b52ec3f0ae85a64f357e5fc936e` | 待验证 | 以指定提交构建签名设备 APK，分别验证处理中/播放中停止、本地停播先于远端取消、迟到音频不复活、旧播放器释放前不启动下一轮 | 当前只提供统一调用入口，按键、新唤醒、直接插话尚未接入；未连接 HA/ADB，旧 v63 结果不继承；hostcheck 包不可部署 |
-| v65 硬件与配网/蓝牙能力探针 | 待提交；实机前填写完整 SHA | Temurin JDK 17.0.19 下 `prepare.py`、`check.sh` 通过：API 22 / Java 8、Android 146 项、lint、hostcheck APK SHA-256 `e1450db18a6082d75ee9a53e3cd9026866210d307c366d049648f441725d4e31`、工具 32 项、HA 44 项及配置加载检查 | 待验证 | 建立 v63 回退基线后安装；后台逐项验证中央短/长按、音量环方向与逻辑音量；再分别开启限时蓝牙、BLE、热点窗口 | v63 现场原始事件、A2DP Sink/GATT 服务及两手机当前不可发现见[探测记录](2026-09-07-r1-hardware-capability.md)；灯光普通 APK 无 sysfs 写权限 |
+| v65 硬件与配网/蓝牙能力探针 | `199ba3ff9db5c9c597c3e81c88ea2a9fee684e81` | `prepare.py`、`check.sh` 通过：Android 146 项、lint、hostcheck APK SHA-256 `e1450db18a6082d75ee9a53e3cd9026866210d307c366d049648f441725d4e31`、工具 32 项、HA 44 项及配置加载检查 | 失败 | 签名设备 APK `5d4be8715a0d41ac712dcc4713746a0b83270561b811eddcd1776b652ab4956f` 安装及卫星恢复通过；后台 event0/event1 读取失败 | 节点虽为 `0666`，普通应用仍被 SELinux 隔离；蓝牙、BLE 广播器、旧热点 API 查询可用，LED 不可写；v63 回退基线已保存 |
+| v66 Android 事件分发输入 | 待提交；实机前填写完整 SHA | API 22 / Java 8、Android 148 项、lint、hostcheck APK SHA-256 `33113f2869197a5bc93a256cb39090593c70ac6b79f2634f441d9a19acbee725`、工具 32 项通过；HA 代码未变 | 待验证 | Activity 保持前台后分别验证中央短/长按、顺/逆时针、逻辑音量及重启后入口恢复 | evdev 失败保留为诊断；框架转发不得重复计数 |
 
 ## 优化任务的后续验证
 

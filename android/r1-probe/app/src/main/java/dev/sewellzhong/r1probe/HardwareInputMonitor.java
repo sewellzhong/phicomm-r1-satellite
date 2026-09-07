@@ -9,7 +9,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 /** Background, read-only listener for the R1 centre key and circular volume touch surface. */
-final class HardwareInputMonitor {
+final class HardwareInputMonitor implements HardwareInputRelay.Listener {
     private static final String CENTRAL = "/dev/input/event0", RING = "/dev/input/event1";
     private final NativeSettings settings;
     private final AudioManager audio;
@@ -17,6 +17,7 @@ final class HardwareInputMonitor {
     private volatile boolean stopping;
     private volatile FileInputStream centralInput, ringInput;
     private Thread centralThread, ringThread;
+    private boolean frameworkAttached;
     private long shortPresses, longPresses, clockwiseSteps, counterclockwiseSteps;
     private long lastDurationMs;
     private String lastEvent = "none", failure;
@@ -38,9 +39,24 @@ final class HardwareInputMonitor {
 
     void start() {
         if (centralThread != null || ringThread != null) return;
+        HardwareInputRelay.attach(this); frameworkAttached = true;
         centralThread = thread("r1-central-key", CENTRAL, true);
         ringThread = thread("r1-volume-ring", RING, false);
         centralThread.start(); ringThread.start();
+    }
+
+    @Override public void central(int action, long eventMs) {
+        if (centralInput == null) interpreter.central(HardwareInputInterpreter.EV_KEY,
+                HardwareInputInterpreter.CENTRAL_KEY, action, eventMs);
+    }
+    @Override public void ring(int action, int position, long eventMs) {
+        if (ringInput != null) return;
+        if (action == android.view.MotionEvent.ACTION_DOWN)
+            interpreter.ring(HardwareInputInterpreter.EV_KEY, HardwareInputInterpreter.BTN_TOUCH, 1, eventMs);
+        if (action != android.view.MotionEvent.ACTION_UP && action != android.view.MotionEvent.ACTION_CANCEL)
+            interpreter.ring(HardwareInputInterpreter.EV_ABS, HardwareInputInterpreter.ABS_X, position, eventMs);
+        if (action == android.view.MotionEvent.ACTION_UP || action == android.view.MotionEvent.ACTION_CANCEL)
+            interpreter.ring(HardwareInputInterpreter.EV_KEY, HardwareInputInterpreter.BTN_TOUCH, 0, eventMs);
     }
 
     private Thread thread(String name, String path, boolean central) {
@@ -76,18 +92,21 @@ final class HardwareInputMonitor {
     }
 
     synchronized JSONObject snapshot() throws JSONException {
-        return new JSONObject().put("running", centralInput != null && ringInput != null)
+        boolean evdev = centralInput != null && ringInput != null;
+        return new JSONObject().put("running", evdev || frameworkAttached)
+                .put("mode", evdev ? "evdev" : frameworkAttached ? "android_dispatch" : "unavailable")
                 .put("central_readable", new File(CENTRAL).canRead())
                 .put("ring_readable", new File(RING).canRead())
                 .put("short_presses", shortPresses).put("long_presses", longPresses)
                 .put("last_press_ms", lastDurationMs)
                 .put("clockwise_steps", clockwiseSteps).put("counterclockwise_steps", counterclockwiseSteps)
                 .put("last_event", lastEvent)
-                .put("failure", failure == null ? JSONObject.NULL : failure);
+                .put("evdev_failure", failure == null ? JSONObject.NULL : failure);
     }
 
     void stop() {
         stopping = true;
+        HardwareInputRelay.detach(this); frameworkAttached = false;
         close(centralInput); close(ringInput);
         if (centralThread != null) centralThread.interrupt();
         if (ringThread != null) ringThread.interrupt();
