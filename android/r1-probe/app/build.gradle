@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("67")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.67-original-provisioning-bridge")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("68")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.68-provisioning-page")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

@@ -318,7 +318,10 @@ public final class NativeSatelliteService extends Service {
     private JSONObject capabilitySnapshot() throws org.json.JSONException {
         return new JSONObject().put("hardware", hardware.snapshot())
                 .put("capabilities", capabilities.snapshot()).put("hotspot", hotspot.snapshot())
-                .put("original_provisioning_bridge", originalProvisioning != null);
+                .put("original_provisioning_bridge", originalProvisioning != null)
+                .put("original_provisioning_page", "http://192.168.43.1:8080/")
+                .put("original_provisioning_result", originalProvisioning == null
+                        ? "unavailable" : originalProvisioning.lastResult());
     }
     private synchronized void publish() {
         if (registration != null || destroyed || !settings.enabled()) return;
@@ -353,6 +356,8 @@ public final class NativeSatelliteService extends Service {
     @Override public void onDestroy() {
         diagnostic.stop("service_destroyed");
         hardware.stop(); capabilities.close(); hotspot.close();
+        if (originalProvisioning != null) try { originalProvisioning.closeOriginalProvisioning(); }
+        catch (Exception ignored) { }
         destroyed = true; main.removeCallbacks(renewLock); closeClient(); closeServer(); unpublish();
         unregisterReceiver(network);
         if (health != null) health.cancel();

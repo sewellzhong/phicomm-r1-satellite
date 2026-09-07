@@ -35,4 +35,8 @@ v66 设备 APK SHA-256 为 `940364e67e7ade6fe38125fc3806f3ca8c7a70760fcbe9c0f553
 
 普通 APK 的热点反射调用返回成功后，手机未发现临时 SSID，设备也没有 AP 接口或 hostapd，wlan0 仍为家庭网络客户端，因此热点网页方案本轮失败。v67 在启动网页前读取 `getWifiApState()`，只有真实进入 `WIFI_AP_STATE_ENABLED` 才报告 active；否则返回 `hotspot_not_enabled` 并恢复 Wi-Fi。
 
-固件 3448 的原厂日志与反编译类表明，中央键长按事件经 `MessageDispatchManager` 送出 `what=256,arg1=5`；SystemTool 再发送 `what=262144,arg1=1`。保留的 NetControl 收到后同时启动配网灯、BLE、`Phicomm_R1_*` SoftAP 和 8989 网页，并设置 300 秒退出任务。v67 新增 shell 管理入口，直接发送后一条系统消息以复用原厂 NetControl，不恢复已隐藏的原厂语音包，也不修改系统包或权限。该入口须在实机看到灯光/热点后才算通过。
+固件 3448 的原厂日志与反编译类表明，中央键长按事件经 `MessageDispatchManager` 送出 `what=256,arg1=5`；SystemTool 再发送 `what=262144,arg1=1`。保留的 NetControl 收到后同时启动配网灯、BLE、`Phicomm_R1_*` SoftAP 和 8989 网页，并设置 300 秒退出任务。v67 新增 shell 管理入口，直接发送后一条系统消息以复用原厂 NetControl，不恢复已隐藏的原厂语音包，也不修改系统包或权限。
+
+v67 提交 `8cb1977278aa0774bb48ba0ae0a16308a774224b` 的设备 APK SHA-256 为 `b44c120af2adcacf84896d7d2f1993be1ed2b51b6208c249036278874ac5488c`。安装后消息桥可用，卫星恢复 `listening`，原厂音频包保持隐藏。首次调用原厂配网入口后，用户确认配网灯发生变化且手机发现 `Phicomm_R1_*` 热点；提示音没有出现。热点连接、网页提交、安卓/iPhone 完整配网仍须逐项验证。
+
+手机随后成功连接原厂热点并打开 8989 服务；根路径只显示 `Directory: /`，表明固件缺少首页文件。`/api/wifilist` 能返回附近 Wi-Fi 列表，热点、Jetty 和扫描 API 因此通过。v68 在独立 APK 的 8080 端口提供移动端页面，同源代理只读扫描请求；提交时直接写入 Android Wi-Fi 配置并退出原厂热点，不调用会把配置对象写入原厂日志的 `/api/configwifi`。页面和应用状态不回显、不记录、不持久保存密码，真实连接结果仍须实机验证。
