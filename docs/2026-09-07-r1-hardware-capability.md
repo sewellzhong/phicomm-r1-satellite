@@ -60,3 +60,9 @@ v75 提交 `32fbca9c7cb081bb51226cbcc9e19bc6f48dc281` 的设备 APK SHA-256 为 
 同一自动检查关窗后，SoftAP 确认消失，但 R1 原地址和 mDNS 均不可达；v76 因设备离线未部署。证据说明 SoftAP 关闭与 Wi-Fi 客户端恢复是两个异步阶段，即时调用 `setWifiEnabled(true)` 仍可能被拒绝。v77 改为后台每 500 ms 重试启用客户端、最长 20 秒，只有 `isWifiEnabled()` 真实返回成功才清除 pending；失败时保留 pending，供下次服务启动继续恢复。当前设备需真人整机重启，不能把代码支持记为实机恢复通过。
 
 v77 代码提交为 `fbbbce4001d88bd29c4c7eea7f72c949c83ba493`；完整主机检查通过 Android 153 项、lint、工具 32 项、HA 44 项及配置加载检查。hostcheck APK SHA-256 为 `ce9190b887a676fbca9bd852146a7addc95b4971788ee40e7aa8d33a27e645fc`，设备候选 APK SHA-256 为 `1dc1902dfebd9593973d1305753887866298255390c51e63f61a7138d8d7578c`。候选包保存在忽略的本地证据目录，尚未部署。
+
+设备重启后部署 v77，中央键短按计数由 0 增至 1；随后长按进入配网，预扫描快照显示开窗前已存在的临时热点。v78 取消单一页面所有者：iPhone 与 Android 同时连接 `Phicomm_R1_*` 后均可打开正常页面，iPhone 的 `iphone-only-123` 与 Android 的 `android-only-456` 测试输入互不串用；窗口到期并重新开启后，两端密码框均为空。页面和 API 返回 `no-store/no-cache`，每个浏览器持有独立随机会话，只有最终配置提交是设备级一次性操作。
+
+v78 单手机最终验收选择家庭 Wi-Fi 并提交，页面正确只提示“信息已收到”；R1 很快恢复原地址和 `listening`，但持久状态为 `recovered_after_failure`，不是 `connected`，因此完整配网判定失败。失败发生在热点模式下调用 `addNetwork/updateNetwork` 的即时阶段。v79 把经过校验的请求暂存为 Android Keystore RSA 加密密文，先关闭 SoftAP 并恢复 station，再写入系统 Wi-Fi 配置；服务重建时按 `handoff` 或 network ID 阶段续接，所有结束路径删除密文，失败状态只暴露白名单错误码。
+
+v79 代码提交为 `ae4fbe12b2215d46f8d8276a8e624c0898951c1c`；完整主机检查通过 Android 156 项、lint、工具 32 项、HA 44 项、配置加载和公开审计。hostcheck APK SHA-256 为 `dfc1b51ad2b92fc81ac6a46b7be09e3e444f0e13a71c62f4d5bf691175be9a31`，设备 APK SHA-256 为 `27139dc8fba250938433a63ae8ebce2bc3df92934381f460fad3550ccc4242f6`。该包已部署到首台 R1，API 22 上使用合成数据执行加密、解密和清除返回 `handoff_probe=true`，事后私有存储不存在交接字段，卫星仍为 `listening`，原厂包保持隐藏。按用户决定不再进行第二次手机验收，v79 完整配网标记为待之后复测。
