@@ -1,6 +1,6 @@
 # R1 原生语音卫星 APK
 
-当前开发源码 v64，独立包名 `dev.sewellzhong.r1probe`；Android 5.1 / API 22、ARMv7、固件 3448。`NativeSatelliteService` 提供原生运行、持久配置和开机恢复。旧 `AssistRuntimeService` 及其 WebSocket 启动工具已移除；首台设备仍为已验证最小录放音的 v63，v64 统一取消基础待实机验证。
+当前开发源码 v65，独立包名 `dev.sewellzhong.r1probe`；Android 5.1 / API 22、ARMv7、固件 3448。`NativeSatelliteService` 提供原生运行、持久配置、开机恢复、后台按键/音量环探针及限时硬件能力窗口。首台设备仍为已验证最小录放音的 v63，v65 待实机部署验证。
 
 ## 构建
 
@@ -20,6 +20,8 @@ PCM 固定 S16LE、16 kHz、单声道、20 ms/帧。`tools/assist/prepare-acknow
 ## 运行与验证边界
 
 使用根目录 `tools/native/manage-r1-native.py` 和 `deploy-r1-native.py`。原生 Noise 密钥留在设备私有配置中，不写入仓库或日志。升级前确认目标、固件、签名与回退 APK；恢复原包功能的基线见[根说明](../../README.md)。
+
+`capability-status` 和 `hardware-reset` 查询/清除硬件探针计数；`bluetooth-discoverable`、`ble-window`、`hotspot-window` 只开启限时能力窗口，并分别用对应的 `*-close` 提前关闭。热点启动会短暂断开 Wi-Fi/ADB，必须现场执行并等待自动恢复；临时测试密码不得保存到日志或证据。
 
 既有音频探针与 Alexa 有界诊断入口保留，不能和卫星音频并发运行，也不表示授权恢复 KWS 专项测试。涉及真实录放音的结论必须有实机证据。当前验收排期与已知失败见根说明。
 

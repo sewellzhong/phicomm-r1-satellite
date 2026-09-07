@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("64")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.64-audio-cancel-foundation")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("65")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.65-hardware-capability")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

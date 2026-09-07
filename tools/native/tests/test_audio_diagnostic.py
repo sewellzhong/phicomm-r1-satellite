@@ -137,6 +137,21 @@ class PromptSelectionCliTests(unittest.TestCase):
             with self.assertRaises(SystemExit): manage.main()
             factory.assert_not_called()
 
+    def test_capability_window_passes_requested_seconds(self):
+        device=mock.Mock(); device.control.return_value={}
+        with mock.patch.object(manage,'Device',return_value=device), \
+                mock.patch('sys.argv',['manage','bluetooth-discoverable','device','--seconds','60']), \
+                mock.patch('builtins.print'):
+            manage.main()
+        device.control.assert_called_once_with({'action':'bluetooth-discoverable','seconds':60})
+
+    def test_diagnostic_capture_rejects_more_than_thirty_seconds(self):
+        with mock.patch.object(manage,'Device') as factory, \
+                mock.patch('sys.argv',['manage','diagnostic-start','device','--seconds','31']), \
+                mock.patch('sys.stderr'):
+            with self.assertRaises(SystemExit): manage.main()
+            factory.assert_not_called()
+
 class RealAlexaTests(unittest.TestCase):
     def test_real_mode_never_injects_a_local_window(self):
         with tempfile.TemporaryDirectory() as directory:

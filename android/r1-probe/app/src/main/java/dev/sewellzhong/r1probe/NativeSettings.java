@@ -38,7 +38,12 @@ final class NativeSettings {
         if (!prefs.contains("volume")) setting("volume", Math.max(0, Math.min(100, percent)));
     }
     float speechSpeed() { return prefs.getFloat("speech_speed", .85f); }
-    void setting(String key, float value) { commit(prefs.edit().putFloat(key, value)); }
+    synchronized void setting(String key, float value) { commit(prefs.edit().putFloat(key, value)); }
+    synchronized int adjustVolume(int delta) {
+        int target = Math.max(0, Math.min(100, volumePercent() + delta));
+        if (target != volumePercent()) commit(prefs.edit().putFloat("volume", target));
+        return target;
+    }
     dev.sewellzhong.r1probe.assist.CommandWindow window() { return window(false); }
     dev.sewellzhong.r1probe.assist.CommandWindow window(boolean followup) {
         return new dev.sewellzhong.r1probe.assist.CommandWindow(followup ? followupWaitSeconds() : waitSeconds(), quietSeconds(), commandSeconds(), 6);
@@ -73,6 +78,12 @@ final class NativeSettings {
         commit(change);
     }
     void wakeEnabled(boolean enabled) { commit(prefs.edit().putBoolean("wake_enabled", enabled)); }
+    boolean hotspotProbePending() { return prefs.getBoolean("hotspot_probe_pending", false); }
+    boolean hotspotProbePreviousWifi() { return prefs.getBoolean("hotspot_probe_previous_wifi", true); }
+    void hotspotProbe(boolean pending, boolean previousWifi) {
+        commit(prefs.edit().putBoolean("hotspot_probe_pending", pending)
+                .putBoolean("hotspot_probe_previous_wifi", previousWifi));
+    }
     void rotate() {
         if (!configured() || enabled()) throw new IllegalStateException("stop_before_rotation");
         commit(prefs.edit().putString("psk", freshKey()));

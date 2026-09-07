@@ -32,6 +32,9 @@ import org.json.JSONObject;
 public final class NativeSatelliteService extends Service {
     private NativeSettings settings;
     private AudioDiagnostic diagnostic;
+    private HardwareInputMonitor hardware;
+    private DeviceCapabilityProbe capabilities;
+    private HotspotCapabilityProbe hotspot;
     private volatile boolean destroyed;
     private volatile Socket client;
     private volatile LocalSocket adminClient;
@@ -74,6 +77,10 @@ public final class NativeSatelliteService extends Service {
         super.onCreate();
         settings = new NativeSettings(this);
         diagnostic = new AudioDiagnostic(getFilesDir());
+        hardware = new HardwareInputMonitor(this, settings);
+        capabilities = new DeviceCapabilityProbe(this);
+        hotspot = new HotspotCapabilityProbe(this, settings);
+        hardware.start();
         if (settings.enabled()) audioPermitted();
         main.postDelayed(renewLock, 60000L);
         Notification.Builder builder;
@@ -196,6 +203,7 @@ public final class NativeSatelliteService extends Service {
                     }
                     JSONObject command = new JSONObject(new String(bytes.toByteArray(), StandardCharsets.UTF_8));
                     String action = command.getString("action");
+                    JSONObject actionResponse = null;
                     switch (action) {
                         case "diagnostic-arm":
                         case "diagnostic-start":
@@ -231,11 +239,26 @@ public final class NativeSatelliteService extends Service {
                             break;
                         case "stop": settings.enable(false, false); closeClient(); closeServer(); break;
                         case "rotate": settings.rotate(); break;
+                        case "hardware-reset": hardware.reset(); break;
+                        case "capability-status": break;
+                        case "bluetooth-discoverable": capabilities.openDiscoverable(command.optInt("seconds", 60)); break;
+                        case "bluetooth-close": capabilities.closeDiscoverable(); break;
+                        case "ble-window": capabilities.openBle(command.optInt("seconds", 60)); break;
+                        case "ble-close": capabilities.stopBle(); break;
+                        case "hotspot-window": actionResponse = hotspot.open(command.optInt("seconds", 120)); break;
+                        case "hotspot-close": hotspot.close(); break;
                         case "status": case "pairing": break;
                         default: throw new IllegalArgumentException("unsupported_action");
                     }
                     response = action.startsWith("diagnostic-") && !"diagnostic-window".equals(action)
                             ? diagnosticSnapshot() : snapshot();
+                    if (action.equals("capability-status") || action.equals("hardware-reset")
+                            || action.startsWith("bluetooth-") || action.startsWith("ble-")
+                            || action.startsWith("hotspot-")) response = capabilitySnapshot();
+                    if (actionResponse != null) {
+                        java.util.Iterator<String> keys = actionResponse.keys();
+                        while (keys.hasNext()) { String key = keys.next(); response.put(key, actionResponse.get(key)); }
+                    }
                     if("diagnostic-export".equals(action)) {
                         if(!diagnostic.hash().equals(command.getString("sha256"))) throw new IllegalStateException("capture_changed");
                         long offset=command.getLong("offset");
@@ -277,7 +300,12 @@ public final class NativeSatelliteService extends Service {
                 .put("protocol_mac", settings.mac()).put("connections", connections).put("failures", failures)
                 .put("port", 6053).put("audio_opened", current != null && current.audioOpened())
                 .put("audio", current == null ? JSONObject.NULL : current.diagnostics())
-                .put("health", health == null ? JSONObject.NULL : health.snapshot());
+                .put("health", health == null ? JSONObject.NULL : health.snapshot())
+                .put("hardware", hardware.snapshot());
+    }
+    private JSONObject capabilitySnapshot() throws org.json.JSONException {
+        return new JSONObject().put("hardware", hardware.snapshot())
+                .put("capabilities", capabilities.snapshot()).put("hotspot", hotspot.snapshot());
     }
     private synchronized void publish() {
         if (registration != null || destroyed || !settings.enabled()) return;
@@ -286,7 +314,7 @@ public final class NativeSatelliteService extends Service {
         info.setAttribute("version", "2026.8.0"); info.setAttribute("mac", settings.mac().replace(":", "").toLowerCase(java.util.Locale.ROOT));
         info.setAttribute("platform", "R1"); info.setAttribute("network", "wifi");
         info.setAttribute("api_encryption", "Noise_NNpsk0_25519_ChaChaPoly_SHA256");
-        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "0.64-audio-cancel-foundation");
+        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "0.65-hardware-capability");
         registration = new NsdManager.RegistrationListener() {
             @Override public void onServiceRegistered(NsdServiceInfo serviceInfo) { }
             @Override public void onRegistrationFailed(NsdServiceInfo serviceInfo, int code) { error = "discovery_registration_failed"; }
@@ -311,6 +339,7 @@ public final class NativeSatelliteService extends Service {
     }
     @Override public void onDestroy() {
         diagnostic.stop("service_destroyed");
+        hardware.stop(); capabilities.close(); hotspot.close();
         destroyed = true; main.removeCallbacks(renewLock); closeClient(); closeServer(); unpublish();
         unregisterReceiver(network);
         if (health != null) health.cancel();

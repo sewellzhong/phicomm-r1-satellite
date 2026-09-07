@@ -98,9 +98,11 @@ def export_diagnostic(device, destination):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["initialize", "start", "stop", "status", "rotate", "pair", "audio-check", "diagnostic-window", "diagnostic-start", "diagnostic-arm", "diagnostic-stop", "diagnostic-status", "diagnostic-export", "diagnostic-clear"])
+    parser.add_argument("action", choices=["initialize", "start", "stop", "status", "rotate", "pair", "audio-check",
+        "diagnostic-window", "diagnostic-start", "diagnostic-arm", "diagnostic-stop", "diagnostic-status", "diagnostic-export", "diagnostic-clear",
+        "capability-status", "hardware-reset", "bluetooth-discoverable", "bluetooth-close", "ble-window", "ble-close", "hotspot-window", "hotspot-close"])
     parser.add_argument("serial")
-    parser.add_argument("--seconds", type=int, default=30, choices=range(1,31))
+    parser.add_argument("--seconds", type=int, default=30, choices=range(1,121))
     parser.add_argument("--output", type=Path)
     parser.add_argument("--sha256")
     parser.add_argument("--name", default="r1-sample01")
@@ -109,6 +111,8 @@ def main():
     parser.add_argument("--listen", action="store_true")
     parser.add_argument("--ha-host", default="home-assistant")
     args = parser.parse_args()
+    if args.action in ("diagnostic-start", "diagnostic-arm") and args.seconds > 30:
+        parser.error("diagnostic capture is limited to 30 seconds")
     if args.prompt_index is not None and (args.action != "diagnostic-window" or args.followup):
         parser.error("--prompt-index requires an initial diagnostic-window")
     device = Device(args.serial); device.verify()
@@ -117,7 +121,8 @@ def main():
         if args.output is None: parser.error("--output is required")
         print(json.dumps(export_diagnostic(device,args.output),ensure_ascii=False)); return
     command = {"action": args.action}
-    if args.action in ("diagnostic-start", "diagnostic-arm"): command["seconds"] = args.seconds
+    if args.action in ("diagnostic-start", "diagnostic-arm", "bluetooth-discoverable", "ble-window", "hotspot-window"):
+        command["seconds"] = args.seconds
     if args.action == "diagnostic-clear":
         if not args.sha256: parser.error("--sha256 is required")
         command["sha256"] = args.sha256
