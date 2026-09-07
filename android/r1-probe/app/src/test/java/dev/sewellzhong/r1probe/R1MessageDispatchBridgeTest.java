@@ -43,6 +43,20 @@ public class R1MessageDispatchBridgeTest {
         assertFalse(R1MessageDispatchBridge.shouldResumeTarget("applying", -1));
     }
 
+    @Test public void resumesOnlyPresentEncryptedHandoff() {
+        assertTrue(R1MessageDispatchBridge.shouldResumeHandoff("handoff", true));
+        assertFalse(R1MessageDispatchBridge.shouldResumeHandoff("handoff", false));
+        assertFalse(R1MessageDispatchBridge.shouldResumeHandoff("window", true));
+    }
+
+    @Test public void exposesOnlyBoundedProvisioningFailureCodes() {
+        assertEquals("wifi_configuration_rejected", R1MessageDispatchBridge.failureCode(
+                new IllegalStateException("wifi_configuration_rejected")));
+        assertEquals("failure", R1MessageDispatchBridge.failureCode(
+                new IllegalStateException("secret or vendor detail")));
+        assertEquals("failure", R1MessageDispatchBridge.failureCode(null));
+    }
+
     @Test public void extractsOnlyTheRequestedCookie() {
         String headers = "GET / HTTP/1.1\r\nCookie: theme=light; R1SESSION=abc_123; x=y\r\n\r\n";
         assertEquals("abc_123", ProvisioningWebServer.cookie(headers, "R1SESSION"));

@@ -281,6 +281,10 @@ public final class NativeSatelliteService extends Service {
                             if (originalProvisioning == null) throw new IllegalStateException("message_dispatch_unavailable");
                             originalProvisioning.recoverWifi();
                             break;
+                        case "provisioning-handoff-probe":
+                            if (originalProvisioning == null) throw new IllegalStateException("message_dispatch_unavailable");
+                            actionResponse = originalProvisioning.probeHandoff();
+                            break;
                         case "status": case "pairing": break;
                         default: throw new IllegalArgumentException("unsupported_action");
                     }
@@ -289,7 +293,7 @@ public final class NativeSatelliteService extends Service {
                     if (action.equals("capability-status") || action.equals("hardware-reset")
                             || action.startsWith("bluetooth-") || action.startsWith("ble-")
                             || action.startsWith("hotspot-") || action.startsWith("original-provisioning-")
-                            || action.equals("provisioning-recover"))
+                            || action.equals("provisioning-recover") || action.equals("provisioning-handoff-probe"))
                         response = capabilitySnapshot();
                     if (actionResponse != null) {
                         java.util.Iterator<String> keys = actionResponse.keys();
@@ -359,7 +363,7 @@ public final class NativeSatelliteService extends Service {
         info.setAttribute("version", "2026.8.0"); info.setAttribute("mac", settings.mac().replace(":", "").toLowerCase(java.util.Locale.ROOT));
         info.setAttribute("platform", "R1"); info.setAttribute("network", "wifi");
         info.setAttribute("api_encryption", "Noise_NNpsk0_25519_ChaChaPoly_SHA256");
-        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "0.78-provisioning-resume");
+        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "0.79-secure-wifi-handoff");
         registration = new NsdManager.RegistrationListener() {
             @Override public void onServiceRegistered(NsdServiceInfo serviceInfo) { }
             @Override public void onRegistrationFailed(NsdServiceInfo serviceInfo, int code) { error = "discovery_registration_failed"; }
@@ -386,7 +390,7 @@ public final class NativeSatelliteService extends Service {
         diagnostic.stop("service_destroyed");
         hardware.stop(); capabilities.close(); hotspot.close();
         if (systemKeys != null) systemKeys.stop();
-        if (originalProvisioning != null) try { originalProvisioning.closeOriginalProvisioning(); }
+        if (originalProvisioning != null) try { originalProvisioning.serviceDestroyed(); }
         catch (Exception ignored) { }
         destroyed = true; main.removeCallbacks(renewLock); closeClient(); closeServer(); unpublish();
         unregisterReceiver(network);

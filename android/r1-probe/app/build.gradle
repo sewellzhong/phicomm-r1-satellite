@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("78")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.78-provisioning-resume")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("79")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.79-secure-wifi-handoff")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

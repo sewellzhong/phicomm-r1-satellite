@@ -103,6 +103,12 @@ final class NativeSettings {
                 .putInt("original_provisioning_network_id", networkId)
                 .putString("original_provisioning_result", "applying"));
     }
+    void provisioningHandoff() {
+        commit(prefs.edit().putBoolean("original_provisioning_pending", true)
+                .putString("original_provisioning_stage", "handoff")
+                .remove("original_provisioning_network_id")
+                .putString("original_provisioning_result", "switching_to_station"));
+    }
     void provisioningRecovering() {
         commit(prefs.edit().putBoolean("original_provisioning_pending", true)
                 .putString("original_provisioning_stage", "recovering")
