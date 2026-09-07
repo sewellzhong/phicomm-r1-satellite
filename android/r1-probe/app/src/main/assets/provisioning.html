@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>连接 R1</title>
+  <style>
+    :root { color-scheme: light; --ink:#27332f; --muted:#6d7b75; --cream:#fffdf7; --mint:#dff3ea; --green:#347760; --line:#e4e9e5; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; padding:28px 18px; color:var(--ink); font:16px/1.55 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:linear-gradient(155deg,#e7f5ee 0%,#fff8e9 62%,#f6eee6 100%); }
+    main { width:min(100%,430px); margin:0 auto; }
+    .hello { display:flex; align-items:center; gap:14px; margin:12px 4px 22px; }
+    .mark { display:grid; place-items:center; width:54px; height:54px; border-radius:18px; color:#fff; font-weight:750; font-size:22px; background:linear-gradient(145deg,#4e967b,#2e6d58); box-shadow:0 10px 28px #34776035; }
+    h1 { margin:0; font-size:26px; letter-spacing:-.02em; }
+    .hello p { margin:2px 0 0; color:var(--muted); font-size:14px; }
+    .card { padding:22px; border:1px solid #ffffffb8; border-radius:24px; background:#fffdf7e8; box-shadow:0 18px 48px #5b75681c; backdrop-filter:blur(12px); }
+    .steps { display:flex; gap:7px; margin-bottom:20px; }
+    .steps i { height:5px; flex:1; border-radius:9px; background:var(--line); }
+    .steps i:first-child,.steps i:nth-child(2) { background:#65a98d; }
+    label { display:block; margin:16px 0 7px; font-size:14px; font-weight:650; }
+    .field { position:relative; }
+    select,input { width:100%; min-height:50px; border:1px solid var(--line); border-radius:14px; padding:0 44px 0 14px; color:var(--ink); font:inherit; background:#fff; outline:none; }
+    select:focus,input:focus { border-color:#65a98d; box-shadow:0 0 0 4px #65a98d1e; }
+    .small { position:absolute; right:8px; top:7px; width:auto; min-height:36px; padding:0 10px; border:0; color:var(--green); background:transparent; font:600 13px/1 inherit; }
+    .actions { display:flex; gap:10px; margin-top:20px; }
+    button { min-height:48px; border:0; border-radius:14px; padding:0 16px; font:650 16px/1 inherit; cursor:pointer; }
+    #scan { width:112px; color:var(--green); background:var(--mint); }
+    #go { flex:1; color:#fff; background:linear-gradient(135deg,#438a70,#2f715a); box-shadow:0 8px 20px #34776035; }
+    button:disabled { opacity:.5; box-shadow:none; }
+    #status { min-height:25px; margin:16px 2px 0; color:var(--muted); font-size:14px; }
+    .privacy { margin:18px 5px 0; color:var(--muted); font-size:12px; text-align:center; }
+  </style>
+</head>
+<body>
+<main>
+  <header class="hello"><div class="mark">R1</div><div><h1>让 R1 连上家里的网络</h1><p>很快就好，大约一分钟</p></div></header>
+  <section class="card">
+    <div class="steps" aria-label="步骤 2，共 3 步"><i></i><i></i><i></i></div>
+    <label for="net">选择 Wi-Fi</label>
+    <div class="field"><select id="net" disabled><option>正在寻找附近的网络…</option></select></div>
+    <label for="pwd">Wi-Fi 密码</label>
+    <div class="field"><input id="pwd" type="password" autocomplete="current-password" placeholder="请输入密码"><button class="small" id="peek" type="button">显示</button></div>
+    <div class="actions"><button id="scan" type="button">重新扫描</button><button id="go" type="button" disabled>连接 R1</button></div>
+    <p id="status" role="status">正在扫描，请稍等一下…</p>
+  </section>
+  <p class="privacy">密码只写入这台 R1 的系统 Wi-Fi 配置，本应用不会保存或记录。</p>
+</main>
+<script>
+  let rows=[];
+  const net=document.querySelector('#net'),pwd=document.querySelector('#pwd'),status=document.querySelector('#status'),go=document.querySelector('#go'),scan=document.querySelector('#scan');
+  function normalize(json){const source=Array.isArray(json)?json:(json.data||[]);return source.map(x=>Array.isArray(x)?x:[x.ssid,x.mac,x.level,x.secure]).filter(x=>x[0]);}
+  function load(){scan.disabled=true;go.disabled=true;net.disabled=true;net.innerHTML='<option>正在寻找附近的网络…</option>';status.textContent='正在扫描，请稍等一下…';fetch('/api/wifilist',{cache:'no-store'}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(json=>{rows=normalize(json);net.textContent='';rows.forEach((x,i)=>{const option=document.createElement('option');option.value=i;option.textContent=x[0];net.appendChild(option)});if(rows.length){net.disabled=false;go.disabled=false;status.textContent='找到 '+rows.length+' 个网络，请选择你家的 Wi-Fi。';}else{status.textContent='暂时没找到网络，等几秒再试试。';}}).catch(()=>status.textContent='扫描没有成功，请点“重新扫描”。').then(()=>scan.disabled=false);}
+  document.querySelector('#peek').onclick=function(){const show=pwd.type==='password';pwd.type=show?'text':'password';this.textContent=show?'隐藏':'显示';};
+  scan.onclick=load;
+  go.onclick=()=>{const row=rows[+net.value];if(!row)return;go.disabled=true;scan.disabled=true;status.textContent='正在把网络信息交给 R1…';fetch('/api/configwifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:row[0],secure:row[3],password:pwd.value})}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(()=>status.textContent='设置完成。现在可以把手机切回家里的 Wi-Fi，R1 会自己连上。').catch(()=>{go.disabled=false;scan.disabled=false;status.textContent='没有连接成功，请确认密码后再试一次。';});};
+  load();
+</script>
+</body>
+</html>

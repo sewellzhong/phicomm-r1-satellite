@@ -1,5 +1,6 @@
 package dev.sewellzhong.r1probe;
 
+import android.content.Context;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -19,25 +20,16 @@ final class ProvisioningWebServer {
 
     private static final int MAX_HEADERS = 8192;
     private static final int MAX_BODY = 4096;
-    private static final byte[] PAGE = ("<!doctype html><html lang=zh-CN><meta charset=utf-8>"
-            + "<meta name=viewport content='width=device-width,initial-scale=1'>"
-            + "<title>R1 配网</title><style>body{font:16px sans-serif;max-width:34rem;margin:2rem auto;padding:0 1rem}"
-            + "label,select,input,button{display:block;width:100%;box-sizing:border-box;margin:.7rem 0;padding:.75rem}"
-            + "button{background:#1769aa;color:white;border:0;border-radius:.4rem}#status{white-space:pre-wrap}</style>"
-            + "<h1>R1 配网</h1><p>选择家庭 Wi-Fi。密码只用于写入 R1 的 Android Wi-Fi 配置，不保存到本应用。</p>"
-            + "<label>Wi-Fi<select id=net><option>正在扫描…</option></select></label>"
-            + "<label>密码<input id=pwd type=password autocomplete=current-password></label>"
-            + "<button id=go>连接</button><p id=status></p><script>let rows=[];const n=document.querySelector('#net'),s=document.querySelector('#status');"
-            + "fetch('/api/wifilist').then(r=>r.json()).then(j=>{rows=j.data||[];n.textContent='';rows.forEach((x,i)=>{let o=document.createElement('option');o.value=i;o.textContent=x[0];n.appendChild(o)});if(!rows.length)s.textContent='没有扫描到 Wi-Fi';}).catch(()=>s.textContent='扫描失败，请刷新页面');"
-            + "document.querySelector('#go').onclick=()=>{let x=rows[+n.value];if(!x)return;s.textContent='正在提交…';fetch('/api/configwifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:x[0],secure:x[3],password:document.querySelector('#pwd').value})}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(()=>s.textContent='已提交。请将手机切回家庭 Wi-Fi，并等待 R1 上线。').catch(()=>s.textContent='提交失败，请检查密码后重试');};</script></html>")
-            .getBytes(StandardCharsets.UTF_8);
-
+    private final Context context;
     private final Configurator configurator;
     private volatile boolean running;
     private ServerSocket server;
     private Thread worker;
 
-    ProvisioningWebServer(Configurator configurator) { this.configurator = configurator; }
+    ProvisioningWebServer(Context context, Configurator configurator) {
+        this.context = context.getApplicationContext();
+        this.configurator = configurator;
+    }
 
     synchronized void start() throws IOException {
         if (running) return;
@@ -63,7 +55,9 @@ final class ProvisioningWebServer {
         if (request.length < 2) { respond(socket, 400, "application/json", "{\"error\":\"bad_request\"}".getBytes(StandardCharsets.UTF_8)); return; }
         String method = request[0].toUpperCase(Locale.US), path = request[1].split("\\?", 2)[0];
         if ("GET".equals(method) && "/".equals(path)) {
-            respond(socket, 200, "text/html; charset=utf-8", PAGE);
+            try (InputStream page = context.getAssets().open("provisioning.html")) {
+                respond(socket, 200, "text/html; charset=utf-8", readLimited(page, 128 * 1024));
+            }
         } else if ("GET".equals(method) && "/api/wifilist".equals(path)) {
             respond(socket, 200, "application/json; charset=utf-8", factoryWifiList());
         } else if ("POST".equals(method) && "/api/configwifi".equals(path)) {
@@ -129,7 +123,7 @@ final class ProvisioningWebServer {
         String reason = status == 200 ? "OK" : status == 202 ? "Accepted" : status == 404 ? "Not Found" : "Bad Request";
         output.write(("HTTP/1.1 " + status + " " + reason + "\r\nContent-Type: " + type
                 + "\r\nContent-Length: " + body.length + "\r\nCache-Control: no-store\r\nConnection: close\r\n"
-                + "Content-Security-Policy: default-src 'self'; script-src 'unsafe-inline'\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+                + "Content-Security-Policy: default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
         output.write(body); output.flush();
     }
 

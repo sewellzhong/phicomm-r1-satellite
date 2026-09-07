@@ -34,7 +34,7 @@ final class R1MessageDispatchBridge {
         sendMessage = manager.getClass().getMethod(
                 "sendMessage", int.class, int.class, int.class, Parcelable.class);
         wifi = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-        web = new ProvisioningWebServer(this::configureWifi);
+        web = new ProvisioningWebServer(context, this::configureWifi);
     }
 
     void openOriginalProvisioning() throws Exception {
