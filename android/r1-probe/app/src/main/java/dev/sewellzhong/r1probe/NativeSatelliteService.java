@@ -36,6 +36,7 @@ public final class NativeSatelliteService extends Service {
     private DeviceCapabilityProbe capabilities;
     private HotspotCapabilityProbe hotspot;
     private R1MessageDispatchBridge originalProvisioning;
+    private R1SystemKeyMonitor systemKeys;
     private volatile boolean destroyed;
     private volatile Socket client;
     private volatile LocalSocket adminClient;
@@ -83,6 +84,24 @@ public final class NativeSatelliteService extends Service {
         hotspot = new HotspotCapabilityProbe(this, settings);
         try { originalProvisioning = new R1MessageDispatchBridge(this); }
         catch (Exception ignored) { originalProvisioning = null; }
+        try {
+            systemKeys = new R1SystemKeyMonitor(this, new R1SystemKeyMonitor.Listener() {
+                @Override public void shortPress() {
+                    NativeAudioRuntime current = audio;
+                    if (current != null) current.cancelAudio(
+                            dev.sewellzhong.r1probe.esphome.NativeAudioCoordinator.CancelReason.USER_STOP);
+                }
+                @Override public void longPress() {
+                    if (originalProvisioning == null) return;
+                    Thread trigger = new Thread(() -> {
+                        try { originalProvisioning.openOriginalProvisioning(); }
+                        catch (Exception ignored) { }
+                    }, "r1-key-provisioning");
+                    trigger.setDaemon(true); trigger.start();
+                }
+            });
+            systemKeys.start();
+        } catch (Exception ignored) { systemKeys = null; }
         hardware.start();
         if (settings.enabled()) audioPermitted();
         main.postDelayed(renewLock, 60000L);
@@ -317,6 +336,7 @@ public final class NativeSatelliteService extends Service {
     }
     private JSONObject capabilitySnapshot() throws org.json.JSONException {
         return new JSONObject().put("hardware", hardware.snapshot())
+                .put("system_keys", systemKeys == null ? JSONObject.NULL : systemKeys.snapshot())
                 .put("capabilities", capabilities.snapshot()).put("hotspot", hotspot.snapshot())
                 .put("original_provisioning_bridge", originalProvisioning != null)
                 .put("original_provisioning_page", "http://192.168.43.1:8080/")
@@ -356,6 +376,7 @@ public final class NativeSatelliteService extends Service {
     @Override public void onDestroy() {
         diagnostic.stop("service_destroyed");
         hardware.stop(); capabilities.close(); hotspot.close();
+        if (systemKeys != null) systemKeys.stop();
         if (originalProvisioning != null) try { originalProvisioning.closeOriginalProvisioning(); }
         catch (Exception ignored) { }
         destroyed = true; main.removeCallbacks(renewLock); closeClient(); closeServer(); unpublish();

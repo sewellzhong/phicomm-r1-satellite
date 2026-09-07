@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("71")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.71-provisioning-window-reset")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("74")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.74-system-key-provisioning")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

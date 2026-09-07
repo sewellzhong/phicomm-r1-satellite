@@ -6,6 +6,7 @@ import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.net.wifi.SupplicantState;
+import android.net.wifi.ScanResult;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Parcelable;
@@ -13,7 +14,11 @@ import android.os.SystemClock;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.regex.Pattern;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 /** Firmware-3448 bridge to the existing system provisioning service. */
@@ -28,7 +33,9 @@ final class R1MessageDispatchBridge {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ProvisioningWebServer web;
     private final Runnable closeWeb;
+    private final Runnable stopOriginal;
     private volatile String lastResult = "none";
+    private volatile long openedAtMs;
 
     @SuppressLint("WrongConstant")
     R1MessageDispatchBridge(Context context) throws Exception {
@@ -37,27 +44,68 @@ final class R1MessageDispatchBridge {
         sendMessage = manager.getClass().getMethod(
                 "sendMessage", int.class, int.class, int.class, Parcelable.class);
         wifi = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-        web = new ProvisioningWebServer(context, this::configureWifi);
+        web = new ProvisioningWebServer(context, this::scanWifi, this::configureWifi);
         closeWeb = web::close;
+        stopOriginal = () -> {
+            try { send(TURN_OFF); } catch (Exception ignored) { }
+        };
     }
 
     void openOriginalProvisioning() throws Exception {
         main.removeCallbacks(closeWeb);
+        main.removeCallbacks(stopOriginal);
         web.close();
         web.start();
+        // Capture fresh station-mode results before NetControl changes wlan0 to AP mode.
+        if (wifi.startScan()) SystemClock.sleep(2200L);
         try { send(TURN_ON); }
         catch (Exception error) { web.close(); throw error; }
         lastResult = "waiting_for_phone";
+        openedAtMs = SystemClock.elapsedRealtime();
         main.postDelayed(closeWeb, 300000L);
     }
 
     void closeOriginalProvisioning() throws Exception {
         main.removeCallbacks(closeWeb);
-        send(TURN_OFF);
+        main.removeCallbacks(stopOriginal);
         web.close();
+        // NetControl starts SoftAP asynchronously. Sending OFF immediately after ON
+        // can be overtaken by the late AP enable and leave a timerless hotspot.
+        long delay = Math.max(0L, 5000L - (SystemClock.elapsedRealtime() - openedAtMs));
+        if (delay > 0L) main.postDelayed(stopOriginal, delay);
+        else send(TURN_OFF);
     }
 
     String lastResult() { return lastResult; }
+
+    private byte[] scanWifi() throws Exception {
+        if (wifi.startScan()) SystemClock.sleep(2200L);
+        List<ScanResult> results = wifi.getScanResults();
+        Map<String, ScanResult> strongest = new LinkedHashMap<>();
+        if (results != null) for (ScanResult item : results) {
+            if (item == null || item.SSID == null || item.SSID.length() == 0 || hasControl(item.SSID)) continue;
+            ScanResult prior = strongest.get(item.SSID);
+            if (prior == null || item.level > prior.level) strongest.put(item.SSID, item);
+        }
+        List<ScanResult> ordered = new java.util.ArrayList<>(strongest.values());
+        Collections.sort(ordered, (left, right) -> Integer.compare(right.level, left.level));
+        JSONArray array = new JSONArray();
+        for (ScanResult item : ordered) {
+            String secure = security(item.capabilities);
+            if ("UNSUPPORTED".equals(secure)) continue;
+            array.put(new JSONObject().put("ssid", item.SSID)
+                    .put("level", WifiManager.calculateSignalLevel(item.level, 4)).put("secure", secure));
+        }
+        return array.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    static String security(String capabilities) {
+        String value = capabilities == null ? "" : capabilities.toUpperCase(java.util.Locale.US);
+        if (value.contains("WEP")) return "WEP";
+        if (value.contains("PSK")) return "WPA";
+        if (value.contains("SAE") || value.contains("EAP")) return "UNSUPPORTED";
+        return "INSECURE";
+    }
 
     private void configureWifi(JSONObject request) throws Exception {
         String ssid = request.getString("ssid"), secure = request.optString("secure", "INSECURE");
