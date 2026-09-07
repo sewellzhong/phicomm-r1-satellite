@@ -101,7 +101,7 @@ def main():
     parser.add_argument("action", choices=["initialize", "start", "stop", "status", "rotate", "pair", "audio-check",
         "diagnostic-window", "diagnostic-start", "diagnostic-arm", "diagnostic-stop", "diagnostic-status", "diagnostic-export", "diagnostic-clear",
         "capability-status", "hardware-reset", "bluetooth-discoverable", "bluetooth-close", "ble-window", "ble-close", "hotspot-window", "hotspot-close",
-        "original-provisioning-open", "original-provisioning-close"])
+        "original-provisioning-open", "original-provisioning-close", "provisioning-recover"])
     parser.add_argument("serial")
     parser.add_argument("--seconds", type=int, default=30, choices=range(1,121))
     parser.add_argument("--output", type=Path)

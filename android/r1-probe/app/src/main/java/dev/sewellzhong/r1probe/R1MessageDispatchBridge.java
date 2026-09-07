@@ -30,9 +30,10 @@ final class R1MessageDispatchBridge {
     private final Object manager;
     private final Method sendMessage;
     private final WifiManager wifi;
+    private final NativeSettings settings;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ProvisioningWebServer web;
-    private final Runnable closeWeb;
+    private final Runnable expireWindow;
     private final Runnable stopOriginal;
     private volatile String lastResult = "none";
     private volatile long openedAtMs;
@@ -44,36 +45,70 @@ final class R1MessageDispatchBridge {
         sendMessage = manager.getClass().getMethod(
                 "sendMessage", int.class, int.class, int.class, Parcelable.class);
         wifi = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        settings = new NativeSettings(context);
         web = new ProvisioningWebServer(context, this::scanWifi, this::configureWifi);
-        closeWeb = web::close;
+        expireWindow = this::recoverWifi;
         stopOriginal = () -> {
-            try { send(TURN_OFF); } catch (Exception ignored) { }
+            try { finishOriginal(); } catch (Exception ignored) { }
         };
+        if (settings.provisioningPending()) recoverWifi();
     }
 
     void openOriginalProvisioning() throws Exception {
-        main.removeCallbacks(closeWeb);
+        main.removeCallbacks(expireWindow);
         main.removeCallbacks(stopOriginal);
         web.close();
         web.start();
         // Capture fresh station-mode results before NetControl changes wlan0 to AP mode.
         if (wifi.startScan()) SystemClock.sleep(2200L);
+        settings.provisioning(true);
         try { send(TURN_ON); }
-        catch (Exception error) { web.close(); throw error; }
+        catch (Exception error) { recoverWifi(); throw error; }
         lastResult = "waiting_for_phone";
         openedAtMs = SystemClock.elapsedRealtime();
-        main.postDelayed(closeWeb, 300000L);
+        main.postDelayed(expireWindow, 300000L);
     }
 
     void closeOriginalProvisioning() throws Exception {
-        main.removeCallbacks(closeWeb);
+        main.removeCallbacks(expireWindow);
         main.removeCallbacks(stopOriginal);
         web.close();
         // NetControl starts SoftAP asynchronously. Sending OFF immediately after ON
         // can be overtaken by the late AP enable and leave a timerless hotspot.
         long delay = Math.max(0L, 5000L - (SystemClock.elapsedRealtime() - openedAtMs));
         if (delay > 0L) main.postDelayed(stopOriginal, delay);
-        else send(TURN_OFF);
+        else finishOriginal();
+    }
+
+    void recoverWifi() {
+        main.removeCallbacks(expireWindow);
+        main.removeCallbacks(stopOriginal);
+        web.close();
+        try { send(TURN_OFF); } catch (Exception ignored) { }
+        try {
+            Method method = WifiManager.class.getDeclaredMethod(
+                    "setWifiApEnabled", WifiConfiguration.class, boolean.class);
+            method.setAccessible(true);
+            method.invoke(wifi, null, false);
+        } catch (Exception ignored) { }
+        wifi.setWifiEnabled(true);
+        settings.provisioning(false);
+        lastResult = "recovered";
+    }
+
+    private void finishOriginal() throws Exception {
+        try { send(TURN_OFF); }
+        finally {
+            try {
+                Method method = WifiManager.class.getDeclaredMethod(
+                        "setWifiApEnabled", WifiConfiguration.class, boolean.class);
+                method.setAccessible(true); method.invoke(wifi, null, false);
+            } finally {
+                wifi.setWifiEnabled(true);
+                settings.provisioning(false);
+                lastResult = "closed";
+            }
+        }
     }
 
     String lastResult() { return lastResult; }
@@ -121,8 +156,10 @@ final class R1MessageDispatchBridge {
             SystemClock.sleep(2500L);
             connectWifi(configuration);
             lastResult = "connected";
+            settings.provisioning(false);
         } catch (Exception error) {
             lastResult = "failed";
+            settings.provisioning(false);
             throw error;
         }
     }

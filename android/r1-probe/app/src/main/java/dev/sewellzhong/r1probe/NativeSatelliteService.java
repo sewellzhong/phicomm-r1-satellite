@@ -277,6 +277,10 @@ public final class NativeSatelliteService extends Service {
                             if (originalProvisioning == null) throw new IllegalStateException("message_dispatch_unavailable");
                             originalProvisioning.closeOriginalProvisioning();
                             break;
+                        case "provisioning-recover":
+                            if (originalProvisioning == null) throw new IllegalStateException("message_dispatch_unavailable");
+                            originalProvisioning.recoverWifi();
+                            break;
                         case "status": case "pairing": break;
                         default: throw new IllegalArgumentException("unsupported_action");
                     }
@@ -284,7 +288,8 @@ public final class NativeSatelliteService extends Service {
                             ? diagnosticSnapshot() : snapshot();
                     if (action.equals("capability-status") || action.equals("hardware-reset")
                             || action.startsWith("bluetooth-") || action.startsWith("ble-")
-                            || action.startsWith("hotspot-") || action.startsWith("original-provisioning-"))
+                            || action.startsWith("hotspot-") || action.startsWith("original-provisioning-")
+                            || action.equals("provisioning-recover"))
                         response = capabilitySnapshot();
                     if (actionResponse != null) {
                         java.util.Iterator<String> keys = actionResponse.keys();

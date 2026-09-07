@@ -14,6 +14,7 @@
 | v70 配网连接确认与重试 | `daa76751cef6c11f7a9f30e8fbf2ebda52205944` | API 22 / Java 8、Android 149 项、lint、hostcheck APK 和工具 32 项通过；HA 代码未变 | 阻断于页面 | 设备 APK SHA-256 `523e648c0b06cb2c6edc9b4d3d5f37dd1656f387e505c6db000e728acf2a1bf8`；原厂 AP 关闭后等待 2.5 秒，明确断开旧网络并最多三次选择目标网络 | 提前调用原厂 `/api/quit` 后再次开窗，旧 5 分钟定时器关闭了复用的 8080 服务；8989 原厂页仍可打开，连接重试未实际触发 |
 | v71 配网页面窗口重建 | `bf7f37d6348c5af4c0fef8d6d53a1b8cd509eff2` | 完整 `check.sh` 通过：Android 149 项、lint、hostcheck APK SHA-256 `3c434dd38fb5e5fb5b7b03489afc700fee1b41802ca23ba9ede16a11a5aeaec9`、工具 32 项、HA 44 项及配置检查 | 部分通过 | 设备 APK SHA-256 `6063a5820b915ec72da0a6d70e49e510d053befcae0db7d73bfebec6698b4f8e`；自动开窗后 8080 返回新版页面 | 自动检查在页面返回后立即关窗，原厂异步 AP 启动晚于关闭，造成热点可能停留且 ADB 未恢复；需整机重启，未执行第二轮 |
 | v74 配网并发、实时扫描与系统键探针 | `709fe2b7ea338db34af862381640668c8a8ba1a9` | 完整 `check.sh` 通过：Android 153 项、lint、hostcheck APK SHA-256 `774712903724e23a3071d2720f1d9536d532faf7f437780f4e6b57d22d7a50d4`、工具 32 项、HA 44 项及配置检查 | 待验证 | 设备候选 APK SHA-256 `7d503d8a5a474007552259c2d566dd719e3a460e88cf8764e722535cb14e6a9f`；开窗前主动扫描，页面刷新再次请求 Android 扫描；首个浏览器持有随机会话且只能提交一次，其他终端返回占用提示；系统消息中心注册 256 类并统计短按 1/长按 5 | 当前 v71 因快速开关原厂 AP 可能停留在热点，需真人整机重启恢复后再部署 v74；中央键消息和多手机接入须实测，音量环仍受框架处理限制 |
+| v75 配网崩溃恢复 | 待提交；实机前填写完整 SHA | API 22 / Java 8、Android 153 项及 lint 通过；工具 32 项待复跑 | 待验证 | 开窗前持久标记 pending；正常关闭、连接成功/失败或 5 分钟到期均显式关 SoftAP、恢复 Wi-Fi 并清除标记；服务重启发现遗留标记自动恢复；提供 shell 恢复入口 | v71 当前 AP 可关联但 8989 已停止，原厂 `/api/quit` 和 shell `svc wifi enable` 均未恢复；v75 计划通过热点 ADB 覆盖安装后执行恢复，不需 root |
 
 ## 优化任务的后续验证
 

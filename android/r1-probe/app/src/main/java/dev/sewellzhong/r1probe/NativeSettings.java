@@ -84,6 +84,10 @@ final class NativeSettings {
         commit(prefs.edit().putBoolean("hotspot_probe_pending", pending)
                 .putBoolean("hotspot_probe_previous_wifi", previousWifi));
     }
+    boolean provisioningPending() { return prefs.getBoolean("original_provisioning_pending", false); }
+    void provisioning(boolean pending) {
+        commit(prefs.edit().putBoolean("original_provisioning_pending", pending));
+    }
     void rotate() {
         if (!configured() || enabled()) throw new IllegalStateException("stop_before_rotation");
         commit(prefs.edit().putString("psk", freshKey()));
