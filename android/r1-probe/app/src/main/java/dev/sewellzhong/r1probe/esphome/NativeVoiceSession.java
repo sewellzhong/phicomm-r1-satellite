@@ -20,6 +20,7 @@ public final class NativeVoiceSession {
         void audio(byte[] data) throws IOException;
         void end();
         boolean complete();
+        boolean terminated();
         String failure();
         void stop();
     }
@@ -88,9 +89,13 @@ public final class NativeVoiceSession {
             EsphomeApi.VoiceAssistantEventResponse response = EsphomeApi.VoiceAssistantEventResponse.parseFrom(payload);
             EsphomeApi.VoiceAssistantEvent event = response.getEventType();
             if (!active()) return true;
+            // Once cancellation starts, only the terminal event may release this run. Late
+            // STT/intent/TTS/error events belong to the cancelled run and must not change its
+            // outcome or revive playback.
+            if (state == State.CANCELLING && event != EsphomeApi.VoiceAssistantEvent.VOICE_ASSISTANT_RUN_END)
+                return true;
             switch (event) {
                 case VOICE_ASSISTANT_INTENT_END:
-                    if (state == State.CANCELLING) break;
                     for (EsphomeApi.VoiceAssistantEventData data : response.getDataList()) {
                         if ("conversation_id".equals(data.getName())) {
                             if (data.getValue().length() > 256) abortConnection("conversation_id_too_long");
@@ -109,11 +114,9 @@ public final class NativeVoiceSession {
                     break;
                 case VOICE_ASSISTANT_TTS_START:
                 case VOICE_ASSISTANT_TTS_END:
-                    if (state == State.CANCELLING) break;
                     expectTts();
                     break;
                 case VOICE_ASSISTANT_TTS_STREAM_START:
-                    if (state == State.CANCELLING) break;
                     expectTts();
                     if (streamStarted || playback == null) abortConnection("tts_stream_unsupported_or_duplicate");
                     streamStarted = true;
@@ -122,7 +125,6 @@ public final class NativeVoiceSession {
                     catch (IOException e) { abortConnection("tts_start_failed"); }
                     break;
                 case VOICE_ASSISTANT_TTS_STREAM_END:
-                    if (state == State.CANCELLING) break;
                     if (!streamStarted) abortConnection("tts_end_before_start");
                     if (!streamEnded) { streamEnded = true; playback.end(); }
                     completePlayback();
@@ -195,14 +197,24 @@ public final class NativeVoiceSession {
         send(MessageIds.VoiceAssistantAudio, EsphomeApi.VoiceAssistantAudio.newBuilder().setEnd(true).build());
     }
 
-    public void cancel() throws IOException {
-        if (!active() || state == State.CANCELLING) return;
+    public boolean cancel() throws IOException {
+        return cancel(true);
+    }
+
+    /** Coordinator entry after it has already stopped local playback on the caller thread. */
+    boolean cancelAfterLocalStop() throws IOException {
+        return cancel(false);
+    }
+
+    private boolean cancel(boolean stopPlayback) throws IOException {
+        if (!active() || state == State.CANCELLING) return false;
         if (outcome == Outcome.NONE) outcome = Outcome.CANCELLED;
-        if (playback != null) playback.stop();
-        if (runEnded) { finishRun(); return; }
+        if (stopPlayback && playback != null) playback.stop();
+        if (runEnded) { finishRun(); return false; }
         state = State.CANCELLING;
         deadline = clock.millis() + 5000;
         send(MessageIds.VoiceAssistantRequest, EsphomeApi.VoiceAssistantRequest.newBuilder().setStart(false).build());
+        return true;
     }
 
     /** Owner must call at least once per second, including when the peer is silent. */

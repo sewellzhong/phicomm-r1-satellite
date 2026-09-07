@@ -74,11 +74,25 @@ public final class NativeVoiceSessionTest {
     @Test public void cancellationWaitsForOldRunEndBeforeRestart() throws Exception {
         start(); session.cancel();
         event(EsphomeApi.VoiceAssistantEvent.VOICE_ASSISTANT_ERROR);
+        assertEquals(NativeVoiceSession.Outcome.CANCELLED, session.outcome());
         try { session.startCommand(); fail(); } catch (IllegalStateException expected) { }
         session.handle(MessageIds.VoiceAssistantResponse,new byte[0]); blockedFrame();
         event(EsphomeApi.VoiceAssistantEvent.VOICE_ASSISTANT_RUN_END);
         session.startCommand();
         assertEquals(NativeVoiceSession.State.STARTING,session.state());
+    }
+    @Test public void cancellationFromStartingSendsOneStopAndIsIdempotent() throws Exception {
+        subscribe(true); session.startCommand();
+        assertTrue(session.cancel()); assertFalse(session.cancel());
+        assertEquals(2, sent.size());
+        assertFalse(((EsphomeApi.VoiceAssistantRequest)sent.get(1)).getStart());
+        assertEquals(NativeVoiceSession.Outcome.CANCELLED, session.outcome());
+    }
+    @Test public void cancellationFromProcessingStopsTheAcceptedRun() throws Exception {
+        start(); session.sendPcmFrame(new byte[640]); session.finishInput();
+        assertTrue(session.cancel());
+        assertEquals(NativeVoiceSession.State.CANCELLING, session.state());
+        assertFalse(((EsphomeApi.VoiceAssistantRequest)sent.get(sent.size()-1)).getStart());
     }
     @Test public void missingStartResponseCancelsThenCloses() throws Exception {
         subscribe(true); session.startCommand(); now = 10000; session.tick();

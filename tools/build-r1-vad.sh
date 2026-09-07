@@ -12,7 +12,7 @@ fi
 [[ "$(git -C "$SOURCE_DIR" rev-parse HEAD)" == "$SOURCE_COMMIT" ]]
 BUILD_DIR="$ROOT_DIR/local-deps/build/r1-vad"
 OUTPUT_DIR="$ROOT_DIR/local-deps/r1-vad/jniLibs/armeabi-v7a"
-cmake -S "$ROOT_DIR/android/native/vad-jni" -B "$BUILD_DIR" \
+cmake --fresh -S "$ROOT_DIR/android/native/vad-jni" -B "$BUILD_DIR" \
   -DCMAKE_TOOLCHAIN_FILE="$NDK_DIR/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-21 \
   -DCMAKE_BUILD_TYPE=Release -DFVAD_DIR="$SOURCE_DIR"

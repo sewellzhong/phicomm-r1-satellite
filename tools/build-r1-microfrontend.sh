@@ -24,7 +24,7 @@ actual_commit="$(git -C "$SOURCE_DIR" rev-parse HEAD)"
   exit 1
 }
 
-cmake -S "${ROOT_DIR}/android/native/microfrontend-jni" -B "$BUILD_DIR" \
+cmake --fresh -S "${ROOT_DIR}/android/native/microfrontend-jni" -B "$BUILD_DIR" \
   -DCMAKE_TOOLCHAIN_FILE="$NDK_DIR/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-21 \
   -DCMAKE_BUILD_TYPE=Release -DPYMICRO_FEATURES_DIR="$SOURCE_DIR"

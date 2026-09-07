@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
 
 public class NativePcmPlaybackTest {
@@ -36,7 +37,8 @@ public class NativePcmPlaybackTest {
     }
     @Test public void waitsForMicrophoneAndHardwareDrainAndPreservesPartialFrames() throws Exception {
         Gate gate=new Gate(); Sink sink=new Sink();
-        NativePcmPlayback player=new NativePcmPlayback(()->sink,gate);
+        java.util.List<String> events=java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        NativePcmPlayback player=new NativePcmPlayback(()->sink,gate,events::add);
         try {
             player.start(); byte[] expected=new byte[1500];
             for(int i=0;i<expected.length;i++)expected[i]=(byte)(i%127);
@@ -49,6 +51,9 @@ public class NativePcmPlaybackTest {
             assertFalse(player.complete()); assertFalse(gate.drainNotified);
             sink.drained=true; completed(player);
             assertArrayEquals(expected,sink.data.toByteArray()); assertTrue(sink.closed); assertTrue(gate.released); assertTrue(gate.drainNotified);
+            assertTrue(events.stream().anyMatch(value -> value.contains("playback_first_write")));
+            assertTrue(events.stream().anyMatch(value -> value.contains("playback_drained")));
+            assertTrue(events.stream().anyMatch(value -> value.contains("buffer_high_water_bytes=1500")));
         } finally { player.stop(); }
     }
     @Test public void overflowAndOddSamplesAreRejectedWithoutUnboundedAllocation() throws Exception {
@@ -77,16 +82,18 @@ public class NativePcmPlaybackTest {
     @Test public void blockedNativeStopDoesNotBlockProtocolOwnerOrPretendTerminated() throws Exception {
         Gate gate = new Gate(); gate.ready = true;
         CountDownLatch started = new CountDownLatch(1), stopping = new CountDownLatch(1), release = new CountDownLatch(1);
+        AtomicInteger stopCalls = new AtomicInteger(), closeCalls = new AtomicInteger();
         NativePcmPlayback player = new NativePcmPlayback(() -> new NativePcmPlayback.Sink() {
             public void start() { started.countDown(); }
             public int write(byte[] b, int o, int n) { return n; }
             public long playedFrames() { return 0; }
             public void stop() {
+                stopCalls.incrementAndGet();
                 stopping.countDown();
                 boolean done = false;
                 while (!done) try { release.await(); done = true; } catch (InterruptedException ignored) { }
             }
-            public void close() { }
+            public void close() { closeCalls.incrementAndGet(); }
         }, gate);
         java.util.concurrent.ExecutorService caller = java.util.concurrent.Executors.newSingleThreadExecutor();
         try {
@@ -100,6 +107,7 @@ public class NativePcmPlaybackTest {
         long until = System.nanoTime() + 2_000_000_000L;
         while (!player.terminated() && System.nanoTime() < until) Thread.sleep(5);
         assertTrue(player.terminated());
+        assertEquals(1, stopCalls.get()); assertEquals(1, closeCalls.get());
     }
     @Test public void emptyStreamFailsRatherThanAcknowledgingPlayback() throws Exception {
         Gate gate=new Gate();gate.ready=true;

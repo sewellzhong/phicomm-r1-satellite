@@ -239,9 +239,11 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
             @Override public boolean microphoneReleased() { return true; }
             @Override public void drained() { playbackInput.drained(); }
             @Override public void release() { playbackRequested = false; }
-        });
-        coordinator = new NativeAudioCoordinator(playback, () -> System.nanoTime() / 1_000_000L);
+        }, this::diagnosticEvent);
+        coordinator = new NativeAudioCoordinator(playback, () -> System.nanoTime() / 1_000_000L,
+                this::diagnosticEvent);
     }
+    boolean cancelAudio(NativeAudioCoordinator.CancelReason reason) { return coordinator.requestCancel(reason); }
     public String status() { return status; }
     public boolean audioOpened() { return everOpened; }
     public boolean terminated() { return (capture == null || !capture.isAlive()) && (promptPlayer == null || !promptPlayer.isAlive()) && playback.terminated() && (recorderStopper == null || !recorderStopper.isAlive()); }

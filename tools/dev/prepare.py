@@ -19,6 +19,20 @@ AARS = {
     'tensorflow-lite-api': '76f22dc18991211f7ad727c6862c832a9876057476fa458080a1a2280b4177d7',
     'tensorflow-lite': 'fc945337cff72a261e15013170968a8f321ef30ea7ec50e9043c683e4a719e00',
 }
+JARS = {
+    'protobuf-javalite-3.25.5.jar': (
+        'https://repo.maven.apache.org/maven2/com/google/protobuf/protobuf-javalite/3.25.5/protobuf-javalite-3.25.5.jar',
+        '79a3ff51ac2a8b1be7fffa228483d64974f17f3effffd966b054d87179e45634'),
+    'junit-4.13.2.jar': (
+        'https://repo.maven.apache.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar',
+        '8e495b634469d64fb8acfa3495a065cbacc8a0fff55ce1e31007be4c16dc57d3'),
+    'hamcrest-core-1.3.jar': (
+        'https://repo.maven.apache.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar',
+        '66fdef91e9739348df7a096aa384a5685f4e875584cce89386a7a47251c4d8e9'),
+    'json-20240303.jar': (
+        'https://repo.maven.apache.org/maven2/org/json/json/20240303/json-20240303.jar',
+        '3cf6cd6892e32e2b4c1c39e0f52f5248a2f5b37646fdfbb79a66b46b618414ed'),
+}
 
 def run(*args):
     subprocess.run(args, cwd=ROOT, check=True)
@@ -60,6 +74,13 @@ def main():
             if hashlib.sha256(data).hexdigest() != expected:
                 raise SystemExit(f'Checksum mismatch: {name}')
             dest.write_bytes(data)
+        if hashlib.sha256(dest.read_bytes()).hexdigest() != expected:
+            raise SystemExit(f'Checksum mismatch: {name}')
+    for name, (url, expected) in JARS.items():
+        dest = deps / name
+        if not dest.exists():
+            with urllib.request.urlopen(url, timeout=60) as response:
+                dest.write_bytes(response.read())
         if hashlib.sha256(dest.read_bytes()).hexdigest() != expected:
             raise SystemExit(f'Checksum mismatch: {name}')
     run('python3', 'tools/esphome/prepare-deps.py')

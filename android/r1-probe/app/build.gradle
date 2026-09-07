@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("63")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.63-native-cleanup")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("64")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.64-audio-cancel-foundation")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 
@@ -63,9 +63,10 @@ dependencies {
     // Selected Alexa runtime; legacy candidate engines have been removed.
     implementation files("../../../local-deps/tensorflow-lite-api-2.10.0.aar")
     implementation files("../../../local-deps/tensorflow-lite-2.10.0.aar")
-    implementation "com.google.protobuf:protobuf-javalite:3.25.5"
-    testImplementation "org.json:json:20240303"
-    testImplementation "junit:junit:4.13.2"
+    implementation files("../../../local-deps/protobuf-javalite-3.25.5.jar")
+    testImplementation files("../../../local-deps/json-20240303.jar")
+    testImplementation files("../../../local-deps/junit-4.13.2.jar")
+    testImplementation files("../../../local-deps/hamcrest-core-1.3.jar")
 }
 
 
