@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("69")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.69-provisioning-page-ui")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("70")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.70-provisioning-connect-retry")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

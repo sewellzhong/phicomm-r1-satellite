@@ -3,7 +3,9 @@ package dev.sewellzhong.r1probe;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.net.wifi.WifiConfiguration;
+import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.net.wifi.SupplicantState;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Parcelable;
@@ -58,21 +60,41 @@ final class R1MessageDispatchBridge {
         validate(ssid, secure, password);
         WifiConfiguration configuration = configuration(ssid, secure, password);
         lastResult = "applying";
-        send(TURN_OFF);
-        web.close();
-        SystemClock.sleep(1000L);
+        try {
+            send(TURN_OFF);
+            web.close();
+            // NetControl restores the previous station after stopping its AP. Let that
+            // firmware operation settle before selecting the submitted network.
+            SystemClock.sleep(2500L);
+            connectWifi(configuration);
+            lastResult = "connected";
+        } catch (Exception error) {
+            lastResult = "failed";
+            throw error;
+        }
+    }
+
+    private void connectWifi(WifiConfiguration configuration) {
         if (!wifi.isWifiEnabled() && !wifi.setWifiEnabled(true)) throw new IllegalStateException("wifi_enable_failed");
-        SystemClock.sleep(500L);
+        for (int wait = 0; wait < 20 && !wifi.isWifiEnabled(); wait++) SystemClock.sleep(500L);
+        if (!wifi.isWifiEnabled()) throw new IllegalStateException("wifi_enable_timeout");
         List<WifiConfiguration> existing = wifi.getConfiguredNetworks();
         if (existing != null) for (WifiConfiguration item : existing)
             if (configuration.SSID.equals(item.SSID)) { configuration.networkId = item.networkId; break; }
         int network = configuration.networkId >= 0 ? wifi.updateNetwork(configuration) : wifi.addNetwork(configuration);
-        if (network < 0 || !wifi.enableNetwork(network, true)
-                || !wifi.saveConfiguration() || !wifi.reconnect()) {
-            lastResult = "failed";
-            throw new IllegalStateException("wifi_connect_rejected");
+        if (network < 0 || !wifi.saveConfiguration()) throw new IllegalStateException("wifi_configuration_rejected");
+        for (int attempt = 0; attempt < 3; attempt++) {
+            wifi.disconnect();
+            SystemClock.sleep(500L);
+            if (!wifi.enableNetwork(network, true) || !wifi.reconnect()) continue;
+            for (int wait = 0; wait < 24; wait++) {
+                WifiInfo info = wifi.getConnectionInfo();
+                if (info != null && info.getNetworkId() == network
+                        && info.getSupplicantState() == SupplicantState.COMPLETED) return;
+                SystemClock.sleep(500L);
+            }
         }
-        lastResult = "connection_requested";
+        throw new IllegalStateException("wifi_connect_timeout");
     }
 
     static void validate(String ssid, String secure, String password) {
