@@ -88,6 +88,36 @@ final class NativeSettings {
     void provisioning(boolean pending) {
         commit(prefs.edit().putBoolean("original_provisioning_pending", pending));
     }
+    String provisioningStage() { return prefs.getString("original_provisioning_stage", "idle"); }
+    int provisioningNetworkId() { return prefs.getInt("original_provisioning_network_id", -1); }
+    String provisioningResult() { return prefs.getString("original_provisioning_result", "none"); }
+    void provisioningWindow() {
+        commit(prefs.edit().putBoolean("original_provisioning_pending", true)
+                .putString("original_provisioning_stage", "window")
+                .remove("original_provisioning_network_id")
+                .putString("original_provisioning_result", "waiting_for_phone"));
+    }
+    void provisioningApplying(int networkId) {
+        commit(prefs.edit().putBoolean("original_provisioning_pending", true)
+                .putString("original_provisioning_stage", "applying")
+                .putInt("original_provisioning_network_id", networkId)
+                .putString("original_provisioning_result", "applying"));
+    }
+    void provisioningRecovering() {
+        commit(prefs.edit().putBoolean("original_provisioning_pending", true)
+                .putString("original_provisioning_stage", "recovering")
+                .remove("original_provisioning_network_id")
+                .putString("original_provisioning_result", "recovering"));
+    }
+    void provisioningFinished(String result) {
+        commit(prefs.edit().putBoolean("original_provisioning_pending", false)
+                .putString("original_provisioning_stage", "idle")
+                .remove("original_provisioning_network_id")
+                .putString("original_provisioning_result", result));
+    }
+    void provisioningResult(String result) {
+        commit(prefs.edit().putString("original_provisioning_result", result));
+    }
     void rotate() {
         if (!configured() || enabled()) throw new IllegalStateException("stop_before_rotation");
         commit(prefs.edit().putString("psk", freshKey()));

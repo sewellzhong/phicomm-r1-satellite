@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("77")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.77-wifi-recovery-retry")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("78")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.78-provisioning-resume")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

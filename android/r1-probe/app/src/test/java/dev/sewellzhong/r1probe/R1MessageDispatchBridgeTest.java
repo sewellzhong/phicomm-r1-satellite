@@ -35,21 +35,32 @@ public class R1MessageDispatchBridgeTest {
         assertEquals("UNSUPPORTED", R1MessageDispatchBridge.security("[WPA2-EAP-CCMP][ESS]"));
     }
 
+    @Test public void resumesOnlyPersistedApplyingTarget() {
+        assertTrue(R1MessageDispatchBridge.shouldResumeTarget("applying", 0));
+        assertTrue(R1MessageDispatchBridge.shouldResumeTarget("applying", 12));
+        assertFalse(R1MessageDispatchBridge.shouldResumeTarget("window", 12));
+        assertFalse(R1MessageDispatchBridge.shouldResumeTarget("recovering", 12));
+        assertFalse(R1MessageDispatchBridge.shouldResumeTarget("applying", -1));
+    }
+
     @Test public void extractsOnlyTheRequestedCookie() {
         String headers = "GET / HTTP/1.1\r\nCookie: theme=light; R1SESSION=abc_123; x=y\r\n\r\n";
         assertEquals("abc_123", ProvisioningWebServer.cookie(headers, "R1SESSION"));
         assertNull(ProvisioningWebServer.cookie(headers, "missing"));
     }
 
-    @Test public void oneBrowserOwnsEachProvisioningWindowAndSubmitsOnce() {
-        ProvisioningWebServer.Owner owner = new ProvisioningWebServer.Owner();
-        String token = owner.claim(null);
-        assertTrue(owner.authorized(token));
-        assertEquals(token, owner.claim(token));
-        assertNull(owner.claim("another-phone"));
-        assertTrue(owner.submit());
-        assertFalse(owner.submit());
-        owner.reset();
-        assertFalse(owner.authorized(token));
+    @Test public void browsersHaveIndependentSessionsAndDeviceAcceptsOneSubmission() {
+        ProvisioningWebServer.Sessions sessions = new ProvisioningWebServer.Sessions();
+        String first = sessions.claim(null);
+        String second = sessions.claim("another-phone");
+        assertTrue(sessions.authorized(first));
+        assertTrue(sessions.authorized(second));
+        assertFalse(first.equals(second));
+        assertEquals(first, sessions.claim(first));
+        assertTrue(sessions.submit(second));
+        assertFalse(sessions.submit(first));
+        sessions.reset();
+        assertFalse(sessions.authorized(first));
+        assertFalse(sessions.authorized(second));
     }
 }

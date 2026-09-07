@@ -347,6 +347,8 @@ public final class NativeSatelliteService extends Service {
                 .put("original_provisioning_page", "http://192.168.43.1:8080/")
                 .put("original_provisioning_result", originalProvisioning == null
                         ? "unavailable" : originalProvisioning.lastResult())
+                .put("original_provisioning_stage", originalProvisioning == null
+                        ? "unavailable" : originalProvisioning.stage())
                 .put("original_provisioning_pending", originalProvisioning != null
                         && originalProvisioning.pending());
     }
@@ -357,7 +359,7 @@ public final class NativeSatelliteService extends Service {
         info.setAttribute("version", "2026.8.0"); info.setAttribute("mac", settings.mac().replace(":", "").toLowerCase(java.util.Locale.ROOT));
         info.setAttribute("platform", "R1"); info.setAttribute("network", "wifi");
         info.setAttribute("api_encryption", "Noise_NNpsk0_25519_ChaChaPoly_SHA256");
-        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "0.67-original-provisioning-bridge");
+        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "0.78-provisioning-resume");
         registration = new NsdManager.RegistrationListener() {
             @Override public void onServiceRegistered(NsdServiceInfo serviceInfo) { }
             @Override public void onRegistrationFailed(NsdServiceInfo serviceInfo, int code) { error = "discovery_registration_failed"; }

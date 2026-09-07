@@ -36,7 +36,7 @@ final class R1MessageDispatchBridge {
     private final ProvisioningWebServer web;
     private final Runnable expireWindow;
     private final Runnable stopOriginal;
-    private volatile String lastResult = "none";
+    private volatile String lastResult;
     private volatile long openedAtMs;
     private volatile byte[] scanCache = "[]".getBytes(StandardCharsets.UTF_8);
     private final AtomicBoolean recoveryRunning = new AtomicBoolean();
@@ -49,13 +49,18 @@ final class R1MessageDispatchBridge {
                 "sendMessage", int.class, int.class, int.class, Parcelable.class);
         wifi = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         settings = new NativeSettings(context);
+        lastResult = settings.provisioningResult();
         web = new ProvisioningWebServer(context, this::scanWifi, this::configureWifi);
         expireWindow = this::recoverWifi;
         stopOriginal = () -> {
             try { send(TURN_OFF); } catch (Exception ignored) { }
             beginWifiRecovery("closed");
         };
-        if (settings.provisioningPending()) recoverWifi();
+        if (settings.provisioningPending()) {
+            int networkId = settings.provisioningNetworkId();
+            if (shouldResumeTarget(settings.provisioningStage(), networkId)) resumeWifiTarget(networkId);
+            else recoverWifi();
+        }
     }
 
     void openOriginalProvisioning() throws Exception {
@@ -67,10 +72,10 @@ final class R1MessageDispatchBridge {
         // firmware 3448 clears scan results while SoftAP is active.
         scanCache = scanWifi();
         web.start();
-        settings.provisioning(true);
+        settings.provisioningWindow();
         try { send(TURN_ON); }
         catch (Exception error) { recoverWifi(); throw error; }
-        lastResult = "waiting_for_phone";
+        result("waiting_for_phone");
         openedAtMs = SystemClock.elapsedRealtime();
         main.postDelayed(expireWindow, 300000L);
     }
@@ -99,7 +104,7 @@ final class R1MessageDispatchBridge {
     }
 
     private void beginWifiRecovery(String successResult) {
-        settings.provisioning(true);
+        settings.provisioningRecovering();
         lastResult = "recovering";
         if (!recoveryRunning.compareAndSet(false, true)) return;
         Thread worker = new Thread(() -> {
@@ -108,13 +113,13 @@ final class R1MessageDispatchBridge {
                 for (int attempt = 0; attempt < 40; attempt++) {
                     if (!wifi.isWifiEnabled()) wifi.setWifiEnabled(true);
                     if (wifi.isWifiEnabled()) {
-                        settings.provisioning(false);
+                        settings.provisioningFinished(successResult);
                         lastResult = successResult;
                         return;
                     }
                     SystemClock.sleep(500L);
                 }
-                lastResult = "recovery_failed";
+                result("recovery_failed");
             } finally { recoveryRunning.set(false); }
         }, "r1-wifi-recovery");
         worker.setDaemon(true);
@@ -132,6 +137,7 @@ final class R1MessageDispatchBridge {
 
     String lastResult() { return lastResult; }
     boolean pending() { return settings.provisioningPending(); }
+    String stage() { return settings.provisioningStage(); }
 
     private byte[] scanWifi() throws Exception {
         if (wifi.startScan()) SystemClock.sleep(2200L);
@@ -169,36 +175,48 @@ final class R1MessageDispatchBridge {
         String ssid = request.getString("ssid"), secure = request.optString("secure", "INSECURE");
         String password = request.optString("password", "");
         validate(ssid, secure, password);
+        if (!recoveryRunning.compareAndSet(false, true))
+            throw new IllegalStateException("wifi_transition_in_progress");
         WifiConfiguration configuration = configuration(ssid, secure, password);
-        lastResult = "applying";
+        result("applying");
         try {
+            int network = saveWifiConfiguration(configuration);
+            // WifiManager owns the credential from here. This app persists only the
+            // non-secret network id so a recreated service can resume the handoff.
+            settings.provisioningApplying(network);
             send(TURN_OFF);
             web.close();
             scanCache = "[]".getBytes(StandardCharsets.UTF_8);
             // NetControl restores the previous station after stopping its AP. Let that
             // firmware operation settle before selecting the submitted network.
             SystemClock.sleep(2500L);
-            connectWifi(configuration);
+            connectWifi(network);
+            settings.provisioningFinished("connected");
             lastResult = "connected";
-            settings.provisioning(false);
+            recoveryRunning.set(false);
         } catch (Exception error) {
-            lastResult = "failed";
+            result("failed");
+            recoveryRunning.set(false);
             beginWifiRecovery("recovered_after_failure");
             throw error;
         }
     }
 
-    private void connectWifi(WifiConfiguration configuration) {
-        for (int wait = 0; wait < 20 && !wifi.isWifiEnabled(); wait++) {
-            wifi.setWifiEnabled(true);
-            SystemClock.sleep(500L);
-        }
-        if (!wifi.isWifiEnabled()) throw new IllegalStateException("wifi_enable_timeout");
+    private int saveWifiConfiguration(WifiConfiguration configuration) {
         List<WifiConfiguration> existing = wifi.getConfiguredNetworks();
         if (existing != null) for (WifiConfiguration item : existing)
             if (configuration.SSID.equals(item.SSID)) { configuration.networkId = item.networkId; break; }
         int network = configuration.networkId >= 0 ? wifi.updateNetwork(configuration) : wifi.addNetwork(configuration);
         if (network < 0 || !wifi.saveConfiguration()) throw new IllegalStateException("wifi_configuration_rejected");
+        return network;
+    }
+
+    private void connectWifi(int network) {
+        for (int wait = 0; wait < 20 && !wifi.isWifiEnabled(); wait++) {
+            wifi.setWifiEnabled(true);
+            SystemClock.sleep(500L);
+        }
+        if (!wifi.isWifiEnabled()) throw new IllegalStateException("wifi_enable_timeout");
         for (int attempt = 0; attempt < 3; attempt++) {
             wifi.disconnect();
             SystemClock.sleep(500L);
@@ -211,6 +229,38 @@ final class R1MessageDispatchBridge {
             }
         }
         throw new IllegalStateException("wifi_connect_timeout");
+    }
+
+    private void resumeWifiTarget(int network) {
+        if (!recoveryRunning.compareAndSet(false, true)) return;
+        result("resuming_target");
+        Thread worker = new Thread(() -> {
+            boolean failed = false;
+            try {
+                try { send(TURN_OFF); } catch (Exception ignored) { }
+                disableSoftAp();
+                connectWifi(network);
+                settings.provisioningFinished("connected");
+                lastResult = "connected";
+            } catch (Exception error) {
+                result("failed");
+                failed = true;
+            } finally {
+                recoveryRunning.set(false);
+            }
+            if (failed) beginWifiRecovery("recovered_after_failure");
+        }, "r1-wifi-target-resume");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    static boolean shouldResumeTarget(String stage, int networkId) {
+        return "applying".equals(stage) && networkId >= 0;
+    }
+
+    private void result(String value) {
+        lastResult = value;
+        settings.provisioningResult(value);
     }
 
     static void validate(String ssid, String secure, String password) {

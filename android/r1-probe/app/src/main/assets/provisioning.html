@@ -34,14 +34,14 @@
 <body>
 <main>
   <header class="hello"><div class="mark">R1</div><div><h1>让 R1 连上家里的网络</h1><p>很快就好，大约一分钟</p></div></header>
-  <section class="card">
+  <section class="card"><form id="wifi-form" autocomplete="off" onsubmit="return false">
     <div class="steps" aria-label="步骤 2，共 3 步"><i></i><i></i><i></i></div>
     <label for="net">选择 Wi-Fi</label>
     <div class="field"><select id="net" disabled><option>正在寻找附近的网络…</option></select></div>
     <label for="pwd">Wi-Fi 密码</label>
-    <div class="field"><input id="pwd" type="password" autocomplete="current-password" placeholder="请输入密码"><button class="small" id="peek" type="button">显示</button></div>
+    <div class="field"><input id="pwd" type="password" autocomplete="new-password" autocapitalize="none" spellcheck="false" placeholder="请输入密码"><button class="small" id="peek" type="button">显示</button></div>
     <div class="actions"><button id="scan" type="button">刷新列表</button><button id="go" type="button" disabled>连接 R1</button></div>
-    <p id="status" role="status">正在扫描，请稍等一下…</p>
+    <p id="status" role="status">正在扫描，请稍等一下…</p></form>
   </section>
   <p class="privacy">密码只写入这台 R1 的系统 Wi-Fi 配置，本应用不会保存或记录。</p>
 </main>
@@ -54,6 +54,8 @@
   scan.onclick=load;
   go.onclick=()=>{const row=rows[+net.value];if(!row)return;go.disabled=true;scan.disabled=true;status.textContent='正在把网络信息交给 R1…';fetch('/api/configwifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:row[0],secure:row[3],password:pwd.value})}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(()=>status.textContent='信息已收到，R1 正在连接。请把手机切回家里的 Wi-Fi，稍后查看 R1 是否上线。').catch(()=>{go.disabled=false;scan.disabled=false;status.textContent='信息没有提交成功，请确认密码后再试一次。';});};
   load();
+  window.addEventListener('pageshow',()=>{pwd.value='';net.selectedIndex=0;});
+  window.addEventListener('pagehide',()=>{pwd.value='';});
 </script>
 </body>
 </html>
