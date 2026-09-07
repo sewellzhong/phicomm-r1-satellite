@@ -58,3 +58,5 @@ v74 代码提交为 `709fe2b7ea338db34af862381640668c8a8ba1a9`；完整主机检
 v75 提交 `32fbca9c7cb081bb51226cbcc9e19bc6f48dc281` 的设备 APK SHA-256 为 `6c94e114d1e94f9bde078aa2911c8f967c6cffdf6c5ae7789e42fb5f2af80688`。经遗留热点的 ADB 覆盖安装并调用统一恢复入口后，R1 成功关闭 SoftAP、回到原地址和 `listening`；系统消息中心按键接收器注册为 `running=true`。随后自动模拟两个浏览器：第一个取得页面，第二个收到 409，占用保护通过；页面扫描返回 0，证实固件切换 SoftAP 时清空 Android 扫描结果。v76 改为开窗前采集本轮快照，只在内存保留去重且不含 BSSID 的 SSID/强度/安全类型，任何退出路径立即清除。
 
 同一自动检查关窗后，SoftAP 确认消失，但 R1 原地址和 mDNS 均不可达；v76 因设备离线未部署。证据说明 SoftAP 关闭与 Wi-Fi 客户端恢复是两个异步阶段，即时调用 `setWifiEnabled(true)` 仍可能被拒绝。v77 改为后台每 500 ms 重试启用客户端、最长 20 秒，只有 `isWifiEnabled()` 真实返回成功才清除 pending；失败时保留 pending，供下次服务启动继续恢复。当前设备需真人整机重启，不能把代码支持记为实机恢复通过。
+
+v77 代码提交为 `fbbbce4001d88bd29c4c7eea7f72c949c83ba493`；完整主机检查通过 Android 153 项、lint、工具 32 项、HA 44 项及配置加载检查。hostcheck APK SHA-256 为 `ce9190b887a676fbca9bd852146a7addc95b4971788ee40e7aa8d33a27e645fc`，设备候选 APK SHA-256 为 `1dc1902dfebd9593973d1305753887866298255390c51e63f61a7138d8d7578c`。候选包保存在忽略的本地证据目录，尚未部署。
