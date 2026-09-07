@@ -18,6 +18,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -38,6 +39,7 @@ final class R1MessageDispatchBridge {
     private volatile String lastResult = "none";
     private volatile long openedAtMs;
     private volatile byte[] scanCache = "[]".getBytes(StandardCharsets.UTF_8);
+    private final AtomicBoolean recoveryRunning = new AtomicBoolean();
 
     @SuppressLint("WrongConstant")
     R1MessageDispatchBridge(Context context) throws Exception {
@@ -50,12 +52,14 @@ final class R1MessageDispatchBridge {
         web = new ProvisioningWebServer(context, this::scanWifi, this::configureWifi);
         expireWindow = this::recoverWifi;
         stopOriginal = () -> {
-            try { finishOriginal(); } catch (Exception ignored) { }
+            try { send(TURN_OFF); } catch (Exception ignored) { }
+            beginWifiRecovery("closed");
         };
         if (settings.provisioningPending()) recoverWifi();
     }
 
     void openOriginalProvisioning() throws Exception {
+        if (recoveryRunning.get()) throw new IllegalStateException("wifi_recovery_in_progress");
         main.removeCallbacks(expireWindow);
         main.removeCallbacks(stopOriginal);
         web.close();
@@ -80,7 +84,9 @@ final class R1MessageDispatchBridge {
         // can be overtaken by the late AP enable and leave a timerless hotspot.
         long delay = Math.max(0L, 5000L - (SystemClock.elapsedRealtime() - openedAtMs));
         if (delay > 0L) main.postDelayed(stopOriginal, delay);
-        else finishOriginal();
+        else {
+            try { send(TURN_OFF); } finally { beginWifiRecovery("closed"); }
+        }
     }
 
     void recoverWifi() {
@@ -89,34 +95,43 @@ final class R1MessageDispatchBridge {
         web.close();
         scanCache = "[]".getBytes(StandardCharsets.UTF_8);
         try { send(TURN_OFF); } catch (Exception ignored) { }
+        beginWifiRecovery("recovered");
+    }
+
+    private void beginWifiRecovery(String successResult) {
+        settings.provisioning(true);
+        lastResult = "recovering";
+        if (!recoveryRunning.compareAndSet(false, true)) return;
+        Thread worker = new Thread(() -> {
+            try {
+                disableSoftAp();
+                for (int attempt = 0; attempt < 40; attempt++) {
+                    if (!wifi.isWifiEnabled()) wifi.setWifiEnabled(true);
+                    if (wifi.isWifiEnabled()) {
+                        settings.provisioning(false);
+                        lastResult = successResult;
+                        return;
+                    }
+                    SystemClock.sleep(500L);
+                }
+                lastResult = "recovery_failed";
+            } finally { recoveryRunning.set(false); }
+        }, "r1-wifi-recovery");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void disableSoftAp() {
         try {
             Method method = WifiManager.class.getDeclaredMethod(
                     "setWifiApEnabled", WifiConfiguration.class, boolean.class);
             method.setAccessible(true);
             method.invoke(wifi, null, false);
         } catch (Exception ignored) { }
-        wifi.setWifiEnabled(true);
-        settings.provisioning(false);
-        lastResult = "recovered";
-    }
-
-    private void finishOriginal() throws Exception {
-        try { send(TURN_OFF); }
-        finally {
-            try {
-                Method method = WifiManager.class.getDeclaredMethod(
-                        "setWifiApEnabled", WifiConfiguration.class, boolean.class);
-                method.setAccessible(true); method.invoke(wifi, null, false);
-            } finally {
-                wifi.setWifiEnabled(true);
-                settings.provisioning(false);
-                lastResult = "closed";
-                scanCache = "[]".getBytes(StandardCharsets.UTF_8);
-            }
-        }
     }
 
     String lastResult() { return lastResult; }
+    boolean pending() { return settings.provisioningPending(); }
 
     private byte[] scanWifi() throws Exception {
         if (wifi.startScan()) SystemClock.sleep(2200L);
@@ -168,14 +183,16 @@ final class R1MessageDispatchBridge {
             settings.provisioning(false);
         } catch (Exception error) {
             lastResult = "failed";
-            settings.provisioning(false);
+            beginWifiRecovery("recovered_after_failure");
             throw error;
         }
     }
 
     private void connectWifi(WifiConfiguration configuration) {
-        if (!wifi.isWifiEnabled() && !wifi.setWifiEnabled(true)) throw new IllegalStateException("wifi_enable_failed");
-        for (int wait = 0; wait < 20 && !wifi.isWifiEnabled(); wait++) SystemClock.sleep(500L);
+        for (int wait = 0; wait < 20 && !wifi.isWifiEnabled(); wait++) {
+            wifi.setWifiEnabled(true);
+            SystemClock.sleep(500L);
+        }
         if (!wifi.isWifiEnabled()) throw new IllegalStateException("wifi_enable_timeout");
         List<WifiConfiguration> existing = wifi.getConfiguredNetworks();
         if (existing != null) for (WifiConfiguration item : existing)

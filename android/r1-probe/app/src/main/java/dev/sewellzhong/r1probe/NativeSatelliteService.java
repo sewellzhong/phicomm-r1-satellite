@@ -346,7 +346,9 @@ public final class NativeSatelliteService extends Service {
                 .put("original_provisioning_bridge", originalProvisioning != null)
                 .put("original_provisioning_page", "http://192.168.43.1:8080/")
                 .put("original_provisioning_result", originalProvisioning == null
-                        ? "unavailable" : originalProvisioning.lastResult());
+                        ? "unavailable" : originalProvisioning.lastResult())
+                .put("original_provisioning_pending", originalProvisioning != null
+                        && originalProvisioning.pending());
     }
     private synchronized void publish() {
         if (registration != null || destroyed || !settings.enabled()) return;
