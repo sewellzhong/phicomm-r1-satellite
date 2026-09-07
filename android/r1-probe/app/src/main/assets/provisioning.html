@@ -40,7 +40,7 @@
     <div class="field"><select id="net" disabled><option>正在寻找附近的网络…</option></select></div>
     <label for="pwd">Wi-Fi 密码</label>
     <div class="field"><input id="pwd" type="password" autocomplete="current-password" placeholder="请输入密码"><button class="small" id="peek" type="button">显示</button></div>
-    <div class="actions"><button id="scan" type="button">重新扫描</button><button id="go" type="button" disabled>连接 R1</button></div>
+    <div class="actions"><button id="scan" type="button">刷新列表</button><button id="go" type="button" disabled>连接 R1</button></div>
     <p id="status" role="status">正在扫描，请稍等一下…</p>
   </section>
   <p class="privacy">密码只写入这台 R1 的系统 Wi-Fi 配置，本应用不会保存或记录。</p>
@@ -49,7 +49,7 @@
   let rows=[];
   const net=document.querySelector('#net'),pwd=document.querySelector('#pwd'),status=document.querySelector('#status'),go=document.querySelector('#go'),scan=document.querySelector('#scan');
   function normalize(json){const source=Array.isArray(json)?json:(json.data||[]);return source.map(x=>Array.isArray(x)?x:[x.ssid,x.mac||'',x.level,x.secure]).filter(x=>x[0]);}
-  function load(){scan.disabled=true;go.disabled=true;net.disabled=true;net.innerHTML='<option>正在寻找附近的网络…</option>';status.textContent='正在扫描，请稍等一下…';fetch('/api/wifilist',{cache:'no-store'}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(json=>{rows=normalize(json);net.textContent='';rows.forEach((x,i)=>{const option=document.createElement('option');option.value=i;option.textContent=x[0];net.appendChild(option)});if(rows.length){net.disabled=false;go.disabled=false;status.textContent='找到 '+rows.length+' 个网络，请选择你家的 Wi-Fi。';}else{status.textContent='暂时没找到网络，等几秒再试试。';}}).catch(()=>status.textContent='扫描没有成功，请点“重新扫描”。').then(()=>scan.disabled=false);}
+  function load(){scan.disabled=true;go.disabled=true;net.disabled=true;net.innerHTML='<option>正在读取附近的网络…</option>';status.textContent='正在读取开热点前的扫描结果…';fetch('/api/wifilist',{cache:'no-store'}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(json=>{rows=normalize(json);net.textContent='';rows.forEach((x,i)=>{const option=document.createElement('option');option.value=i;option.textContent=x[0];net.appendChild(option)});if(rows.length){net.disabled=false;go.disabled=false;status.textContent='找到 '+rows.length+' 个网络，请选择你家的 Wi-Fi。';}else{status.textContent='没有找到网络。请先保持目标热点开启，再退出并重新进入 R1 配网。';}}).catch(()=>status.textContent='列表读取失败，请点“刷新列表”。').then(()=>scan.disabled=false);}
   document.querySelector('#peek').onclick=function(){const show=pwd.type==='password';pwd.type=show?'text':'password';this.textContent=show?'隐藏':'显示';};
   scan.onclick=load;
   go.onclick=()=>{const row=rows[+net.value];if(!row)return;go.disabled=true;scan.disabled=true;status.textContent='正在把网络信息交给 R1…';fetch('/api/configwifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:row[0],secure:row[3],password:pwd.value})}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(()=>status.textContent='信息已收到，R1 正在连接。请把手机切回家里的 Wi-Fi，稍后查看 R1 是否上线。').catch(()=>{go.disabled=false;scan.disabled=false;status.textContent='信息没有提交成功，请确认密码后再试一次。';});};

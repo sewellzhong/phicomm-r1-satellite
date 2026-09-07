@@ -54,3 +54,5 @@ v71 设备 APK SHA-256 为 `6063a5820b915ec72da0a6d70e49e510d053befcae0db7d73bfe
 v74 代码提交为 `709fe2b7ea338db34af862381640668c8a8ba1a9`；完整主机检查通过 Android 153 项、lint、工具 32 项、HA 44 项及配置加载检查。hostcheck APK SHA-256 为 `774712903724e23a3071d2720f1d9536d532faf7f437780f4e6b57d22d7a50d4`，设备候选 APK SHA-256 为 `7d503d8a5a474007552259c2d566dd719e3a460e88cf8764e722535cb14e6a9f`。候选包尚未部署，不能继承 v71 的设备结果。
 
 开发机随后临时关联 R1 热点进行无人值守恢复检查：AP 可关联，但 8989 服务已经停止，说明快速开关留下的是原厂状态机已退出、SoftAP 仍开启的状态。原厂退出 URL 和固件 `svc wifi enable` 均不能可靠恢复。v75 增加独立 APK 自有的 pending 标记和 `provisioning-recover`：显式调用隐藏 SoftAP 关闭接口、恢复 Wi-Fi 客户端，正常关闭、连接完成、超时和服务重启均收口到同一恢复路径。该恢复尚待用热点 ADB 部署验证。
+
+v75 提交 `32fbca9c7cb081bb51226cbcc9e19bc6f48dc281` 的设备 APK SHA-256 为 `6c94e114d1e94f9bde078aa2911c8f967c6cffdf6c5ae7789e42fb5f2af80688`。经遗留热点的 ADB 覆盖安装并调用统一恢复入口后，R1 成功关闭 SoftAP、回到原地址和 `listening`；系统消息中心按键接收器注册为 `running=true`。随后自动模拟两个浏览器：第一个取得页面，第二个收到 409，占用保护通过；页面扫描返回 0，证实固件切换 SoftAP 时清空 Android 扫描结果。v76 改为开窗前采集本轮快照，只在内存保留去重且不含 BSSID 的 SSID/强度/安全类型，任何退出路径立即清除。

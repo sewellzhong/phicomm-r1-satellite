@@ -37,6 +37,7 @@ final class R1MessageDispatchBridge {
     private final Runnable stopOriginal;
     private volatile String lastResult = "none";
     private volatile long openedAtMs;
+    private volatile byte[] scanCache = "[]".getBytes(StandardCharsets.UTF_8);
 
     @SuppressLint("WrongConstant")
     R1MessageDispatchBridge(Context context) throws Exception {
@@ -58,9 +59,10 @@ final class R1MessageDispatchBridge {
         main.removeCallbacks(expireWindow);
         main.removeCallbacks(stopOriginal);
         web.close();
+        // Capture a per-window snapshot before NetControl changes wlan0 to AP mode;
+        // firmware 3448 clears scan results while SoftAP is active.
+        scanCache = scanWifi();
         web.start();
-        // Capture fresh station-mode results before NetControl changes wlan0 to AP mode.
-        if (wifi.startScan()) SystemClock.sleep(2200L);
         settings.provisioning(true);
         try { send(TURN_ON); }
         catch (Exception error) { recoverWifi(); throw error; }
@@ -73,6 +75,7 @@ final class R1MessageDispatchBridge {
         main.removeCallbacks(expireWindow);
         main.removeCallbacks(stopOriginal);
         web.close();
+        scanCache = "[]".getBytes(StandardCharsets.UTF_8);
         // NetControl starts SoftAP asynchronously. Sending OFF immediately after ON
         // can be overtaken by the late AP enable and leave a timerless hotspot.
         long delay = Math.max(0L, 5000L - (SystemClock.elapsedRealtime() - openedAtMs));
@@ -84,6 +87,7 @@ final class R1MessageDispatchBridge {
         main.removeCallbacks(expireWindow);
         main.removeCallbacks(stopOriginal);
         web.close();
+        scanCache = "[]".getBytes(StandardCharsets.UTF_8);
         try { send(TURN_OFF); } catch (Exception ignored) { }
         try {
             Method method = WifiManager.class.getDeclaredMethod(
@@ -107,6 +111,7 @@ final class R1MessageDispatchBridge {
                 wifi.setWifiEnabled(true);
                 settings.provisioning(false);
                 lastResult = "closed";
+                scanCache = "[]".getBytes(StandardCharsets.UTF_8);
             }
         }
     }
@@ -116,6 +121,7 @@ final class R1MessageDispatchBridge {
     private byte[] scanWifi() throws Exception {
         if (wifi.startScan()) SystemClock.sleep(2200L);
         List<ScanResult> results = wifi.getScanResults();
+        if (results == null || results.isEmpty()) return scanCache.clone();
         Map<String, ScanResult> strongest = new LinkedHashMap<>();
         if (results != null) for (ScanResult item : results) {
             if (item == null || item.SSID == null || item.SSID.length() == 0 || hasControl(item.SSID)) continue;
@@ -131,7 +137,9 @@ final class R1MessageDispatchBridge {
             array.put(new JSONObject().put("ssid", item.SSID)
                     .put("level", WifiManager.calculateSignalLevel(item.level, 4)).put("secure", secure));
         }
-        return array.toString().getBytes(StandardCharsets.UTF_8);
+        byte[] encoded = array.toString().getBytes(StandardCharsets.UTF_8);
+        if (array.length() > 0) scanCache = encoded;
+        return encoded.clone();
     }
 
     static String security(String capabilities) {
@@ -151,6 +159,7 @@ final class R1MessageDispatchBridge {
         try {
             send(TURN_OFF);
             web.close();
+            scanCache = "[]".getBytes(StandardCharsets.UTF_8);
             // NetControl restores the previous station after stopping its AP. Let that
             // firmware operation settle before selecting the submitted network.
             SystemClock.sleep(2500L);
