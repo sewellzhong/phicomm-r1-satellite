@@ -51,6 +51,9 @@ test-results/**/*.r1diag
 *.gz
 /local-secrets/
 /local-evidence/
+/local-recovery/
+*.img
+*.dump
 # Prompt speech has unresolved distribution provenance.
 /android/r1-probe/app/src/main/assets/ack/
 /android/r1-probe/app/src/main/assets/interaction/

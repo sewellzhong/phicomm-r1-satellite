@@ -5,6 +5,7 @@
 ## 当前状态
 
 - 2026-09-08 用户将[原厂四麦与音频调校优先路线](docs/2026-09-08-r1-factory-audio-root-plan.md)提升为最高开发优先级：先为 `r1-sample01` 建立完整 eMMC 备份和受控回刷，再使用 Root、特权代理、受限 SELinux、定制系统及必要刷机实际复用 MicArray、DOA、AEC和DSP处理。标准 AudioRecord和自研处理只作对照及最终降级候选。
+- R0 主机端清单、双副本复读校验和门槛报告工具已实现并使用合成镜像测试；工具不含设备连接或刷写能力。完整 eMMC 备份、低层恢复入口和受控完整回刷仍须在 `r1-sample01` 实机完成，当前保持“待验证”。操作边界见 [R0 恢复手册](docs/2026-09-08-r1-r0-recovery-runbook.md)。
 - 当前开发源码和首台设备均为 v79（安全 Wi-Fi 交接）；现场盘点见[硬件能力探测](docs/2026-09-07-r1-hardware-capability.md)。安卓与 iPhone 的 A2DP 配对、播放、断开和重连播放通过。中央键短按和长按已由系统消息桥实机捕获，长按可开启原厂热点；两台手机可同时连接并独立操作配网页面，输入及跨窗口缓存隔离通过。v78 单手机提交后因热点模式下提前写入 Wi-Fi 配置而回退，未通过完整配网。v79 改为使用 Android Keystore 加密一次性交接、恢复 station 后写入，R1 上合成数据往返自检通过；完整手机配网按用户决定留待之后复测。
 - 保留 Android 5.1.1 / API 22、ARMv7、固件 3448 的原厂音频底层，独立包名 `dev.sewellzhong.r1probe`。原生链路使用固定 ESPHome 2026.8.0 协议及 Noise PSK。
 - 唤醒词仅为英文 `Alexa`，使用现有 microWakeWord v2 模型；STT、对话、TTS 固定中文。停止 Camila 训练、模型选型及 KWS 专项声学测试。
@@ -35,6 +36,7 @@ Linux 环境按 [开发指南](docs/development.md) 准备依赖，运行 `bash 
 
 - [Android 构建与运行说明](android/r1-probe/README.md)
 - `tools/native/`：原生管理、部署、配对和有界诊断。
+- `tools/recovery/`：R0 镜像清单、双副本校验和恢复门槛报告；只处理主机本地文件，不连接或写入设备。
 - `tools/assist/`：固定提示音素材生成；已无旧 WebSocket 启动工具。
 - `tools/kws/`：当前 Alexa 模型准备和既有诊断工具，保留工具不表示恢复专项测试。
 - `integrations/home_assistant/`：R1 原生 HA 集成；`protocol/`：固定版本协议与许可证。

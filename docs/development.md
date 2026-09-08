@@ -18,7 +18,7 @@ bash tools/dev/check.sh
 
 准备流程需要互联网；Gitleaks 8.30.1、TFLite AAR、protobuf 与测试 JAR 均按固定 SHA-256 下载，检查只扫描公开文件，不读取被忽略的私有资料。HA 测试容器禁网，不连接实际设备服务。SDK/依赖下载失败或校验失败会中止。Gradle wrapper 固定 8.9，协议/TFLite/原生源码版本不随环境自动升级。依赖在 `local-deps/` 重建，CMake 每次重新配置当前 SDK/NDK 路径，不复制私有密钥。
 
-`check.sh` 构建包名为 `dev.sewellzhong.r1probe.hostcheck`，提示音是短测试音，不是中文回答。所有原生运行库和 Alexa 权重仍参与编译打包。该包只作主机构建检查，不安装到 R1，也不作为可交付 APK。GitHub Actions 使用相同入口，仅保留测试报告。
+`check.sh` 构建包名为 `dev.sewellzhong.r1probe.hostcheck`，提示音是短测试音，不是中文回答。所有原生运行库和 Alexa 权重仍参与编译打包。该包只作主机构建检查，不安装到 R1，也不作为可交付 APK。GitHub Actions 使用相同入口，仅保留测试报告。统一检查还运行 `tools/recovery/tests/` 的合成镜像安全回归；恢复工具本身没有设备连接和刷写接口。
 
 主机套件包含 148 项 Android、32 项部署/诊断工具和 44 项 HA 测试，以及 HA 配置加载检查。首次在线检查会准备 Gradle/AGP 自身依赖；相同版本已缓存且 `prepare.py` 已成功后，可用 `R1_GRADLE_OFFLINE=1 bash tools/dev/check.sh` 排除远端仓库波动。另两项既有 HA 私有路由源码测试位于 `tools/ha/local_tests/`，本地准备原 `local-deps/ha-live-routing-2026-09-06/` 后显式执行；不计入公开套件，不以模拟替身替换其真实源码结论。
 
