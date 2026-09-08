@@ -111,4 +111,32 @@ public class FactoryAudioClientTest {
         client.negotiate();
         client.submitPlaybackReference(1, 1, new byte[638], "tts");
     }
+
+    @Test public void brokenStopStillClosesClientAndSecondCloseIsSafe() throws Exception {
+        ByteArrayOutputStream replies = new ByteArrayOutputStream();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(1)
+                .setHelloReply(FactoryAudio.HelloReply.newBuilder().setSelectedVersion(1)).build());
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(2)
+                .setHealth(FactoryAudio.Health.newBuilder().setCaptureState(
+                        FactoryAudio.CaptureState.CAPTURE_STATE_STREAMING)).build());
+        FactoryAudioClient client = new FactoryAudioClient(null,
+                new ByteArrayInputStream(replies.toByteArray()), new ByteArrayOutputStream());
+        client.negotiate();
+        client.startCapture();
+        try {
+            client.close();
+        } catch (IOException expected) {
+            // The peer disappeared before acknowledging stop, but local state must still close.
+        }
+        client.close();
+        try {
+            client.health();
+        } catch (IOException expected) {
+            assertEquals("factory_audio_client_closed", expected.getMessage());
+            return;
+        }
+        throw new AssertionError("closed client remained usable");
+    }
 }

@@ -17,6 +17,7 @@ import java.util.ArrayDeque;
 public final class FactoryAudioClient implements Closeable {
     public static final int PROTOCOL_VERSION = 1;
     public static final int FRAME_BYTES = 640;
+    public static final int IO_TIMEOUT_MS = 2000;
     public static final String SOCKET_NAME = "r1_factory_audio";
     private static final int MAX_PENDING_FRAMES = 50;
 
@@ -27,12 +28,14 @@ public final class FactoryAudioClient implements Closeable {
     private long nextRequestId = 1;
     private boolean negotiated;
     private boolean capturing;
+    private boolean closed;
 
     public static FactoryAudioClient connect() throws IOException {
         LocalSocket socket = new LocalSocket();
         try {
             socket.connect(new LocalSocketAddress(
                     SOCKET_NAME, LocalSocketAddress.Namespace.RESERVED));
+            socket.setSoTimeout(IO_TIMEOUT_MS);
             FactoryAudioClient client = new FactoryAudioClient(
                     socket, socket.getInputStream(), socket.getOutputStream());
             client.negotiate();
@@ -50,6 +53,7 @@ public final class FactoryAudioClient implements Closeable {
     }
 
     public synchronized void negotiate() throws IOException {
+        requireOpen();
         require(!negotiated, "factory_audio_already_negotiated");
         long requestId = nextRequestId++;
         send(requestId, FactoryAudio.Envelope.newBuilder().setHello(
@@ -66,6 +70,7 @@ public final class FactoryAudioClient implements Closeable {
     }
 
     public synchronized void startCapture() throws IOException {
+        requireOpen();
         require(negotiated, "factory_audio_not_negotiated");
         require(!capturing, "factory_audio_already_capturing");
         long requestId = nextRequestId++;
@@ -84,6 +89,7 @@ public final class FactoryAudioClient implements Closeable {
     }
 
     public synchronized FactoryAudio.AudioFrame readFrame() throws IOException {
+        requireOpen();
         require(capturing, "factory_audio_not_capturing");
         if (!pendingFrames.isEmpty()) {
             return pendingFrames.removeFirst();
@@ -99,6 +105,7 @@ public final class FactoryAudioClient implements Closeable {
     }
 
     public synchronized FactoryAudio.Health health() throws IOException {
+        requireOpen();
         require(negotiated, "factory_audio_not_negotiated");
         long requestId = nextRequestId++;
         send(requestId, FactoryAudio.Envelope.newBuilder().setGetHealth(
@@ -112,6 +119,7 @@ public final class FactoryAudioClient implements Closeable {
 
     public synchronized void submitPlaybackReference(long sequence, long monotonicTimeNs,
             byte[] pcm, String source) throws IOException {
+        requireOpen();
         require(negotiated, "factory_audio_not_negotiated");
         if (pcm == null || pcm.length != FRAME_BYTES) {
             throw new IOException("factory_audio_reference_format_mismatch");
@@ -129,6 +137,7 @@ public final class FactoryAudioClient implements Closeable {
     }
 
     public synchronized void stopCapture() throws IOException {
+        requireOpen();
         if (!capturing) {
             return;
         }
@@ -147,19 +156,27 @@ public final class FactoryAudioClient implements Closeable {
 
     @Override
     public synchronized void close() throws IOException {
+        if (closed) return;
         IOException first = null;
         try {
             stopCapture();
         } catch (IOException error) {
             first = error;
         }
+        closed = true;
+        capturing = false;
         negotiated = false;
+        pendingFrames.clear();
         if (socket != null) {
             try { socket.close(); } catch (IOException error) {
                 if (first == null) first = error;
             }
         }
         if (first != null) throw first;
+    }
+
+    private void requireOpen() throws IOException {
+        require(!closed, "factory_audio_client_closed");
     }
 
     private void send(long requestId, FactoryAudio.Envelope.Builder body) throws IOException {

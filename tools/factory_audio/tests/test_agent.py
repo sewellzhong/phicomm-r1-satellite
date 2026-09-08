@@ -172,6 +172,25 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(3, result.returncode)
         self.assertIn("factory_backend_unimplemented", result.stderr)
 
+    def test_disconnect_releases_capture_and_next_client_can_start(self):
+        self.negotiate()
+        start = self.pb.Envelope(protocol_version=1, request_id=2)
+        start.start_capture.format.sample_rate_hz = 16000
+        start.start_capture.format.channels = 1
+        start.start_capture.format.sample_width_bytes = 2
+        start.start_capture.format.frame_duration_ms = 20
+        self.send(start)
+        self.assertEqual(self.pb.CAPTURE_STATE_STREAMING, self.receive().health.capture_state)
+        self.client.close()
+
+        self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.client.settimeout(2)
+        self.client.connect(str(self.socket_path))
+        self.negotiate()
+        self.send(start)
+        self.assertEqual(self.pb.CAPTURE_STATE_STREAMING, self.receive().health.capture_state)
+        self.assertEqual(1, self.receive().audio_frame.sequence)
+
     def test_accelerated_twenty_second_and_thirty_minute_budgets_are_contiguous(self):
         self.client.close()
         self.stop_agent()
