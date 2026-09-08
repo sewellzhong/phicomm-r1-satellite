@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("79")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.79-secure-wifi-handoff")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("80")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.80-factory-audio-agent-skeleton")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 
@@ -38,6 +38,7 @@ android {
             jniLibs.srcDir("../../../local-deps/r1-vad/jniLibs")
             jniLibs.srcDir("../../../local-deps/r1-noise/jniLibs")
             java.srcDir(layout.buildDirectory.dir("generated/esphome"))
+            java.srcDir(layout.buildDirectory.dir("generated/factory_audio"))
             if (providers.gradleProperty("includeMicroWakeWordProbe").orElse("true").get().toBoolean()) {
                 assets.srcDir("../../../local-deps/alexa-microwakeword-r1/assets")
             }
@@ -77,6 +78,15 @@ def generateEsphomeApi = tasks.register("generateEsphomeApi", Exec) {
     outputs.dir(layout.buildDirectory.dir("generated/esphome"))
 }
 tasks.named("preBuild").configure { dependsOn(generateEsphomeApi) }
+
+def generateFactoryAudio = tasks.register("generateFactoryAudio", Exec) {
+    workingDir rootProject.projectDir.parentFile.parentFile
+    commandLine "python3", "tools/factory_audio/generate-protocol.py"
+    inputs.files("../../../protocol/factory_audio/factory_audio.proto",
+            "../../../tools/factory_audio/generate-protocol.py")
+    outputs.dir(layout.buildDirectory.dir("generated/factory_audio"))
+}
+tasks.named("preBuild").configure { dependsOn(generateFactoryAudio) }
 
 // Public clones build an isolated host-check package. Device builds require private assets.
 def verifyPrompts = tasks.register("verifyPrompts") {

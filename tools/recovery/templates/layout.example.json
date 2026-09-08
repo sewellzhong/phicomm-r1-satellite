@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "areas": [
+    {
+      "name": "replace-with-observed-emmc-area",
+      "size": 1,
+      "full_image": {
+        "name": "full-emmc",
+        "classification": "sensitive",
+        "copies": [
+          {"storage_id": "media-a", "path": "replace/full.img", "encrypted_storage": true},
+          {"storage_id": "media-b", "path": "replace/full.img", "encrypted_storage": true}
+        ]
+      },
+      "regions": [
+        {
+          "name": "replace-with-observed-region",
+          "offset": 0,
+          "length": 1,
+          "classification": "sensitive",
+          "copies": [
+            {"storage_id": "media-a", "path": "replace/region.img", "encrypted_storage": true},
+            {"storage_id": "media-b", "path": "replace/region.img", "encrypted_storage": true}
+          ]
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "name": "replace-with-factory-audio-artifact",
+      "length": 1,
+      "classification": "non_sensitive",
+      "source": {"tool": "replace-with-read-only-tool", "version": "replace-with-fixed-version"},
+      "copies": [
+        {"storage_id": "media-a", "path": "replace/audio-file.bin", "encrypted_storage": false},
+        {"storage_id": "media-b", "path": "replace/audio-file.bin", "encrypted_storage": false}
+      ]
+    }
+  ]
+}

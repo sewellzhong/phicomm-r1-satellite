@@ -1,0 +1,20 @@
+{
+  "device": {
+    "id": "r1-sample01",
+    "hardware": "replace-with-observed-hardware",
+    "fingerprint": "replace-with-complete-observed-fingerprint"
+  },
+  "low_level_entry": {"status": "pending"},
+  "controlled_full_restore": {"status": "pending"},
+  "post_restore_checks": {
+    "boot": {"status": "pending"},
+    "adb": {"status": "pending"},
+    "wifi": {"status": "pending"},
+    "bluetooth": {"status": "pending"},
+    "microphone": {"status": "pending"},
+    "speaker": {"status": "pending"},
+    "buttons": {"status": "pending"},
+    "leds": {"status": "pending"},
+    "factory_audio_hashes": {"status": "pending"}
+  }
+}

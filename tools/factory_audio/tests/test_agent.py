@@ -1,0 +1,208 @@
+"""Host contract tests for the synthetic factory-audio agent."""
+
+import importlib.util
+import os
+from pathlib import Path
+import socket
+import struct
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[3]
+AGENT = ROOT / "local-deps/build/factory-audio-agent-host/r1-factory-audio-agent"
+PROTO = ROOT / "protocol/factory_audio/factory_audio.proto"
+PROTOC = ROOT / "local-deps/protoc-3.25.5/protoc"
+
+
+class AgentTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.generated = tempfile.TemporaryDirectory()
+        subprocess.run([
+            str(PROTOC), "-I" + str(PROTO.parent),
+            "--python_out=" + cls.generated.name, str(PROTO)
+        ], check=True)
+        sys.path.insert(0, cls.generated.name)
+        import factory_audio_pb2
+        cls.pb = factory_audio_pb2
+
+    @classmethod
+    def tearDownClass(cls):
+        sys.path.remove(cls.generated.name)
+        cls.generated.cleanup()
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.socket_path = Path(self.temporary.name) / "agent.sock"
+        self.agent = subprocess.Popen([
+            str(AGENT), "--fake", "--expected-uid", str(os.getuid()),
+            "--socket", str(self.socket_path)
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        deadline = time.monotonic() + 5
+        while self.agent.poll() is None and not self.socket_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        if not self.socket_path.exists():
+            detail = "agent did not create socket"
+            if self.agent.poll() is not None:
+                detail = self.agent.stderr.read().decode()
+            self.fail(detail)
+        self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.client.settimeout(2)
+        self.client.connect(str(self.socket_path))
+
+    def tearDown(self):
+        self.client.close()
+        self.stop_agent()
+        self.temporary.cleanup()
+
+    def stop_agent(self):
+        if self.agent.poll() is None:
+            self.agent.terminate()
+        self.agent.communicate(timeout=5)
+
+    def send(self, envelope):
+        payload = envelope.SerializeToString()
+        self.client.sendall(struct.pack(">I", len(payload)) + payload)
+
+    def receive(self):
+        header = self.read_exact(4)
+        length = struct.unpack(">I", header)[0]
+        result = self.pb.Envelope()
+        result.ParseFromString(self.read_exact(length))
+        return result
+
+    def read_exact(self, length):
+        chunks = []
+        while length:
+            chunk = self.client.recv(length)
+            if not chunk:
+                raise EOFError()
+            chunks.append(chunk)
+            length -= len(chunk)
+        return b"".join(chunks)
+
+    def negotiate(self):
+        request = self.pb.Envelope(protocol_version=1, request_id=1)
+        request.hello.minimum_version = 1
+        request.hello.maximum_version = 1
+        request.hello.client_name = "host-test"
+        self.send(request)
+        reply = self.receive()
+        self.assertEqual(1, reply.hello_reply.selected_version)
+        self.assertEqual("synthetic-fake", reply.hello_reply.backend_name)
+
+    def test_negotiate_stream_reference_health_and_stop(self):
+        self.negotiate()
+        start = self.pb.Envelope(protocol_version=1, request_id=2)
+        start.start_capture.format.sample_rate_hz = 16000
+        start.start_capture.format.channels = 1
+        start.start_capture.format.sample_width_bytes = 2
+        start.start_capture.format.frame_duration_ms = 20
+        self.send(start)
+        self.assertEqual(self.pb.CAPTURE_STATE_STREAMING, self.receive().health.capture_state)
+        frame = self.receive().audio_frame
+        self.assertEqual(640, len(frame.pcm_s16le))
+        self.assertEqual(1, frame.sequence)
+
+        reference = self.pb.Envelope(protocol_version=1, request_id=3)
+        reference.playback_reference.sequence = 1
+        reference.playback_reference.monotonic_time_ns = time.monotonic_ns()
+        reference.playback_reference.pcm_s16le = bytes(640)
+        reference.playback_reference.source = "tts"
+        self.send(reference)
+        while True:
+            reply = self.receive()
+            if reply.request_id == 3:
+                break
+        self.assertEqual(self.pb.REFERENCE_STATE_ACTIVE, reply.health.reference_state)
+
+        stop = self.pb.Envelope(protocol_version=1, request_id=4)
+        stop.stop_capture.SetInParent()
+        self.send(stop)
+        while True:
+            reply = self.receive()
+            if reply.request_id == 4:
+                break
+        self.assertEqual(self.pb.CAPTURE_STATE_IDLE, reply.health.capture_state)
+
+    def test_format_mismatch_fails_explicitly(self):
+        self.negotiate()
+        request = self.pb.Envelope(protocol_version=1, request_id=2)
+        request.start_capture.format.sample_rate_hz = 48000
+        request.start_capture.format.channels = 1
+        request.start_capture.format.sample_width_bytes = 2
+        request.start_capture.format.frame_duration_ms = 20
+        self.send(request)
+        self.assertEqual(self.pb.ERROR_CODE_FORMAT_MISMATCH, self.receive().error.code)
+
+    def test_protocol_mismatch_fails_explicitly(self):
+        request = self.pb.Envelope(protocol_version=2, request_id=9)
+        request.hello.minimum_version = 2
+        request.hello.maximum_version = 2
+        self.send(request)
+        self.assertEqual(self.pb.ERROR_CODE_PROTOCOL_MISMATCH, self.receive().error.code)
+
+    def test_wrong_uid_is_rejected(self):
+        self.client.close()
+        self.stop_agent()
+        self.agent = subprocess.Popen([
+            str(AGENT), "--fake", "--expected-uid", str(os.getuid() + 1),
+            "--socket", str(self.socket_path)
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        deadline = time.monotonic() + 5
+        while self.agent.poll() is None and not self.socket_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        if not self.socket_path.exists():
+            detail = self.agent.stderr.read().decode() if self.agent.poll() is not None else "agent did not create socket"
+            self.fail(detail)
+        self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.client.settimeout(2)
+        self.client.connect(str(self.socket_path))
+        reply = self.receive()
+        self.assertEqual(self.pb.ERROR_CODE_PERMISSION_DENIED, reply.error.code)
+
+    def test_non_fake_backend_fails_closed(self):
+        result = subprocess.run([
+            str(AGENT), "--expected-uid", str(os.getuid()), "--socket", str(self.socket_path) + ".x"
+        ], capture_output=True, text=True)
+        self.assertEqual(3, result.returncode)
+        self.assertIn("factory_backend_unimplemented", result.stderr)
+
+    def test_accelerated_twenty_second_and_thirty_minute_budgets_are_contiguous(self):
+        self.client.close()
+        self.stop_agent()
+        self.agent = subprocess.Popen([
+            str(AGENT), "--fake", "--fake-frame-period-us", "1",
+            "--expected-uid", str(os.getuid()), "--socket", str(self.socket_path)
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        deadline = time.monotonic() + 5
+        while self.agent.poll() is None and not self.socket_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        if not self.socket_path.exists():
+            detail = self.agent.stderr.read().decode() if self.agent.poll() is not None else "agent did not create socket"
+            self.fail(detail)
+        self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.client.settimeout(5)
+        self.client.connect(str(self.socket_path))
+        self.negotiate()
+        start = self.pb.Envelope(protocol_version=1, request_id=2)
+        start.start_capture.format.sample_rate_hz = 16000
+        start.start_capture.format.channels = 1
+        start.start_capture.format.sample_width_bytes = 2
+        start.start_capture.format.frame_duration_ms = 20
+        self.send(start)
+        self.assertEqual(self.pb.CAPTURE_STATE_STREAMING, self.receive().health.capture_state)
+        # 1,000 frames covers 20 seconds and 90,000 covers 30 minutes; time is accelerated.
+        for expected_sequence in range(1, 90001):
+            sequence = self.receive().audio_frame.sequence
+            self.assertEqual(expected_sequence, sequence)
+            if expected_sequence == 1000:
+                self.assertEqual(20, expected_sequence * 20 // 1000)
+
+
+if __name__ == "__main__":
+    unittest.main()

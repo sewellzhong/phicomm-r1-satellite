@@ -15,6 +15,18 @@
 3. 把包含 `data`、`config`、Wi-Fi 或其他家庭数据的区域，以及覆盖这些区域的完整镜像标记为 `sensitive`。每个副本同时声明 `encrypted_storage: true`。
 4. 使用合成文件运行工具和测试，不填写真实家庭凭据或私有绝对路径。
 
+仓库提供 `tools/recovery/templates/layout.example.json` 和
+`tools/recovery/templates/recovery-state.example.json` 作为现场副本。模板中的
+`replace-*`、长度、偏移和区域名全部必须由实机只读枚举结果替换，不能当作 R1
+实际布局。离开设备时可反复运行以下无副作用桌面演练：
+
+```bash
+python3 tools/recovery/rehearse.py
+```
+
+演练只在临时目录生成 8 字节合成镜像，依次证明双副本校验通过、不完整恢复状态
+保持 `pending`、完整合成证据可得到 `pass`；它不连接设备，也不代表 R0 实机通过。
+
 最小布局结构如下；数值和分区名只是格式示例，不代表 R1 实际布局：
 
 ```json
