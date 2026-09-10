@@ -155,6 +155,22 @@ python3 tools/factory_audio/audit-validation-capture.py \
 旧v80采集没有诊断旁路，继续省略`--diagnostic-wav`即可复核；其报告会继续将运行时通道形状
 列为未验证。v81必须同时拉回三个文件，缺少或篡改双通道旁路时审计拒绝。
 
+完成四个等距离、相同声源和音量的方向采集后，先分别运行上述单次审计。再复制
+`tools/factory_audio/templates/doa-direction-matrix.example.json` 到仓库外，填写四份审计
+报告的相对路径，并执行：
+
+```bash
+python3 tools/factory_audio/audit-doa-direction-matrix.py \
+  --manifest <local-direction-manifest.json> \
+  --output <new-local-direction-report.json>
+```
+
+矩阵审计要求四次采集的DOA有效帧比例至少80%、圆形集中度至少0.5，并在拟合设备未知
+零度偏移后把各方向残差限制在45度以内。阈值只用于拒绝无变化、发散或方向错误的DOA
+证据，不替代技术方案第14章指标。输出的`pass`边界固定为“四方向上报DOA相对响应”；
+它不证明四支麦克风各自响应，也不证明AEC消除量或DSP质量。原始录音、单次报告、矩阵
+清单和矩阵报告均保留在仓库外。
+
 ## 2026-09-11实机结果
 
 首个v2候选使用标准Android boot ID且ramdisk未按4字节对齐，被原厂U-Boot SHA检查拒绝并

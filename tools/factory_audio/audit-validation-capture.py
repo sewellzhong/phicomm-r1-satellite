@@ -45,6 +45,31 @@ def integer(values, key):
         raise RuntimeError(f"metadata_{key}_invalid") from error
 
 
+def circular_histogram_stats(histogram):
+    total = sum(histogram)
+    if total == 0:
+        return {
+            "mean_degrees": None,
+            "resultant_length": 0.0,
+            "peak_bin_degrees": None,
+            "peak_bin_frames": 0,
+        }
+    x = 0.0
+    y = 0.0
+    for index, count in enumerate(histogram):
+        angle = math.radians(index * 10 + 5)
+        x += count * math.cos(angle)
+        y += count * math.sin(angle)
+    mean = math.degrees(math.atan2(y, x)) % 360.0
+    peak = max(range(len(histogram)), key=histogram.__getitem__)
+    return {
+        "mean_degrees": mean,
+        "resultant_length": math.hypot(x, y) / total,
+        "peak_bin_degrees": peak * 10 + 5,
+        "peak_bin_frames": histogram[peak],
+    }
+
+
 def analyze_diagnostic_wav(path, channels, selected_channel, pcm_bytes, mono_pcm):
     require(channels in (1, 2), "validation_diagnostic_channels_invalid")
     require(0 <= selected_channel < channels,
@@ -170,6 +195,9 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None):
         "sequence_gaps": 0,
         "agent_dropped_frames": 0,
         "doa_valid_frames": doa_valid_frames,
+        "doa_valid_fraction": doa_valid_frames / frames,
+        "doa_histogram_10_degrees": histogram,
+        "doa_circular_stats": circular_histogram_stats(histogram),
         "claimed_aec_reference_channels": integer(values, "aec_reference_channels_claimed"),
         "claimed_aec_active": values.get("aec_active_claimed") == "true",
         "claim_boundary": ("transport_reported_doa_and_runtime_output_shape"

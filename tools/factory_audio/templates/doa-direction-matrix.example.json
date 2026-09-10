@@ -1,0 +1,9 @@
+{
+  "device": "r1-sample01",
+  "captures": [
+    {"label": "front", "expected_degrees": 0, "audit_report": "front/audit.json"},
+    {"label": "right", "expected_degrees": 90, "audit_report": "right/audit.json"},
+    {"label": "back", "expected_degrees": 180, "audit_report": "back/audit.json"},
+    {"label": "left", "expected_degrees": 270, "audit_report": "left/audit.json"}
+  ]
+}
