@@ -45,6 +45,18 @@ def aligned(value, boundary):
     return (value + boundary - 1) // boundary * boundary
 
 
+def rockchip_boot_id(header, kernel, ramdisk, second):
+    """Return the RK322x vendor SHA-1 stored in the Android boot id field."""
+    boot_id = hashlib.sha1()
+    for payload in (kernel, ramdisk, second):
+        boot_id.update(payload)
+        boot_id.update(struct.pack("<I", len(payload)))
+    # Rockchip's 2014.10 SecureNSModeBootImageShaCheck extends the Android
+    # digest with tags_addr, page_size, unused[2], name[16] and cmdline[512].
+    boot_id.update(header[32:576])
+    return boot_id.digest()
+
+
 @dataclass
 class Entry:
     name: str
@@ -166,12 +178,24 @@ def build(args):
             and policy_manifest.get("device") == reference["device"], "policy_manifest_invalid")
     agent = overlay / "sbin/r1-factory-audio-agent"
     require(digest(agent) == overlay_manifest.get("agent_sha256"), "overlay_agent_hash_mismatch")
+    init_rc = overlay / "init.r1_factory_audio.rc"
+    require(digest(init_rc) == overlay_manifest.get("init_rc_sha256"),
+            "overlay_init_hash_mismatch")
+    require(digest(overlay / "sepolicy/file_contexts")
+            == overlay_manifest.get("file_contexts_sha256"),
+            "overlay_file_contexts_hash_mismatch")
+    require(digest(overlay / "sepolicy/r1_factory_audio.te")
+            == overlay_manifest.get("policy_source_sha256"),
+            "overlay_policy_source_hash_mismatch")
     patched_policy = policy_dir / "sepolicy"
     require(digest(patched_policy) == policy_manifest.get("patched_policy_sha256"),
             "patched_policy_hash_mismatch")
 
     original = original_path.read_bytes()
     values, kernel, ramdisk, second = boot_parts(original)
+    require(len(ramdisk) % 4 == 0, "original_ramdisk_not_rockchip_sha_aligned")
+    require(original[576:596] == rockchip_boot_id(original, kernel, ramdisk, second),
+            "original_rockchip_boot_id_mismatch")
     entries = parse_cpio(gzip.decompress(ramdisk))
     by_name = {entry.name: entry for entry in entries}
     require(len(by_name) == len(entries), "cpio_duplicate_entry")
@@ -188,17 +212,16 @@ def build(args):
     replace(entries, "init.rk30board.rc", board_init.rstrip(b"\n")
             + b"\nimport /init.r1_factory_audio.rc\n")
     add(entries, "sbin/r1-factory-audio-agent", agent.read_bytes(), 0o750)
-    add(entries, "init.r1_factory_audio.rc", (overlay / "init.r1_factory_audio.rc").read_bytes(), 0o644)
+    add(entries, "init.r1_factory_audio.rc", init_rc.read_bytes(), 0o644)
     new_cpio = build_cpio(entries)
     new_ramdisk = gzip.compress(new_cpio, compresslevel=9, mtime=0)
+    # The RK322x hardware SHA path consumes 32-bit words.  The vendor build
+    # truncates/pads ramdisks to a four-byte boundary before mkbootimg.
+    new_ramdisk += b"\0" * (aligned(len(new_ramdisk), 4) - len(new_ramdisk))
     page = values[7]
     header = bytearray(original[:page])
     struct.pack_into("<I", header, 16, len(new_ramdisk))
-    boot_id = hashlib.sha1()
-    for payload in (kernel, new_ramdisk, second):
-        boot_id.update(payload)
-        boot_id.update(struct.pack("<I", len(payload)))
-    header[576:608] = boot_id.digest() + b"\0" * 12
+    header[576:608] = rockchip_boot_id(header, kernel, new_ramdisk, second) + b"\0" * 12
     candidate = bytes(header) + kernel + b"\0" * (aligned(len(kernel), page) - len(kernel))
     candidate += new_ramdisk + b"\0" * (aligned(len(new_ramdisk), page) - len(new_ramdisk))
     candidate += second + b"\0" * (aligned(len(second), page) - len(second))
@@ -206,6 +229,10 @@ def build(args):
     candidate += b"\0" * (PARTITION_BYTES - len(candidate))
     parsed_values, parsed_kernel, parsed_ramdisk, parsed_second = boot_parts(candidate)
     require(parsed_kernel == kernel and parsed_second == second, "immutable_boot_component_changed")
+    require(len(parsed_ramdisk) % 4 == 0, "candidate_ramdisk_not_rockchip_sha_aligned")
+    require(candidate[576:596]
+            == rockchip_boot_id(candidate, parsed_kernel, parsed_ramdisk, parsed_second),
+            "candidate_rockchip_boot_id_mismatch")
     for index in (1, 3, 5, 6, 7):
         require(parsed_values[index] == values[index], "boot_header_address_changed")
     parsed_names = {entry.name for entry in parse_cpio(gzip.decompress(parsed_ramdisk))}
@@ -223,6 +250,7 @@ def build(args):
         "kernel_sha256": digest_bytes(kernel), "second_sha256": digest_bytes(second),
         "original_ramdisk_sha256": digest_bytes(ramdisk), "candidate_ramdisk_sha256": digest_bytes(new_ramdisk),
         "candidate_ramdisk_bytes": len(new_ramdisk), "page_size": page,
+        "boot_id_scheme": "rockchip_secure_ns_sha1", "ramdisk_alignment_bytes": 4,
         "authorization": authorization, "overlay_manifest_sha256": digest(overlay / "manifest.json"),
         "policy_manifest_sha256": digest(policy_dir / "manifest.json"),
         "declared_changes": ["ramdisk_agent", "ramdisk_init_service", "ramdisk_file_contexts",

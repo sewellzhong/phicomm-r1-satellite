@@ -16,4 +16,5 @@ service r1_factory_audio /sbin/r1-factory-audio-agent \
 # Start only after the deployment gate has verified package UID, vendor hashes and
 # the proven output layout. The normal boot image must not contain unsubstituted tokens.
 on property:sys.boot_completed=1
+    restorecon /sbin/r1-factory-audio-agent
     start r1_factory_audio

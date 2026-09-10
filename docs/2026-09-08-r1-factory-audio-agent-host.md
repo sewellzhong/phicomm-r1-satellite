@@ -20,10 +20,10 @@ v80 建立自有的原厂音频代理公共骨架。协议固定为版本 1，�
 板级版本、四麦、双参考、阵列和 AEC 全部成立时才接受为生产原厂链。当前代码有意
 上报 AEC 未证明并拒绝外加软件参考，所以仍不能进入生产采集。
 
-启动模板先以 root 创建 socket，限定为卫星 UID 10010 可访问，然后清空附加组并降权
+启动模板由Android init创建socket，限定为卫星 UID 10010 可访问，代理继承后清空附加组并降权
 到 Android `audio` UID/GID 1041，才接受连接及初始化后端。专用 SELinux 域只声明
-系统只读文件、`audio_device` 和本地 socket 权限，没有网络、块设备或 permissive
-授权。它仍是待合入目标 boot sepolicy 的模板，不是已部署策略。
+Android 5启动/动态链接、本地日志、系统只读文件、`audio_device` 和本地 socket 权限，
+没有网络、块设备或 permissive授权；实机上继续拒绝原厂库执行`/system/bin/sh`。
 
 APK 客户端固定请求 PCM S16LE、16 kHz、单声道、20 ms/帧，并校验每帧恰好
 640 字节。`factory_proxy` 是显式来源标识，尚未成为默认采集链；代理错误会直接上报，
@@ -108,9 +108,9 @@ v2.3.0 和私有音频源打开，真人“小讯小讯”到达唤醒事件；�
 调试 WAV 均为 0 帧，不能确定代理输出通道或量化 AEC。详见
 [受控运行记录](2026-09-08-r1-original-chain-smoke.md)。
 
-下一步按 R0 手册完成完整 eMMC、低层入口和受控回刷。只有门槛为 `pass` 或用户
-明确接受的 `pass_with_exception`，且原厂boot基线、ABI、预检和通道证明都匹配，私有
-overlay渲染器才生成暂存目录；它本身永不刷机。2026-09-10新增的boot基线门禁会复读
+默认仍按 R0 手册完成完整 eMMC、低层入口和受控回刷。用户针对首台boot风险豁免时，只有
+外部风险记录、原厂boot基线、ABI和预检全部匹配，私有overlay渲染器才生成暂存目录；它
+本身永不刷机。2026-09-10新增的boot基线门禁会复读
 私有kernel/boot/recovery双份文件及其来源证据，并把固定公开参考和私有清单哈希写入overlay
 清单，详见[原厂boot/recovery离线基线](2026-09-10-r1-boot-recovery-baseline.md)。
 
@@ -136,3 +136,22 @@ python3 tools/factory_audio/audit-validation-capture.py \
   --device r1-sample01 --wav <local-wav> --metadata <local-meta> \
   --output <new-local-report.json>
 ```
+
+## 2026-09-11实机结果
+
+首个v2候选使用标准Android boot ID且ramdisk未按4字节对齐，被原厂U-Boot SHA检查拒绝并
+进入recovery；两次均从Loader读回确认候选后写回原boot并复核哈希。构建器随后按同代
+Rockchip `SecureNSModeBootImageShaCheck` 算法把tags/page/unused/name/cmdline纳入SHA-1，
+并强制ramdisk四字节对齐。修复后的候选正常进入Android且保持Enforcing。
+
+根据实机AVC逐项建立专用域启动、rootfs入口、Android 5 linker、logd、socket和audio设备
+权限；没有开放网络、块设备、Permissive或shell执行。最终v13 boot SHA-256为
+`09c89752f388bf09797251c819f7629a39f5ac5a24e93df7a5995154e187a787`，ARMv7代理SHA-256为
+`4a2e7e8d4be302cd4e87bac88a838bccdc2f1058cccaa20762e0202133e13be0`。
+
+v80设备APK SHA-256为`5883f28d2eb11aed9b6b14581b848b2b1fd628a876e4628f813f8a3bc6876b35`，
+与v79证书SHA-256 `0be7a3643442658354c185ec53cb50e73bc1516a56f2760ca46f2c932c1d2639`
+一致。最终10秒采集500帧、0序列缺口、0代理丢帧、500帧有效DOA；PCM共320,000字节且非零。
+离线审计结果为pass，私有报告SHA-256为
+`961f6b2f80b41584e0861105433b8bf624c442f343b16af919524f37298d57be`。该pass仍固定保留四麦
+独立响应、运行时通道形状、AEC消除量和DSP质量为未验证，不放行生产采集。

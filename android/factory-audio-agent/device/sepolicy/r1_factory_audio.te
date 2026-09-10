@@ -2,6 +2,24 @@ type r1_factory_audio, domain, exec_type, file_type;
 
 init_daemon_domain(r1_factory_audio)
 allow r1_factory_audio init:fd use;
+allow init r1_factory_audio:unix_stream_socket { create bind listen setopt getattr };
+allow init r1_factory_audio:sock_file { create open write getattr setattr unlink };
+allow r1_factory_audio tmpfs:filesystem associate;
+allow r1_factory_audio rootfs:file { entrypoint open read execute getattr };
+allow r1_factory_audio rootfs:dir { search getattr };
+allow r1_factory_audio null_device:chr_file { open read write getattr ioctl };
+allow r1_factory_audio kernel:fd use;
+allow r1_factory_audio properties_device:file { open read getattr };
+allow r1_factory_audio device:dir { search getattr };
+allow r1_factory_audio socket_device:dir search;
+allow r1_factory_audio tmpfs:file { read write execute };
+allow r1_factory_audio rootfs:lnk_file { read getattr };
+allow init r1_factory_audio:process { rlimitinh siginh noatsecure };
+allow r1_factory_audio init:process sigchld;
+allow r1_factory_audio self:unix_dgram_socket { create connect write };
+allow r1_factory_audio logdw_socket:sock_file { open write getattr };
+allow r1_factory_audio logd:unix_dgram_socket sendto;
+allow r1_factory_audio self:process fork;
 
 # Vendor libraries and immutable array/calibration configuration.
 allow r1_factory_audio system_file:dir { open read search getattr };

@@ -41,7 +41,25 @@ class DevicePolicyTemplateTest(unittest.TestCase):
         self.assertIn("user root", init)
         self.assertIn("--init-socket-name r1_factory_audio", init)
         self.assertIn("socket r1_factory_audio stream 0660 root 10010", init)
+        self.assertIn("restorecon /sbin/r1-factory-audio-agent", init)
         self.assertIn("disabled", init)
+
+    def test_init_has_only_dedicated_socket_creation_permissions(self):
+        rules = set(policy_patcher.RULES)
+        self.assertIn(("init", "r1_factory_audio", "unix_stream_socket",
+                       "create,bind,listen,setopt,getattr"), rules)
+        self.assertIn(("init", "r1_factory_audio", "sock_file",
+                       "create,open,write,getattr,setattr,unlink"), rules)
+        self.assertIn(("r1_factory_audio", "tmpfs", "filesystem", "associate"), rules)
+        self.assertIn(("r1_factory_audio", "rootfs", "file",
+                       "entrypoint,open,read,execute,getattr"), rules)
+        self.assertIn(("r1_factory_audio", "null_device", "chr_file",
+                       "open,read,write,getattr,ioctl"), rules)
+        self.assertIn(("r1_factory_audio", "tmpfs", "file", "read,write,execute"), rules)
+        self.assertIn(("init", "r1_factory_audio", "process",
+                       "rlimitinh,siginh,noatsecure"), rules)
+        self.assertFalse(any(source == "init" and target in ("socket_device", "rootfs")
+                             for source, target, _, _ in rules))
 
     def test_agent_domain_has_no_network_block_or_permissive_grant(self):
         policy = (DEVICE / "sepolicy/r1_factory_audio.te").read_text()
@@ -177,6 +195,12 @@ class DevicePolicyTemplateTest(unittest.TestCase):
                              result["boot_baseline_reference_sha256"])
             written = json.loads((root / "output/manifest.json").read_text())
             self.assertEqual(result, written)
+            self.assertEqual(renderer.digest(root / "output/init.r1_factory_audio.rc"),
+                             result["init_rc_sha256"])
+            self.assertEqual(renderer.digest(root / "output/sepolicy/file_contexts"),
+                             result["file_contexts_sha256"])
+            self.assertEqual(renderer.digest(root / "output/sepolicy/r1_factory_audio.te"),
+                             result["policy_source_sha256"])
 
 
 if __name__ == "__main__":

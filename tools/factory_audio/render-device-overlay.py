@@ -122,6 +122,9 @@ def render(args):
         shutil.copy2(DEVICE / "sepolicy" / name, output / "sepolicy" / name)
     manifest = {
         "agent_sha256": digest(output / "sbin/r1-factory-audio-agent"),
+        "init_rc_sha256": digest(output / "init.r1_factory_audio.rc"),
+        "file_contexts_sha256": digest(output / "sepolicy/file_contexts"),
+        "policy_source_sha256": digest(output / "sepolicy/r1_factory_audio.te"),
         "boot_baseline_manifest_sha256": boot["baseline_manifest_sha256"],
         "boot_baseline_reference_sha256": boot["reference_sha256"],
         "device": gate["device"],

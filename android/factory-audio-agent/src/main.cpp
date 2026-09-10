@@ -419,10 +419,17 @@ void serve_client(int fd, AudioBackend* backend, uint64_t frame_period_ns) {
     if (result > 0 && (descriptor.revents & POLLIN)
         && !consume_requests(fd, &state, backend)) break;
     if (state.streaming && monotonic_ns() >= state.next_frame_ns) {
+      bool first_frame = state.sequence == 0;
       if (!emit_frame(fd, &state, backend)) break;
-      state.next_frame_ns += state.frame_period_ns;
       uint64_t now = monotonic_ns();
-      if (state.next_frame_ns + state.frame_period_ns < now) {
+      if (first_frame) {
+        // The vendor's first blocking pcm_read primes the hardware pipeline.  Establish
+        // the cadence after it completes so startup latency is not reported as lost PCM.
+        state.next_frame_ns = now + state.frame_period_ns;
+      } else {
+        state.next_frame_ns += state.frame_period_ns;
+      }
+      if (!first_frame && state.next_frame_ns + state.frame_period_ns < now) {
         uint64_t missed = (now - state.next_frame_ns) / state.frame_period_ns;
         state.dropped += missed;
         state.next_frame_ns += missed * state.frame_period_ns;

@@ -37,12 +37,14 @@ class ExperimentalBootTest(unittest.TestCase):
                 self.entry("file_contexts", b"/system u:object_r:system_file:s0\n", 2),
                 self.entry("init.rk30board.rc", b"import /init.rockchip.rc\n", 3)]
             ramdisk = gzip.compress(boot.build_cpio(entries), mtime=0)
+            ramdisk += bytes(boot.aligned(len(ramdisk), 4) - len(ramdisk))
             kernel, second, page = b"kernel", b"second", 16384
             header = bytearray(page)
             header[:8] = b"ANDROID!"
             values = (len(kernel), 0x60408000, len(ramdisk), 0x62000000,
                       len(second), 0x60f00000, 0x60088000, page)
             struct.pack_into("<8I", header, 8, *values)
+            header[576:596] = boot.rockchip_boot_id(header, kernel, ramdisk, second)
             image = bytes(header) + kernel + bytes(boot.aligned(len(kernel), page) - len(kernel))
             image += ramdisk + bytes(boot.aligned(len(ramdisk), page) - len(ramdisk))
             image += second + bytes(boot.aligned(len(second), page) - len(second))
@@ -60,7 +62,13 @@ class ExperimentalBootTest(unittest.TestCase):
             agent = overlay / "sbin/r1-factory-audio-agent"
             agent.write_bytes(b"agent")
             (overlay / "init.r1_factory_audio.rc").write_text("service r1 /sbin/r1-factory-audio-agent\n")
+            (overlay / "sepolicy").mkdir()
+            (overlay / "sepolicy/file_contexts").write_text("/sbin/r1 u:object_r:r1:s0\n")
+            (overlay / "sepolicy/r1_factory_audio.te").write_text("type r1;\n")
             overlay_manifest = {"device": device, "agent_sha256": boot.digest(agent),
+                "init_rc_sha256": boot.digest(overlay / "init.r1_factory_audio.rc"),
+                "file_contexts_sha256": boot.digest(overlay / "sepolicy/file_contexts"),
+                "policy_source_sha256": boot.digest(overlay / "sepolicy/r1_factory_audio.te"),
                 "authorization": {"mode": "explicit_device_limited_risk_acceptance"},
                 "output_channels": 2, "output_channel": 0}
             (overlay / "manifest.json").write_text(json.dumps(overlay_manifest))
@@ -82,11 +90,15 @@ class ExperimentalBootTest(unittest.TestCase):
             finally:
                 boot.REFERENCE = old_reference
             self.assertEqual("pass_for_device_locked_boot_write", result["status"])
+            self.assertEqual("rockchip_secure_ns_sha1", result["boot_id_scheme"])
+            self.assertEqual(0, result["candidate_ramdisk_bytes"] % 4)
             self.assertEqual(98304, result["partition"]["loader_image_start_sector"])
             candidate = (output / "boot-experimental.img").read_bytes()
             _, candidate_kernel, candidate_ramdisk, candidate_second = boot.boot_parts(candidate)
             self.assertEqual(kernel, candidate_kernel)
             self.assertEqual(second, candidate_second)
+            self.assertEqual(candidate[576:596], boot.rockchip_boot_id(
+                candidate, candidate_kernel, candidate_ramdisk, candidate_second))
             names = {item.name for item in boot.parse_cpio(gzip.decompress(candidate_ramdisk))}
             self.assertIn("sbin/r1-factory-audio-agent", names)
             self.assertIn("init.r1_factory_audio.rc", names)

@@ -19,18 +19,19 @@ boot ramdisk；原kernel、RSCE/DTB、second、system、recovery、Loader、分�
 - 固定`setools-android`提交和仓库补丁生成策略工具；它只在ADB临时目录重写原策略副本，
   从不加载策略。生成的policy v26新增单一专用domain及最小文件、音频设备、socket和降权权限，
   没有permissive、网络或块设备授权。
-- boot构建器解析并重建newc+gzip ramdisk，更新Android boot header的ramdisk长度和SHA-1 ID，
-  并复核kernel、second、地址、16 KiB页大小和12 MiB分区长度不变。
+- boot构建器解析并重建newc+gzip ramdisk，强制ramdisk四字节对齐，按Rockchip 2014.10
+  `SecureNSModeBootImageShaCheck`扩展规则更新SHA-1 ID，并复核kernel、second、地址、
+  16 KiB页大小和12 MiB分区长度不变。
 
-私有v2候选从原boot A/B分别独立构建且逐字节一致。初次诊断固定按静态契约以2通道读取、
+初次诊断固定按静态契约以2通道读取、
 选择通道0输出；这只是验证假设，不构成运行时通道、AEC或DSP证明。
 
 主机统一检查通过Android 170项、lint、native 32项、恢复73项及演练、原厂音频47项、
 HA 44项、API22 ARMv7构建、公开审计和凭据扫描。hostcheck APK SHA-256为
 `661ccc32b74b62b26cb2263fd9f93687e3a365ddaf0c3f941022979d8ecb1348`，ARMv7代理为
 `263c463c86ff92e122dfd4031de9cc7c0289f89d0d560a904e53236a41313780`，专用policy v2为
-`339867203ffeec71f4c99674fdd124793892f9007d76a330a9549d9dbc4a234c`，boot v2为
-`aaa5b96686a89bd025b752ce6be1e038565c0ec2d6457707576ca419c5f3131c`。
+`339867203ffeec71f4c99674fdd124793892f9007d76a330a9549d9dbc4a234c`。该旧policy和v2 boot
+只保留为失败证据，不再是部署候选。
 
 ## 写入与验收
 
@@ -41,3 +42,33 @@ HA 44项、API22 ARMv7构建、公开审计和凭据扫描。hostcheck APK SHA-2
 
 启动通过后才触发最长20秒诊断采集，检查非零PCM、帧连续性、DOA字段和正确释放。之后再
 比较四麦响应、播放参考、AEC消除量和DSP质量。在实机证据齐全前生产采集继续失败关闭。
+
+## 实机执行结果（2026-09-10至2026-09-11）
+
+v2 boot `aaa5b966…f3131c`完成写前双读、写入和复位前读回，但复位后进入原厂recovery。
+从recovery回到Loader后再次读回确认boot仍为候选，再写回原boot `f904c534…0ad58`并读回
+一致，Android、ADB、原音频链和Enforcing恢复。第二次受控复现同样回落recovery并完成相同
+回滚。U-Boot本地二进制及同代公开源码均显示厂商会复算扩展boot SHA；原厂头内SHA按该
+算法完全匹配，而v2只计算标准Android字段且新ramdisk长度模4为2，因此v2判定失败。
+公开复核固定到Rockchip衍生U-Boot提交
+[`8fe3a66f`](https://github.com/geekboxzone/lollipop_u-boot/blob/8fe3a66fcbea782e404c3d011eb383dcecec876f/board/rockchip/common/SecureBoot/SecureVerify.c#L156-L219)。
+
+修复后从原boot A/B独立构建的镜像逐字节一致。v3首次正常进入Android，证明Rockchip SHA
+和四字节对齐修复有效。随后只依据每轮实机AVC增量收紧专用Enforcing策略：init socket、
+rootfs入口、Android 5动态链接、本地logd和audio设备；没有允许网络、块设备、Permissive或
+原厂库尝试的`/system/bin/sh`。最终v13 boot SHA-256为
+`09c89752f388bf09797251c819f7629a39f5ac5a24e93df7a5995154e187a787`，每轮均执行当前boot
+双读、候选单写、写后读回、正常启动、fingerprint及Enforcing检查。
+
+v80 APK通过相同证书覆盖v79，SHA-256为
+`5883f28d2eb11aed9b6b14581b848b2b1fd628a876e4628f813f8a3bc6876b35`。最终10秒诊断调用设备
+已有`libuni4michal.so`，原厂日志报告HAL 1.1、MicArray v2.3.0、4麦、2路回声参考和AEC开启；
+APK收到500个20 ms单声道帧，序号1至500、0缺口、0代理丢帧、500帧有效DOA。WAV含
+160,000个S16LE样本，其中140,383个非零；离线审计pass，报告SHA-256为
+`961f6b2f80b41584e0861105433b8bf624c442f343b16af919524f37298d57be`。录音及原厂材料仅在
+仓库外私有目录保存。
+
+本结果通过R1权限环境、R2代理运行和R3的“实际PCM传输/DOA字段”子项；不把日志声明等同于
+AEC效果证明。四麦独立响应、DOA方向变化、实际通道形状、播放参考覆盖、AEC消除量及DSP
+质量仍为未验证，生产`startCapture()`继续失败关闭。R0仍为`pending`，boot回滚成功也不等于
+完整eMMC、独立低层入口或完整回刷门槛通过。
