@@ -155,6 +155,24 @@ python3 tools/factory_audio/audit-validation-capture.py \
 旧v80采集没有诊断旁路，继续省略`--diagnostic-wav`即可复核；其报告会继续将运行时通道形状
 列为未验证。v81必须同时拉回三个文件，缺少或篡改双通道旁路时审计拒绝。
 
+v82可选地在同一个有界窗口内播放受控本地参考。参考文件必须已经位于应用自己的
+`diagnostics`目录，格式为16 kHz、单声道、S16LE WAV；窗口必须比参考至少长2秒。触发前
+先把`STREAM_MUSIC`设为受测档位，命令增加：
+
+```bash
+--es playback_reference_path <diagnostics内参考文件名>
+```
+
+采集固定保留1秒前导和至少1秒尾段，并记录设备实际媒体音量index/max，而不相信命令行
+声称的百分比。拉回原参考文件后，离线审计增加：
+
+```bash
+--playback-reference-wav <local-reference-wav>
+```
+
+审计会核对参考SHA-256、长度、格式、音量换算及播放单调时钟完全位于采集窗口内。该pass
+仅证明同次采集确实包含受控本机播放，不能单独证明硬件参考覆盖或AEC消除效果。
+
 完成四个等距离、相同声源和音量的方向采集后，先分别运行上述单次审计。再复制
 `tools/factory_audio/templates/doa-direction-matrix.example.json` 到仓库外，填写四份审计
 报告的相对路径，并执行：
@@ -189,3 +207,11 @@ v80设备APK SHA-256为`5883f28d2eb11aed9b6b14581b848b2b1fd628a876e4628f813f8a3b
 离线审计结果为pass，私有报告SHA-256为
 `961f6b2f80b41584e0861105433b8bf624c442f343b16af919524f37298d57be`。该pass仍固定保留四麦
 独立响应、运行时通道形状、AEC消除量和DSP质量为未验证，不放行生产采集。
+
+## 2026-09-11 v82主机增量
+
+提交`519def937b28b095dbfd0e63ea17cb7e6ed30e9e`实现上述受控播放同步采集。正式
+`tools/factory_audio/check.sh`通过56项；新增Java纯逻辑JUnit 4项使用缓存API类库完成
+Java 8定向编译和运行。公开文件扫描360项0发现，凭据扫描无泄漏。当前主机缺少Android
+SDK，完整Gradle入口在解析SDK位置时停止，故本次没有完整APK、lint或hostcheck
+哈希。没有连接ADB、没有构建设备签名APK、没有修改boot；v82及AEC仍待实机验证。
