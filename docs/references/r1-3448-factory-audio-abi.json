@@ -32,11 +32,14 @@
     "unisound_apk_sha256": "a0548242414666d27df9b099e85ab69697cc5c1599f019ce34dd2460f8841bd7"
   },
   "original_java_contract": {
+    "default_four_mic_read_buffer_bytes": 2400,
+    "default_four_mic_debug_mode_argument": 1,
+    "default_packet_samples": 1200,
     "four_mic_manager_class": "com.unisound.sdk.x",
-    "four_mic_read_buffer_bytes": 4800,
     "jni_class": "com.unisound.jni.Uni4micHalJNI",
     "jni_read_signature": "readData(long, byte[], int): int",
     "open_audio_in_argument": 2,
+    "read_buffer_runtime_configurable": true,
     "runtime_output_channels": "pending",
     "static_evidence_offsets": {
       "close_sequence": "classes.dex:0x26ab18-0x26ab28",
@@ -58,7 +61,58 @@
     "uni_4mic_hal_release()"
   ],
   "return_contracts": {
-    "uni_4mic_pcm_read": "forwards tinyalsa pcm_read status: 0 success, negative failure"
+    "java_four_mic_callback": "only invoked when JNI readData returns a positive value",
+    "uni_4mic_pcm_read": "returns the underlying pcm_read value when nonnegative and -1 on validation/read failure",
+    "runtime_positive_length_source": "pending; static evidence conflicts with the usual tinyalsa zero-on-success contract"
+  },
+  "static_analysis_contract": {
+    "Unisound-classes.dexdump.txt": [
+      {"contains": "const/4 v3, #int 1", "offset": "0x26a96e"},
+      {"contains": "const/4 v2, #int 0", "offset": "0x26a970"},
+      {"contains": "iput v3, v5, Lcom/unisound/sdk/x;.k:I", "offset": "0x26a984"},
+      {"contains": "const/4 v0, #int 2", "offset": "0x26a988"},
+      {"contains": "iput v0, v5, Lcom/unisound/sdk/x;.l:I", "offset": "0x26a98a"},
+      {"contains": "iput v3, v5, Lcom/unisound/sdk/x;.m:I", "offset": "0x26a98e"},
+      {"contains": "iput v2, v5, Lcom/unisound/sdk/x;.n:I", "offset": "0x26a992"},
+      {"contains": "iput v2, v5, Lcom/unisound/sdk/x;.o:I", "offset": "0x26a996"},
+      {"contains": "const/16 v0, #int 1200", "offset": "0x26a9a2"},
+      {"contains": "iput v0, v5, Lcom/unisound/sdk/x;.s:I", "offset": "0x26a9a6"},
+      {"contains": "openAudioIn:(I)J", "offset": "0x26a9f2"},
+      {"contains": "startRecorder:(J)I", "offset": "0x26aa06"},
+      {"contains": "readData:(J[BI)I", "offset": "0x26aaca"},
+      {"contains": "stopRecorder:(J)I", "offset": "0x26ab18"},
+      {"contains": "closeAudioIn:(J)I", "offset": "0x26ab28"},
+      {"contains": "init:(I)I", "offset": "0x26ac14"},
+      {"contains": "set4MicDebugMode:(I)I", "offset": "0x26ac5c"},
+      {"contains": "close4MicAlgorithm:(I)I", "offset": "0x26ac6a"},
+      {"contains": "mul-int/lit8 v0, v0, #int 2", "offset": "0x26acfa"},
+      {"contains": "new-array v0, v0, [B", "offset": "0x26acfe"},
+      {"contains": "if-lez v1", "offset": "0x26ad0c"},
+      {"contains": "onRecordingData:([BI)V", "offset": "0x26ad14"}
+    ],
+    "libUni4micHalJNI.so.disassembly.txt": [
+      {"contains": "Java_com_unisound_jni_Uni4micHalJNI_readData", "offset": "0x00000e14"},
+      {"contains": "blx", "offset": "0x00000e30"},
+      {"contains": "mov", "offset": "0x00000e46"}
+    ],
+    "libUni4micHalJNI.so.symbols.txt": [
+      {"contains": "Java_com_unisound_jni_Uni4micHalJNI_openAudioIn", "offset": "0x00000e03"},
+      {"contains": "Java_com_unisound_jni_Uni4micHalJNI_readData", "offset": "0x00000e15"},
+      {"contains": "Java_com_unisound_jni_Uni4micHalJNI_startRecorder", "offset": "0x00000e4b"}
+    ],
+    "libuni4michal.so.symbols.txt": [
+      {"contains": "uni_hal_4mic_array_process", "offset": "0x00003975"},
+      {"contains": "uni_4mic_pcm_read", "offset": "0x00002a81"},
+      {"contains": "uni_4mic_pcm_start", "offset": "0x00002b29"},
+      {"contains": "uni_hal_4mic_array_compute_DOA", "offset": "0x00003999"}
+    ],
+    "libuni4michal.so.disassembly.txt": [
+      {"contains": "uni_4mic_pcm_read", "offset": "0x00002a80"},
+      {"contains": "blx", "offset": "0x00002ae0"},
+      {"contains": "cmp", "offset": "0x00002ae4"},
+      {"contains": "bge", "offset": "0x00002ae6"},
+      {"contains": "mov.w", "offset": "0x00002af4"}
+    ]
   },
   "schema_version": 1,
   "status": "static_abi_confirmed_runtime_shape_pending"

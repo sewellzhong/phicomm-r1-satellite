@@ -278,6 +278,56 @@ def run_to_new_file(arguments, output_path):
                        stderr=subprocess.PIPE, check=True)
 
 
+def verify_static_analysis(reference, analysis_dir):
+    """Require each pinned semantic anchor before accepting generated analysis."""
+    contract = reference.get("static_analysis_contract")
+    require(isinstance(contract, dict) and contract, "static_analysis_contract_missing")
+    checked = []
+    for filename, anchors in contract.items():
+        require(isinstance(filename, str) and filename and "/" not in filename,
+                "static_analysis_filename_invalid")
+        require(isinstance(anchors, list) and anchors,
+                "static_analysis_anchors_missing:" + filename)
+        path = analysis_dir / filename
+        require(path.is_file() and not path.is_symlink(),
+                "static_analysis_file_missing:" + filename)
+        expected = []
+        for anchor in anchors:
+            require(isinstance(anchor, dict), "static_analysis_anchor_invalid:" + filename)
+            offset = anchor.get("offset")
+            contains = anchor.get("contains")
+            require(isinstance(offset, str) and offset.startswith("0x"),
+                    "static_analysis_offset_invalid:" + filename)
+            require(len(offset) > 2 and all(character in "0123456789abcdefABCDEF"
+                                            for character in offset[2:]),
+                    "static_analysis_offset_invalid:" + filename)
+            require(isinstance(contains, str) and contains,
+                    "static_analysis_fragment_invalid:" + filename)
+            expected.append((offset[2:].lower(), contains, offset))
+
+        found = 0
+        # Vendor symbol names may contain non-UTF-8 bytes; semantic anchors are ASCII.
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                offset_token, fragment, _ = expected[found]
+                line_tokens = [token.rstrip(":").lower() for token in line.split()]
+                normalized_offset = offset_token.lstrip("0") or "0"
+                if any((token.lstrip("0") or "0") == normalized_offset
+                       for token in line_tokens[:2]):
+                    require(fragment in line,
+                            "static_analysis_fragment_mismatch:" + filename + ":" + offset_token)
+                    found += 1
+                    if found == len(expected):
+                        break
+        if found != len(expected):
+            raise AuditError(
+                "static_analysis_anchor_missing:" + filename + ":" + expected[found][2]
+            )
+        checked.append({"file": filename, "anchors_checked": found,
+                        "sha256": sha256_file(path)})
+    return checked
+
+
 def audit_materials(extraction_manifest_path, reference_path, output_dir,
                     seven_zip, dexdump, readelf, llvm_objdump):
     extraction_manifest_path, extraction, system_paths = validate_extraction_manifest(
@@ -338,13 +388,14 @@ def audit_materials(extraction_manifest_path, reference_path, output_dir,
         run_to_new_file((tools["llvm_objdump"], "-d", "--triple=thumbv7a-linux-android", library),
                         analysis / f"{name}.disassembly.txt")
 
+    static_analysis = verify_static_analysis(reference, analysis)
     analysis_files = []
     for path in sorted(analysis.iterdir()):
         analysis_files.append({"file": f"analysis/{path.name}", "bytes": path.stat().st_size,
                                "sha256": sha256_file(path)})
     result = {
         "schema_version": SCHEMA_VERSION,
-        "status": "pass_materials_verified_analysis_generated",
+        "status": "pass_materials_verified_static_contract_checked",
         "claim_boundary": "offline_static_evidence_only_runtime_shape_pending",
         "device_id": DEVICE_ID,
         "source": {
@@ -357,6 +408,7 @@ def audit_materials(extraction_manifest_path, reference_path, output_dir,
                   for name, path in tools.items()},
         "materials": inventory,
         "analysis": analysis_files,
+        "static_analysis": static_analysis,
     }
     write_exclusive(output_dir / "factory-audio-materials.json",
                     (json.dumps(result, indent=2, sort_keys=True) + "\n").encode())

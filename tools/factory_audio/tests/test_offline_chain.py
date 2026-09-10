@@ -185,13 +185,45 @@ class OfflineChainTest(unittest.TestCase):
         self.assertIn("vendor/firmware/ak7755_pram_data2.bin", audit.MATERIAL_PATHS)
         self.assertFalse(any(path.endswith((".wav", ".pcm")) for path in audit.MATERIAL_PATHS))
 
+    def test_static_analysis_requires_ordered_semantic_anchors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            analysis = Path(directory)
+            evidence = analysis / "evidence.txt"
+            evidence.write_text(
+                "  0010: instruction first semantic call\n"
+                "0014: instruction second semantic call\n",
+                encoding="utf-8",
+            )
+            reference = {"static_analysis_contract": {"evidence.txt": [
+                {"offset": "0x0010", "contains": "first semantic call"},
+                {"offset": "0x0014", "contains": "second semantic call"},
+            ]}}
+            checked = audit.verify_static_analysis(reference, analysis)
+            self.assertEqual(2, checked[0]["anchors_checked"])
+            reference["static_analysis_contract"]["evidence.txt"][1]["contains"] = "wrong"
+            with self.assertRaisesRegex(audit.AuditError, "fragment_mismatch"):
+                audit.verify_static_analysis(reference, analysis)
+
+    def test_static_analysis_rejects_missing_anchors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            analysis = Path(directory)
+            (analysis / "evidence.txt").write_text("0010: present\n", encoding="utf-8")
+            missing = {"static_analysis_contract": {"evidence.txt": [
+                {"offset": "0x0014", "contains": "missing"},
+            ]}}
+            with self.assertRaisesRegex(audit.AuditError, "anchor_missing"):
+                audit.verify_static_analysis(missing, analysis)
+
     def test_public_reference_keeps_runtime_shape_pending(self):
         reference = json.loads(
             (ROOT / "docs/references/r1-3448-factory-audio-abi.json").read_text()
         )
         contract = reference["original_java_contract"]
         self.assertEqual(2, contract["open_audio_in_argument"])
-        self.assertEqual(4800, contract["four_mic_read_buffer_bytes"])
+        self.assertEqual(1200, contract["default_packet_samples"])
+        self.assertEqual(2400, contract["default_four_mic_read_buffer_bytes"])
+        self.assertEqual(1, contract["default_four_mic_debug_mode_argument"])
+        self.assertTrue(contract["read_buffer_runtime_configurable"])
         self.assertEqual("pending", contract["runtime_output_channels"])
 
 

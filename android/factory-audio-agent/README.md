@@ -31,5 +31,6 @@ a self-owned mock shared library and never copy an R1 library into the build.
 the system partition from the private A/B image chunks, then audits a fixed
 allowlist of factory-audio inputs. All extracted bytes and disassembly remain
 under ignored private storage. The public reference records hashes and static
-JNI facts only; a 4,800-byte original read buffer does not prove its runtime
-channel layout and therefore cannot unlock the production backend.
+JNI facts only. The original manager defaults to 1,200 samples and doubles that
+to a 2,400-byte four-mic read buffer, but the packet size is runtime configurable;
+neither value proves the runtime channel layout or unlocks the production backend.
