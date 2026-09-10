@@ -20,7 +20,7 @@ bash tools/dev/check.sh
 
 `check.sh` 构建包名为 `dev.sewellzhong.r1probe.hostcheck`，提示音是短测试音，不是中文回答。所有原生运行库和 Alexa 权重仍参与编译打包。该包只作主机构建检查，不安装到 R1，也不作为可交付 APK。GitHub Actions 使用相同入口，仅保留测试报告。统一检查还运行 `tools/recovery/tests/` 的合成镜像安全回归；恢复工具本身没有设备连接和刷写接口。
 
-主机套件当前包含168项Android、32项部署/诊断工具、73项R0恢复工具、R0桌面演练、37项原厂音频代理/策略/ABI/离线审计测试和44项HA测试，以及lint、hostcheck APK、API 22 ARMv7代理交叉构建和HA配置加载检查。原厂代理测试包括断连释放、1,000/90,000帧的20秒及30分钟预算加速演练；离线审计测试覆盖跨分块提取、双份不一致、篡改、路径逃逸、符号链接及未知通道失败关闭。首次在线检查会准备Gradle/AGP自身依赖；相同版本已缓存且 `prepare.py` 已成功后，可用 `R1_GRADLE_OFFLINE=1 bash tools/dev/check.sh` 排除远端仓库波动。另两项既有HA私有路由源码测试位于 `tools/ha/local_tests/`，本地准备原 `local-deps/ha-live-routing-2026-09-06/` 后显式执行；不计入公开套件，不以模拟替身替换其真实源码结论。
+主机套件当前包含171项Android、32项部署/诊断工具、73项R0恢复工具、R0桌面演练、54项原厂音频代理/策略/ABI/离线审计测试和44项HA测试，以及lint、hostcheck APK、API 22 ARMv7代理交叉构建和HA配置加载检查。原厂代理测试包括断连释放、1,000/90,000帧的20秒及30分钟预算加速演练；离线审计测试覆盖跨分块提取、双份不一致、篡改、路径逃逸、符号链接、未知通道失败关闭和四方向DOA相对响应。首次在线检查会准备Gradle/AGP自身依赖；相同版本已缓存且 `prepare.py` 已成功后，可用 `R1_GRADLE_OFFLINE=1 bash tools/dev/check.sh` 排除远端仓库波动。另两项既有HA私有路由源码测试位于 `tools/ha/local_tests/`，本地准备原 `local-deps/ha-live-routing-2026-09-06/` 后显式执行；不计入公开套件，不以模拟替身替换其真实源码结论。
 
 ## 日常开发
 
