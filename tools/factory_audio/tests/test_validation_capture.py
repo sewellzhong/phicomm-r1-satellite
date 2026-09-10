@@ -119,6 +119,54 @@ class ValidationCaptureAuditTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "diagnostic_wav_missing"):
                 audit_module.audit(wav_path, metadata, "r1-sample01")
 
+    def test_audits_controlled_playback_reference_without_promoting_aec(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wav_path, metadata = self.fixture(root)
+            reference = root / "reference.wav"
+            with wave.open(str(reference), "wb") as recording:
+                recording.setparams((1, 2, 16000, 16000, "NONE", "not compressed"))
+                recording.writeframes(bytes(32000))
+            capture_started = 10_000_000_000
+            playback_started = 11_000_000_000
+            playback_completed = 12_100_000_000
+            with metadata.open("a", encoding="utf-8") as handle:
+                handle.write("playback_reference_present=true\n")
+                handle.write(f"capture_started_monotonic_ns={capture_started}\n")
+                handle.write(f"playback_reference_wav_name={reference.name}\n")
+                handle.write("playback_reference_wav_sha256="
+                             + hashlib.sha256(reference.read_bytes()).hexdigest() + "\n")
+                handle.write("playback_reference_pcm_bytes=32000\n")
+                handle.write("playback_reference_lead_in_ms=1000\n")
+                handle.write(f"playback_started_monotonic_ns={playback_started}\n")
+                handle.write(f"playback_completed_monotonic_ns={playback_completed}\n")
+                handle.write("playback_elapsed_ms=1050\n")
+                handle.write("music_volume_index=9\n")
+                handle.write("music_volume_max_index=15\n")
+                handle.write("music_volume_percent=60\n")
+            lines = metadata.read_text(encoding="utf-8").splitlines()
+            lines = ["elapsed_ms=3000" if line.startswith("elapsed_ms=")
+                     else "target_duration_seconds=3"
+                     if line.startswith("target_duration_seconds=") else line for line in lines]
+            metadata.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            result = audit_module.audit(
+                wav_path, metadata, "r1-sample01",
+                playback_reference_wav_path=reference)
+        self.assertEqual(
+            "transport_reported_doa_and_controlled_playback_capture",
+            result["claim_boundary"])
+        self.assertEqual(60, result["controlled_playback_reference"]["music_volume_percent"])
+        self.assertIn("aec_cancellation_effect", result["unverified"])
+
+    def test_requires_playback_sidecar_when_metadata_claims_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wav_path, metadata = self.fixture(root)
+            with metadata.open("a", encoding="utf-8") as handle:
+                handle.write("playback_reference_present=true\n")
+            with self.assertRaisesRegex(RuntimeError, "playback_reference_wav_missing"):
+                audit_module.audit(wav_path, metadata, "r1-sample01")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -63,10 +63,13 @@ final class AudioPlayback {
         }, "r1-playback-watchdog");
 
         long startedAtNanos = System.nanoTime();
+        long playbackStartedAtNanos = 0L;
+        long playbackCompletedAtNanos = 0L;
         FileInputStream input = new FileInputStream(wavFile);
         try {
             skipFully(input, WavHeader.HEADER_BYTES);
             Log.i(TAG, "R1_AUDIO_PLAYBACK_STAGE stage=track_initialized pcm_bytes=" + pcmBytes);
+            playbackStartedAtNanos = System.nanoTime();
             track.play();
             watchdog.start();
             Log.i(TAG, "R1_AUDIO_PLAYBACK_STAGE stage=write_started");
@@ -103,6 +106,7 @@ final class AudioPlayback {
             }
             playbackFinished.set(true);
             watchdog.interrupt();
+            playbackCompletedAtNanos = System.nanoTime();
             Log.i(TAG, "R1_AUDIO_PLAYBACK_STAGE stage=drain_complete");
         } finally {
             playbackFinished.set(true);
@@ -114,7 +118,8 @@ final class AudioPlayback {
             track.release();
         }
 
-        return new Result(pcmBytes, (System.nanoTime() - startedAtNanos) / 1_000_000L);
+        return new Result(pcmBytes, (System.nanoTime() - startedAtNanos) / 1_000_000L,
+                playbackStartedAtNanos, playbackCompletedAtNanos);
     }
 
     private static void skipFully(FileInputStream input, int bytes) throws Exception {
@@ -131,10 +136,15 @@ final class AudioPlayback {
     static final class Result {
         final int pcmBytes;
         final long elapsedMillis;
+        final long playbackStartedAtNanos;
+        final long playbackCompletedAtNanos;
 
-        Result(int pcmBytes, long elapsedMillis) {
+        Result(int pcmBytes, long elapsedMillis, long playbackStartedAtNanos,
+                long playbackCompletedAtNanos) {
             this.pcmBytes = pcmBytes;
             this.elapsedMillis = elapsedMillis;
+            this.playbackStartedAtNanos = playbackStartedAtNanos;
+            this.playbackCompletedAtNanos = playbackCompletedAtNanos;
         }
     }
 }

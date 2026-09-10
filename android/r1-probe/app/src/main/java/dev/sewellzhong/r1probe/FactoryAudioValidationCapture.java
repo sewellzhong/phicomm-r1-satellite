@@ -9,18 +9,33 @@ import java.io.FileOutputStream;
 import java.io.PrintWriter;
 import java.io.RandomAccessFile;
 import java.security.MessageDigest;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Bounded, explicitly unattested capture used only to collect factory-chain evidence. */
 final class FactoryAudioValidationCapture {
     private static final int FRAMES_PER_SECOND = 50;
+    private static final int PLAYBACK_LEAD_IN_MILLIS = 1000;
+    private static final int PLAYBACK_TAIL_MILLIS = 1000;
     private static final char[] HEX = "0123456789abcdef".toCharArray();
 
     private FactoryAudioValidationCapture() {}
 
     static Result record(File outputDirectory, int durationSeconds, String sampleId)
             throws Exception {
+        return record(outputDirectory, durationSeconds, sampleId, null, -1, -1);
+    }
+
+    static Result record(File outputDirectory, int durationSeconds, String sampleId,
+            File playbackReferenceFile, int musicVolumeIndex, int musicVolumeMaxIndex)
+            throws Exception {
         if (durationSeconds < 1 || durationSeconds > 30) {
             throw new IllegalArgumentException("factory_audio_validation_duration_out_of_range");
+        }
+        int playbackPcmBytes = 0;
+        if (playbackReferenceFile != null) {
+            playbackPcmBytes = WavHeader.validate(playbackReferenceFile);
+            validatePlaybackPlan(durationSeconds, playbackPcmBytes,
+                    musicVolumeIndex, musicVolumeMaxIndex);
         }
         String baseName = System.currentTimeMillis() + "-factory-audio-validation-" + sampleId;
         File wavFile = new File(outputDirectory, baseName + ".wav");
@@ -41,6 +56,7 @@ final class FactoryAudioValidationCapture {
         int diagnosticSelectedOutputChannel = 0;
         int diagnosticPcmBytes = 0;
         FactoryAudio.Health startHealth;
+        PlaybackRun playback = null;
 
         FileOutputStream output = new FileOutputStream(wavFile);
         FileOutputStream diagnosticOutput = null;
@@ -49,6 +65,10 @@ final class FactoryAudioValidationCapture {
             FactoryAudioClient client = FactoryAudioClient.connect();
             try {
                 startHealth = client.startUnattestedValidationCapture();
+                if (playbackReferenceFile != null) {
+                    playback = new PlaybackRun(playbackReferenceFile);
+                    playback.start();
+                }
                 while (frames < targetFrames) {
                     FactoryAudio.AudioFrame frame = client.readFrame();
                     long sequence = frame.getSequence();
@@ -98,12 +118,14 @@ final class FactoryAudioValidationCapture {
                     }
                     frames++;
                 }
+                if (playback != null) playback.await(playbackPcmBytes);
                 client.stopCapture();
             } finally {
                 client.close();
             }
             complete = true;
         } finally {
+            if (playback != null) playback.cancelAndAwait();
             if (diagnosticOutput != null) diagnosticOutput.close();
             output.close();
             if (!complete) {
@@ -138,7 +160,9 @@ final class FactoryAudioValidationCapture {
                 diagnosticChannels, diagnosticPcmBytes,
                 diagnosticSelectedOutputChannel,
                 diagnosticChannels > 0 ? diagnosticWavFile.getName() : "",
-                diagnosticChannels > 0 ? sha256(diagnosticWavFile) : "");
+                diagnosticChannels > 0 ? sha256(diagnosticWavFile) : "",
+                startedAtNanos, playbackReferenceFile, playbackPcmBytes,
+                musicVolumeIndex, musicVolumeMaxIndex, playback);
         return new Result(wavFile, diagnosticChannels > 0 ? diagnosticWavFile : null,
                 metadataFile, frames, sequenceGaps, doaValidFrames);
     }
@@ -148,7 +172,9 @@ final class FactoryAudioValidationCapture {
             long firstSequence, long lastSequence, long sequenceGaps, long agentDroppedFrames,
             int doaValidFrames, int[] doaHistogram, String wavSha256, int diagnosticChannels,
             int diagnosticPcmBytes, int diagnosticSelectedOutputChannel,
-            String diagnosticWavName, String diagnosticWavSha256) throws Exception {
+            String diagnosticWavName, String diagnosticWavSha256,
+            long captureStartedAtNanos, File playbackReferenceFile, int playbackPcmBytes,
+            int musicVolumeIndex, int musicVolumeMaxIndex, PlaybackRun playback) throws Exception {
         PrintWriter metadata = new PrintWriter(file, "UTF-8");
         try {
             metadata.println("purpose=R1 factory audio bounded validation capture");
@@ -179,6 +205,24 @@ final class FactoryAudioValidationCapture {
                     + diagnosticSelectedOutputChannel);
             metadata.println("diagnostic_wav_name=" + diagnosticWavName);
             metadata.println("diagnostic_wav_sha256=" + diagnosticWavSha256);
+            metadata.println("playback_reference_present=" + (playbackReferenceFile != null));
+            if (playbackReferenceFile != null) {
+                metadata.println("capture_started_monotonic_ns=" + captureStartedAtNanos);
+                metadata.println("playback_reference_wav_name="
+                        + playbackReferenceFile.getName());
+                metadata.println("playback_reference_wav_sha256="
+                        + sha256(playbackReferenceFile));
+                metadata.println("playback_reference_pcm_bytes=" + playbackPcmBytes);
+                metadata.println("playback_reference_lead_in_ms="
+                        + PLAYBACK_LEAD_IN_MILLIS);
+                metadata.println("playback_started_monotonic_ns=" + playback.startedAtNanos);
+                metadata.println("playback_completed_monotonic_ns=" + playback.completedAtNanos);
+                metadata.println("playback_elapsed_ms=" + playback.result.elapsedMillis);
+                metadata.println("music_volume_index=" + musicVolumeIndex);
+                metadata.println("music_volume_max_index=" + musicVolumeMaxIndex);
+                metadata.println("music_volume_percent="
+                        + Math.round(100.0f * musicVolumeIndex / musicVolumeMaxIndex));
+            }
         } finally {
             metadata.close();
         }
@@ -209,6 +253,80 @@ final class FactoryAudioValidationCapture {
             value.append(HEX[unsigned >>> 4]).append(HEX[unsigned & 0x0f]);
         }
         return value.toString();
+    }
+
+    static void validatePlaybackPlan(int durationSeconds, int playbackPcmBytes,
+            int musicVolumeIndex, int musicVolumeMaxIndex) {
+        long availableMillis = durationSeconds * 1000L
+                - PLAYBACK_LEAD_IN_MILLIS - PLAYBACK_TAIL_MILLIS;
+        long playbackMillis = playbackPcmBytes * 1000L
+                / (WavHeader.SAMPLE_RATE * WavHeader.BYTES_PER_SAMPLE);
+        long availablePcmBytes = availableMillis * WavHeader.SAMPLE_RATE
+                * WavHeader.BYTES_PER_SAMPLE / 1000L;
+        if (playbackPcmBytes <= 0 || (playbackPcmBytes & 1) != 0
+                || playbackMillis <= 0 || playbackPcmBytes > availablePcmBytes) {
+            throw new IllegalArgumentException("factory_audio_playback_reference_too_long");
+        }
+        if (musicVolumeMaxIndex <= 0 || musicVolumeIndex < 0
+                || musicVolumeIndex > musicVolumeMaxIndex) {
+            throw new IllegalArgumentException("factory_audio_music_volume_invalid");
+        }
+    }
+
+    private static final class PlaybackRun implements Runnable {
+        private final File referenceFile;
+        private final AtomicReference<Throwable> failure = new AtomicReference<Throwable>();
+        private final Thread thread;
+        volatile long startedAtNanos;
+        volatile long completedAtNanos;
+        volatile AudioPlayback.Result result;
+
+        PlaybackRun(File referenceFile) {
+            this.referenceFile = referenceFile;
+            thread = new Thread(this, "r1-factory-aec-reference");
+        }
+
+        void start() {
+            thread.start();
+        }
+
+        @Override
+        public void run() {
+            try {
+                Thread.sleep(PLAYBACK_LEAD_IN_MILLIS);
+                result = AudioPlayback.play(referenceFile);
+                startedAtNanos = result.playbackStartedAtNanos;
+                completedAtNanos = result.playbackCompletedAtNanos;
+            } catch (Exception error) {
+                failure.set(error);
+            }
+        }
+
+        void await(int pcmBytes) throws Exception {
+            long playbackMillis = pcmBytes * 1000L
+                    / (WavHeader.SAMPLE_RATE * WavHeader.BYTES_PER_SAMPLE);
+            thread.join(playbackMillis + PLAYBACK_LEAD_IN_MILLIS + 4000L);
+            if (thread.isAlive()) {
+                throw new IllegalStateException("factory_audio_playback_reference_timeout");
+            }
+            Throwable error = failure.get();
+            if (error != null) {
+                throw new IllegalStateException("factory_audio_playback_reference_failed", error);
+            }
+            if (result == null || startedAtNanos <= 0 || completedAtNanos <= startedAtNanos) {
+                throw new IllegalStateException("factory_audio_playback_reference_incomplete");
+            }
+        }
+
+        void cancelAndAwait() {
+            if (!thread.isAlive()) return;
+            thread.interrupt();
+            try {
+                thread.join(4000L);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     static final class Result {

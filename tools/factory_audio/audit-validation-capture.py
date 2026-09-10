@@ -124,7 +124,8 @@ def analyze_diagnostic_wav(path, channels, selected_channel, pcm_bytes, mono_pcm
     }
 
 
-def audit(wav_path, metadata_path, device, diagnostic_wav_path=None):
+def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
+          playback_reference_wav_path=None):
     require(device == "r1-sample01", "device_not_r1_sample01")
     wav_path = Path(wav_path)
     metadata_path = Path(metadata_path)
@@ -186,6 +187,80 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None):
             diagnostic_path, diagnostic_channels, selected_channel,
             diagnostic_pcm_bytes, mono_pcm)
         diagnostic["wav_sha256"] = diagnostic_digest
+    playback_reference_value = values.get("playback_reference_present", "false")
+    require(playback_reference_value in {"true", "false"},
+            "validation_playback_reference_presence_invalid")
+    playback_reference_present = playback_reference_value == "true"
+    playback_reference = None
+    if not playback_reference_present:
+        require(playback_reference_wav_path is None,
+                "validation_unexpected_playback_reference_wav")
+    else:
+        require(playback_reference_wav_path is not None,
+                "validation_playback_reference_wav_missing")
+        reference_path = Path(playback_reference_wav_path)
+        require(reference_path.is_file(), "validation_playback_reference_wav_missing")
+        require(values.get("playback_reference_wav_name") == reference_path.name,
+                "validation_playback_reference_wav_name_mismatch")
+        reference_digest = sha256(reference_path)
+        require(values.get("playback_reference_wav_sha256") == reference_digest,
+                "validation_playback_reference_wav_hash_mismatch")
+        with wave.open(str(reference_path), "rb") as recording:
+            require(recording.getnchannels() == 1,
+                    "validation_playback_reference_not_mono")
+            require(recording.getsampwidth() == 2,
+                    "validation_playback_reference_not_s16le")
+            require(recording.getframerate() == 16000,
+                    "validation_playback_reference_not_16khz")
+            reference_pcm_bytes = recording.getnframes() * 2
+        require(integer(values, "playback_reference_pcm_bytes") == reference_pcm_bytes,
+                "validation_playback_reference_length_mismatch")
+        target_duration_seconds = integer(values, "target_duration_seconds")
+        require(reference_pcm_bytes <= (target_duration_seconds - 2) * 16000 * 2,
+                "validation_playback_reference_too_long")
+        reference_duration_ms = reference_pcm_bytes * 1000 // (16000 * 2)
+        require(integer(values, "playback_reference_lead_in_ms") == 1000,
+                "validation_playback_reference_lead_in_mismatch")
+        capture_started = integer(values, "capture_started_monotonic_ns")
+        playback_started = integer(values, "playback_started_monotonic_ns")
+        playback_completed = integer(values, "playback_completed_monotonic_ns")
+        playback_elapsed_ms = integer(values, "playback_elapsed_ms")
+        require(playback_started >= capture_started + 900_000_000,
+                "validation_playback_reference_started_too_early")
+        require(playback_completed > playback_started,
+                "validation_playback_reference_timing_invalid")
+        require(playback_completed <= capture_started + integer(values, "elapsed_ms") * 1_000_000,
+                "validation_playback_reference_outside_capture")
+        observed_playback_ms = (playback_completed - playback_started) / 1_000_000
+        require(0 < playback_elapsed_ms <= observed_playback_ms + 1,
+                "validation_playback_reference_elapsed_invalid")
+        volume_index = integer(values, "music_volume_index")
+        volume_max_index = integer(values, "music_volume_max_index")
+        require(volume_max_index > 0 and 0 <= volume_index <= volume_max_index,
+                "validation_playback_reference_volume_invalid")
+        volume_percent = integer(values, "music_volume_percent")
+        require(volume_percent == int(100.0 * volume_index / volume_max_index + 0.5),
+                "validation_playback_reference_volume_percent_mismatch")
+        playback_reference = {
+            "wav_sha256": reference_digest,
+            "pcm_bytes": reference_pcm_bytes,
+            "duration_ms": reference_duration_ms,
+            "lead_in_ms": 1000,
+            "started_monotonic_ns": playback_started,
+            "completed_monotonic_ns": playback_completed,
+            "elapsed_ms": playback_elapsed_ms,
+            "music_volume_index": volume_index,
+            "music_volume_max_index": volume_max_index,
+            "music_volume_percent": volume_percent,
+        }
+    if diagnostic is not None and playback_reference is not None:
+        claim_boundary = "transport_reported_doa_runtime_shape_and_controlled_playback_capture"
+    elif diagnostic is not None:
+        claim_boundary = "transport_reported_doa_and_runtime_output_shape"
+    elif playback_reference is not None:
+        claim_boundary = "transport_reported_doa_and_controlled_playback_capture"
+    else:
+        claim_boundary = "transport_and_reported_doa_only"
     return {
         "status": "pass",
         "device": device,
@@ -200,9 +275,9 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None):
         "doa_circular_stats": circular_histogram_stats(histogram),
         "claimed_aec_reference_channels": integer(values, "aec_reference_channels_claimed"),
         "claimed_aec_active": values.get("aec_active_claimed") == "true",
-        "claim_boundary": ("transport_reported_doa_and_runtime_output_shape"
-                           if diagnostic is not None else "transport_and_reported_doa_only"),
+        "claim_boundary": claim_boundary,
         "diagnostic_output": diagnostic,
+        "controlled_playback_reference": playback_reference,
         "unverified": [
             "independent_four_microphone_response",
             "aec_cancellation_effect",
@@ -217,10 +292,12 @@ def main(argv=None):
     parser.add_argument("--wav", required=True)
     parser.add_argument("--metadata", required=True)
     parser.add_argument("--diagnostic-wav")
+    parser.add_argument("--playback-reference-wav")
     parser.add_argument("--output", required=True)
     args = parser.parse_args(argv)
     try:
-        result = audit(args.wav, args.metadata, args.device, args.diagnostic_wav)
+        result = audit(args.wav, args.metadata, args.device, args.diagnostic_wav,
+                       args.playback_reference_wav)
         output = Path(args.output)
         require(not output.exists(), "output_already_exists")
         output.parent.mkdir(parents=True, exist_ok=True)

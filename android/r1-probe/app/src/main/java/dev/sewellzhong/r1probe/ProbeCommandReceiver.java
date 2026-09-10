@@ -3,6 +3,7 @@ package dev.sewellzhong.r1probe;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioManager;
 import android.os.Debug;
 import android.util.Log;
 
@@ -188,10 +189,24 @@ public final class ProbeCommandReceiver extends BroadcastReceiver {
             throws Exception {
         int durationSeconds = clamp(intent.getIntExtra("duration_seconds", 10), 1, 30);
         String sampleId = FileNames.sanitize(intent.getStringExtra("sample_id"));
+        File diagnostics = diagnosticsDir(context);
+        String playbackPath = intent.getStringExtra("playback_reference_path");
+        File playbackReference = playbackPath == null ? null
+                : FileNames.restrictedChild(diagnostics, playbackPath);
+        AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        if (playbackReference != null && audioManager == null) {
+            throw new IllegalStateException("audio_manager_unavailable");
+        }
+        int volumeIndex = playbackReference == null ? -1
+                : audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        int volumeMaxIndex = playbackReference == null ? -1
+                : audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         Log.i(AUDIO_TAG, "R1_FACTORY_AUDIO_VALIDATION_START nonce=" + nonce
-                + " duration_seconds=" + durationSeconds);
+                + " duration_seconds=" + durationSeconds
+                + " playback_reference=" + (playbackReference != null));
         FactoryAudioValidationCapture.Result result = FactoryAudioValidationCapture.record(
-                diagnosticsDir(context), durationSeconds, sampleId);
+                diagnostics, durationSeconds, sampleId, playbackReference,
+                volumeIndex, volumeMaxIndex);
         Log.i(AUDIO_TAG, "R1_FACTORY_AUDIO_VALIDATION_COMPLETE nonce=" + nonce
                 + " wav_path=" + result.wavFile.getAbsolutePath()
                 + " diagnostic_wav_path=" + (result.diagnosticWavFile == null
