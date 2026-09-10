@@ -194,6 +194,8 @@ public final class ProbeCommandReceiver extends BroadcastReceiver {
                 diagnosticsDir(context), durationSeconds, sampleId);
         Log.i(AUDIO_TAG, "R1_FACTORY_AUDIO_VALIDATION_COMPLETE nonce=" + nonce
                 + " wav_path=" + result.wavFile.getAbsolutePath()
+                + " diagnostic_wav_path=" + (result.diagnosticWavFile == null
+                        ? "unavailable" : result.diagnosticWavFile.getAbsolutePath())
                 + " metadata_path=" + result.metadataFile.getAbsolutePath()
                 + " frames=" + result.frames
                 + " sequence_gaps=" + result.sequenceGaps

@@ -281,6 +281,7 @@ struct ClientState {
   uint64_t next_frame_ns = 0;
   uint64_t last_reference_ns = 0;
   uint64_t frame_period_ns = kDefaultFramePeriodNs;
+  bool include_diagnostic_output = false;
   std::vector<uint8_t> input;
 };
 
@@ -320,11 +321,17 @@ bool handle_request(int fd, const Request& request, ClientState* state, AudioBac
     if (!format_is_supported(request.payload)) {
       return reply_error(fd, request.request_id, 4, "pcm_s16le_16000_mono_20ms_required");
     }
+    uint64_t diagnostic = 0;
+    const bool has_diagnostic = read_uint_field(request.payload, 2, &diagnostic);
+    if (has_diagnostic && diagnostic != 1) {
+      return reply_error(fd, request.request_id, 7, "diagnostic_output_flag_invalid");
+    }
     if (!backend->initialize() || !backend->start()) {
       backend->release();
       return reply_error(fd, request.request_id, 3, "backend_start_failed");
     }
     state->streaming = true;
+    state->include_diagnostic_output = has_diagnostic;
     state->sequence = 0;
     state->next_frame_ns = monotonic_ns() + state->frame_period_ns;
     return send_envelope(fd, envelope(request.request_id, 15,
@@ -334,6 +341,7 @@ bool handle_request(int fd, const Request& request, ClientState* state, AudioBac
     backend->stop();
     backend->release();
     state->streaming = false;
+    state->include_diagnostic_output = false;
     return send_envelope(fd, envelope(request.request_id, 15,
         health_message(false, reference_state(*state), state->sequence, state->dropped, *backend)));
   }
@@ -374,6 +382,17 @@ bool emit_frame(int fd, ClientState* state, AudioBackend* backend) {
   if (frame.doa_valid) append_sint32(&audio, 5, frame.doa_degrees);
   append_bool(&audio, 6, frame.doa_valid);
   append_uint(&audio, 7, reference_state(*state));
+  if (state->include_diagnostic_output && !frame.diagnostic_interleaved_pcm.empty()) {
+    const size_t expected = kFrameBytes * frame.diagnostic_output_channels;
+    if (frame.diagnostic_output_channels == 0
+        || frame.diagnostic_interleaved_pcm.size() != expected) {
+      return reply_error(fd, 0, 3, "backend_diagnostic_shape_invalid");
+    }
+    append_bytes(&audio, 8, frame.diagnostic_interleaved_pcm.data(),
+                 frame.diagnostic_interleaved_pcm.size());
+    append_uint(&audio, 9, frame.diagnostic_output_channels);
+    append_uint(&audio, 10, frame.diagnostic_selected_output_channel);
+  }
   return send_envelope(fd, envelope(0, 16, audio));
 }
 

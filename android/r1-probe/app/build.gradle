@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("80")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.80-factory-audio-agent-skeleton")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("81")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.81-factory-audio-r3-capture")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

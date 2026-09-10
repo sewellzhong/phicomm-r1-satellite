@@ -2,8 +2,10 @@
 """Audit a locally pulled factory-agent validation capture; never contacts a device."""
 
 import argparse
+from array import array
 import hashlib
 import json
+import math
 from pathlib import Path
 import sys
 import wave
@@ -43,7 +45,61 @@ def integer(values, key):
         raise RuntimeError(f"metadata_{key}_invalid") from error
 
 
-def audit(wav_path, metadata_path, device):
+def analyze_diagnostic_wav(path, channels, selected_channel, pcm_bytes, mono_pcm):
+    require(channels in (1, 2), "validation_diagnostic_channels_invalid")
+    require(0 <= selected_channel < channels,
+            "validation_diagnostic_selected_channel_invalid")
+    with wave.open(str(path), "rb") as recording:
+        require(recording.getnchannels() == channels,
+                "validation_diagnostic_wav_channel_mismatch")
+        require(recording.getsampwidth() == 2, "validation_diagnostic_wav_not_s16le")
+        require(recording.getframerate() == 16000, "validation_diagnostic_wav_not_16khz")
+        payload = recording.readframes(recording.getnframes())
+    require(len(payload) == pcm_bytes, "validation_diagnostic_wav_length_mismatch")
+    require(len(payload) % (channels * 2) == 0, "validation_diagnostic_pcm_alignment_invalid")
+    samples = array("h")
+    samples.frombytes(payload)
+    if sys.byteorder != "little":
+        samples.byteswap()
+    per_channel = [samples[index::channels] for index in range(channels)]
+    channel_stats = []
+    for values in per_channel:
+        count = len(values)
+        square_sum = sum(value * value for value in values)
+        channel_stats.append({
+            "samples": count,
+            "nonzero_samples": sum(value != 0 for value in values),
+            "peak_absolute": max((abs(value) for value in values), default=0),
+            "rms": math.sqrt(square_sum / count) if count else 0.0,
+        })
+    channel_bytes = []
+    for values in per_channel:
+        encoded = array("h", values)
+        if sys.byteorder != "little":
+            encoded.byteswap()
+        channel_bytes.append(encoded.tobytes())
+    mono_matches = [mono_pcm == value for value in channel_bytes]
+    require(mono_matches[selected_channel], "validation_selected_channel_pcm_mismatch")
+    pair_equal_samples = None
+    pair_identical = None
+    if channels == 2:
+        pair_equal_samples = sum(a == b for a, b in zip(per_channel[0], per_channel[1]))
+        pair_identical = pair_equal_samples == len(per_channel[0])
+    return {
+        "channels": channels,
+        "selected_output_channel": selected_channel,
+        "pcm_bytes": pcm_bytes,
+        "channel_stats": channel_stats,
+        "mono_matches_diagnostic_channels": mono_matches,
+        "channel_pair_equal_samples": pair_equal_samples,
+        "channel_pair_identical": pair_identical,
+        "distinct_nonzero_two_channel_signal": channels == 2
+            and all(item["nonzero_samples"] > 0 for item in channel_stats)
+            and not pair_identical,
+    }
+
+
+def audit(wav_path, metadata_path, device, diagnostic_wav_path=None):
     require(device == "r1-sample01", "device_not_r1_sample01")
     wav_path = Path(wav_path)
     metadata_path = Path(metadata_path)
@@ -80,6 +136,31 @@ def audit(wav_path, metadata_path, device):
         require(recording.getsampwidth() == 2, "validation_wav_not_s16le")
         require(recording.getframerate() == 16000, "validation_wav_not_16khz")
         require(recording.getnframes() * 2 == pcm_bytes, "validation_wav_length_mismatch")
+        mono_pcm = recording.readframes(recording.getnframes())
+    diagnostic_channels = integer(values, "diagnostic_output_channels") \
+        if "diagnostic_output_channels" in values else 0
+    diagnostic_pcm_bytes = integer(values, "diagnostic_pcm_bytes") \
+        if "diagnostic_pcm_bytes" in values else 0
+    diagnostic = None
+    if diagnostic_channels == 0:
+        require(diagnostic_pcm_bytes == 0, "validation_diagnostic_metadata_inconsistent")
+        require(not diagnostic_wav_path, "validation_unexpected_diagnostic_wav")
+    else:
+        selected_channel = integer(values, "diagnostic_selected_output_channel")
+        require(diagnostic_wav_path is not None, "validation_diagnostic_wav_missing")
+        diagnostic_path = Path(diagnostic_wav_path)
+        require(diagnostic_path.is_file(), "validation_diagnostic_wav_missing")
+        require(values.get("diagnostic_wav_name") == diagnostic_path.name,
+                "validation_diagnostic_wav_name_mismatch")
+        diagnostic_digest = sha256(diagnostic_path)
+        require(values.get("diagnostic_wav_sha256") == diagnostic_digest,
+                "validation_diagnostic_wav_hash_mismatch")
+        require(diagnostic_pcm_bytes == frames * 640 * diagnostic_channels,
+                "validation_diagnostic_frame_count_mismatch")
+        diagnostic = analyze_diagnostic_wav(
+            diagnostic_path, diagnostic_channels, selected_channel,
+            diagnostic_pcm_bytes, mono_pcm)
+        diagnostic["wav_sha256"] = diagnostic_digest
     return {
         "status": "pass",
         "device": device,
@@ -91,13 +172,14 @@ def audit(wav_path, metadata_path, device):
         "doa_valid_frames": doa_valid_frames,
         "claimed_aec_reference_channels": integer(values, "aec_reference_channels_claimed"),
         "claimed_aec_active": values.get("aec_active_claimed") == "true",
-        "claim_boundary": "transport_and_reported_doa_only",
+        "claim_boundary": ("transport_reported_doa_and_runtime_output_shape"
+                           if diagnostic is not None else "transport_and_reported_doa_only"),
+        "diagnostic_output": diagnostic,
         "unverified": [
             "independent_four_microphone_response",
-            "runtime_output_channel_shape",
             "aec_cancellation_effect",
             "dsp_output_quality",
-        ],
+        ] + ([] if diagnostic is not None else ["runtime_output_channel_shape"]),
     }
 
 
@@ -106,10 +188,11 @@ def main(argv=None):
     parser.add_argument("--device", required=True)
     parser.add_argument("--wav", required=True)
     parser.add_argument("--metadata", required=True)
+    parser.add_argument("--diagnostic-wav")
     parser.add_argument("--output", required=True)
     args = parser.parse_args(argv)
     try:
-        result = audit(args.wav, args.metadata, args.device)
+        result = audit(args.wav, args.metadata, args.device, args.diagnostic_wav)
         output = Path(args.output)
         require(not output.exists(), "output_already_exists")
         output.parent.mkdir(parents=True, exist_ok=True)

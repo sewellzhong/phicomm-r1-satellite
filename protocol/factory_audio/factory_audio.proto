@@ -51,6 +51,7 @@ message HelloReply {
 
 message StartCapture {
   AudioFormat format = 1;
+  bool include_diagnostic_output = 2;
 }
 
 message StopCapture {}
@@ -78,6 +79,11 @@ message AudioFrame {
   sint32 doa_degrees = 5;
   bool doa_valid = 6;
   ReferenceState reference_state = 7;
+  // Validation-only copy of the vendor backend's complete interleaved output.
+  // Satellite consumers must continue to use pcm_s16le above.
+  bytes diagnostic_interleaved_pcm_s16le = 8;
+  uint32 diagnostic_output_channels = 9;
+  uint32 diagnostic_selected_output_channel = 10;
 }
 
 message PlaybackReference {

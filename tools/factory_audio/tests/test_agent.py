@@ -224,6 +224,7 @@ class AgentTest(unittest.TestCase):
         start.start_capture.format.channels = 1
         start.start_capture.format.sample_width_bytes = 2
         start.start_capture.format.frame_duration_ms = 20
+        start.start_capture.include_diagnostic_output = True
         self.send(start)
         health = self.receive().health
         self.assertEqual("unisound_uni4mic_3448", health.backend_name)
@@ -236,6 +237,25 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(145, frame.doa_degrees)
         self.assertTrue(frame.doa_valid)
         self.assertEqual((1, 3), struct.unpack_from("<hh", frame.pcm_s16le))
+        self.assertEqual(2, frame.diagnostic_output_channels)
+        self.assertEqual(1, frame.diagnostic_selected_output_channel)
+        self.assertEqual(1280, len(frame.diagnostic_interleaved_pcm_s16le))
+        self.assertEqual((0, 1, 2, 3), struct.unpack_from(
+            "<hhhh", frame.diagnostic_interleaved_pcm_s16le))
+
+        stop = self.pb.Envelope(protocol_version=1, request_id=3)
+        stop.stop_capture.SetInParent()
+        self.send(stop)
+        while self.receive().request_id != 3:
+            pass
+        start.request_id = 4
+        start.start_capture.include_diagnostic_output = False
+        self.send(start)
+        while self.receive().request_id != 4:
+            pass
+        production_frame = self.receive().audio_frame
+        self.assertEqual(0, production_frame.diagnostic_output_channels)
+        self.assertEqual(0, len(production_frame.diagnostic_interleaved_pcm_s16le))
 
     def test_vendor_backend_rejects_unproven_defaults(self):
         self.client.close()

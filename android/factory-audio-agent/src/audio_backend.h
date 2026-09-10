@@ -7,6 +7,11 @@
 
 struct BackendFrame {
   std::vector<uint8_t> pcm;
+  // Optional validation-only copy of every vendor output channel. This is never
+  // used as the production satellite stream.
+  std::vector<uint8_t> diagnostic_interleaved_pcm;
+  uint32_t diagnostic_output_channels = 0;
+  uint32_t diagnostic_selected_output_channel = 0;
   int32_t doa_degrees = 0;
   bool doa_valid = false;
 };

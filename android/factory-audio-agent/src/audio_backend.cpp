@@ -29,6 +29,9 @@ bool SyntheticBackend::start() {
 bool SyntheticBackend::read_frame(BackendFrame* frame) {
   if (!streaming_ || frame == nullptr) return false;
   frame->pcm.assign(kMonoFrameBytes, 0);
+  frame->diagnostic_interleaved_pcm.clear();
+  frame->diagnostic_output_channels = 0;
+  frame->diagnostic_selected_output_channel = 0;
   frame->doa_degrees = 0;
   frame->doa_valid = false;
   return true;
@@ -107,6 +110,9 @@ bool VendorBackend::read_frame(BackendFrame* frame) {
   int read_status = pcm_read_(
       handle_, input_buffer_.data(), static_cast<int>(input_buffer_.size()));
   if (read_status < 0) return false;
+  frame->diagnostic_interleaved_pcm = input_buffer_;
+  frame->diagnostic_output_channels = static_cast<uint32_t>(options_.output_channels);
+  frame->diagnostic_selected_output_channel = static_cast<uint32_t>(options_.output_channel);
   frame->pcm.resize(kMonoFrameBytes);
   if (options_.output_channels == 1) {
     memcpy(frame->pcm.data(), input_buffer_.data(), kMonoFrameBytes);

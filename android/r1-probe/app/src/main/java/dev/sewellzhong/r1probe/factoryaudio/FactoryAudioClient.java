@@ -91,7 +91,8 @@ public final class FactoryAudioClient implements Closeable {
                 .setSampleRateHz(16000).setChannels(1).setSampleWidthBytes(2)
                 .setFrameDurationMs(20).build();
         send(requestId, FactoryAudio.Envelope.newBuilder().setStartCapture(
-                FactoryAudio.StartCapture.newBuilder().setFormat(format)));
+                FactoryAudio.StartCapture.newBuilder().setFormat(format)
+                        .setIncludeDiagnosticOutput(!requireProductionAttestation)));
         FactoryAudio.Envelope reply = readReply(requestId);
         if (!reply.hasHealth()
                 || reply.getHealth().getCaptureState()
@@ -240,6 +241,16 @@ public final class FactoryAudioClient implements Closeable {
         if (frame.getPcmS16Le().size() != FRAME_BYTES) {
             throw new IOException("factory_audio_frame_format_mismatch_"
                     + frame.getPcmS16Le().size());
+        }
+        int diagnosticChannels = frame.getDiagnosticOutputChannels();
+        int diagnosticBytes = frame.getDiagnosticInterleavedPcmS16Le().size();
+        if ((diagnosticChannels == 0) != (diagnosticBytes == 0)
+                || diagnosticChannels > 2
+                || diagnosticBytes != diagnosticChannels * FRAME_BYTES
+                || (diagnosticChannels > 0
+                        && frame.getDiagnosticSelectedOutputChannel() >= diagnosticChannels)) {
+            throw new IOException("factory_audio_diagnostic_frame_format_mismatch_"
+                    + diagnosticChannels + "_" + diagnosticBytes);
         }
     }
 

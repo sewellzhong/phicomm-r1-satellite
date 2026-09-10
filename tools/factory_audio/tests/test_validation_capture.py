@@ -1,6 +1,7 @@
 from pathlib import Path
 import hashlib
 import importlib.util
+import struct
 import tempfile
 import unittest
 import wave
@@ -69,6 +70,53 @@ class ValidationCaptureAuditTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             wav_path, metadata = self.fixture(Path(directory), backend="synthetic-fake")
             with self.assertRaisesRegex(RuntimeError, "backend_mismatch"):
+                audit_module.audit(wav_path, metadata, "r1-sample01")
+
+    def test_audits_distinct_stereo_diagnostic_shape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wav_path, metadata = self.fixture(root)
+            diagnostic = root / "capture-diagnostic-stereo.wav"
+            mono = b"".join(struct.pack("<h", sample)
+                            for sample in range(1, 3 * 320 + 1))
+            with wave.open(str(wav_path), "wb") as recording:
+                recording.setparams((1, 2, 16000, 3 * 320, "NONE", "not compressed"))
+                recording.writeframes(mono)
+            stereo = b"".join(struct.pack("<hh", sample, -sample)
+                              for sample in range(1, 3 * 320 + 1))
+            with wave.open(str(diagnostic), "wb") as recording:
+                recording.setparams((2, 2, 16000, 3 * 320, "NONE", "not compressed"))
+                recording.writeframes(stereo)
+            lines = metadata.read_text(encoding="utf-8").splitlines()
+            lines = ["wav_sha256=" + hashlib.sha256(wav_path.read_bytes()).hexdigest()
+                     if line.startswith("wav_sha256=") else line for line in lines]
+            lines.extend([
+                "diagnostic_output_channels=2",
+                f"diagnostic_pcm_bytes={len(stereo)}",
+                "diagnostic_selected_output_channel=0",
+                f"diagnostic_wav_name={diagnostic.name}",
+                "diagnostic_wav_sha256=" + hashlib.sha256(diagnostic.read_bytes()).hexdigest(),
+            ])
+            metadata.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            result = audit_module.audit(
+                wav_path, metadata, "r1-sample01", diagnostic)
+        shape = result["diagnostic_output"]
+        self.assertEqual(2, shape["channels"])
+        self.assertEqual(0, shape["selected_output_channel"])
+        self.assertEqual([True, False], shape["mono_matches_diagnostic_channels"])
+        self.assertTrue(shape["distinct_nonzero_two_channel_signal"])
+        self.assertFalse(shape["channel_pair_identical"])
+        self.assertNotIn("runtime_output_channel_shape", result["unverified"])
+
+    def test_requires_diagnostic_sidecar_when_metadata_claims_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wav_path, metadata = self.fixture(root)
+            with metadata.open("a", encoding="utf-8") as handle:
+                handle.write("diagnostic_output_channels=2\n")
+                handle.write("diagnostic_pcm_bytes=3840\n")
+                handle.write("diagnostic_selected_output_channel=0\n")
+            with self.assertRaisesRegex(RuntimeError, "diagnostic_wav_missing"):
                 audit_module.audit(wav_path, metadata, "r1-sample01")
 
 

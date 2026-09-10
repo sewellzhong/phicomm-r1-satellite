@@ -24,6 +24,7 @@ final class FactoryAudioValidationCapture {
         }
         String baseName = System.currentTimeMillis() + "-factory-audio-validation-" + sampleId;
         File wavFile = new File(outputDirectory, baseName + ".wav");
+        File diagnosticWavFile = new File(outputDirectory, baseName + "-diagnostic-stereo.wav");
         File metadataFile = new File(outputDirectory, baseName + ".meta.txt");
         int targetFrames = durationSeconds * FRAMES_PER_SECOND;
         int frames = 0;
@@ -36,9 +37,13 @@ final class FactoryAudioValidationCapture {
         long startedAtEpochMillis = System.currentTimeMillis();
         long startedAtNanos = System.nanoTime();
         boolean complete = false;
+        int diagnosticChannels = 0;
+        int diagnosticSelectedOutputChannel = 0;
+        int diagnosticPcmBytes = 0;
         FactoryAudio.Health startHealth;
 
         FileOutputStream output = new FileOutputStream(wavFile);
+        FileOutputStream diagnosticOutput = null;
         try {
             output.write(WavHeader.create(0));
             FactoryAudioClient client = FactoryAudioClient.connect();
@@ -67,6 +72,30 @@ final class FactoryAudioValidationCapture {
                         doaHistogram[doa / 10]++;
                     }
                     output.write(frame.getPcmS16Le().toByteArray());
+                    int frameDiagnosticChannels = frame.getDiagnosticOutputChannels();
+                    if (frames == 0 && frameDiagnosticChannels > 0) {
+                        diagnosticChannels = frameDiagnosticChannels;
+                        diagnosticSelectedOutputChannel =
+                                frame.getDiagnosticSelectedOutputChannel();
+                        diagnosticOutput = new FileOutputStream(diagnosticWavFile);
+                        diagnosticOutput.write(WavHeader.create(0, diagnosticChannels));
+                    }
+                    if (frameDiagnosticChannels != diagnosticChannels) {
+                        throw new IllegalStateException(
+                                "factory_audio_validation_diagnostic_shape_changed_"
+                                        + diagnosticChannels + "_" + frameDiagnosticChannels);
+                    }
+                    if (diagnosticChannels > 0
+                            && frame.getDiagnosticSelectedOutputChannel()
+                            != diagnosticSelectedOutputChannel) {
+                        throw new IllegalStateException(
+                                "factory_audio_validation_selected_channel_changed");
+                    }
+                    if (diagnosticOutput != null) {
+                        byte[] diagnostic = frame.getDiagnosticInterleavedPcmS16Le().toByteArray();
+                        diagnosticOutput.write(diagnostic);
+                        diagnosticPcmBytes += diagnostic.length;
+                    }
                     frames++;
                 }
                 client.stopCapture();
@@ -75,8 +104,14 @@ final class FactoryAudioValidationCapture {
             }
             complete = true;
         } finally {
+            if (diagnosticOutput != null) diagnosticOutput.close();
             output.close();
-            if (!complete && wavFile.exists() && !wavFile.delete()) wavFile.deleteOnExit();
+            if (!complete) {
+                if (wavFile.exists() && !wavFile.delete()) wavFile.deleteOnExit();
+                if (diagnosticWavFile.exists() && !diagnosticWavFile.delete()) {
+                    diagnosticWavFile.deleteOnExit();
+                }
+            }
         }
 
         int pcmBytes = frames * FactoryAudioClient.FRAME_BYTES;
@@ -87,17 +122,33 @@ final class FactoryAudioValidationCapture {
         } finally {
             header.close();
         }
+        if (diagnosticChannels > 0) {
+            RandomAccessFile diagnosticHeader = new RandomAccessFile(diagnosticWavFile, "rw");
+            try {
+                diagnosticHeader.seek(0);
+                diagnosticHeader.write(WavHeader.create(diagnosticPcmBytes, diagnosticChannels));
+            } finally {
+                diagnosticHeader.close();
+            }
+        }
         long elapsedMillis = (System.nanoTime() - startedAtNanos) / 1_000_000L;
         writeMetadata(metadataFile, durationSeconds, startedAtEpochMillis, elapsedMillis,
                 startHealth, frames, pcmBytes, firstSequence, lastSequence, sequenceGaps,
-                agentDroppedFrames, doaValidFrames, doaHistogram, sha256(wavFile));
-        return new Result(wavFile, metadataFile, frames, sequenceGaps, doaValidFrames);
+                agentDroppedFrames, doaValidFrames, doaHistogram, sha256(wavFile),
+                diagnosticChannels, diagnosticPcmBytes,
+                diagnosticSelectedOutputChannel,
+                diagnosticChannels > 0 ? diagnosticWavFile.getName() : "",
+                diagnosticChannels > 0 ? sha256(diagnosticWavFile) : "");
+        return new Result(wavFile, diagnosticChannels > 0 ? diagnosticWavFile : null,
+                metadataFile, frames, sequenceGaps, doaValidFrames);
     }
 
     private static void writeMetadata(File file, int durationSeconds, long startedAtEpochMillis,
             long elapsedMillis, FactoryAudio.Health health, int frames, int pcmBytes,
             long firstSequence, long lastSequence, long sequenceGaps, long agentDroppedFrames,
-            int doaValidFrames, int[] doaHistogram, String wavSha256) throws Exception {
+            int doaValidFrames, int[] doaHistogram, String wavSha256, int diagnosticChannels,
+            int diagnosticPcmBytes, int diagnosticSelectedOutputChannel,
+            String diagnosticWavName, String diagnosticWavSha256) throws Exception {
         PrintWriter metadata = new PrintWriter(file, "UTF-8");
         try {
             metadata.println("purpose=R1 factory audio bounded validation capture");
@@ -122,6 +173,12 @@ final class FactoryAudioValidationCapture {
             metadata.println("doa_valid_frames=" + doaValidFrames);
             metadata.println("doa_histogram_10_degrees=" + join(doaHistogram));
             metadata.println("wav_sha256=" + wavSha256);
+            metadata.println("diagnostic_output_channels=" + diagnosticChannels);
+            metadata.println("diagnostic_pcm_bytes=" + diagnosticPcmBytes);
+            metadata.println("diagnostic_selected_output_channel="
+                    + diagnosticSelectedOutputChannel);
+            metadata.println("diagnostic_wav_name=" + diagnosticWavName);
+            metadata.println("diagnostic_wav_sha256=" + diagnosticWavSha256);
         } finally {
             metadata.close();
         }
@@ -156,14 +213,17 @@ final class FactoryAudioValidationCapture {
 
     static final class Result {
         final File wavFile;
+        final File diagnosticWavFile;
         final File metadataFile;
         final int frames;
         final long sequenceGaps;
         final int doaValidFrames;
 
-        Result(File wavFile, File metadataFile, int frames, long sequenceGaps,
+        Result(File wavFile, File diagnosticWavFile, File metadataFile, int frames,
+                long sequenceGaps,
                 int doaValidFrames) {
             this.wavFile = wavFile;
+            this.diagnosticWavFile = diagnosticWavFile;
             this.metadataFile = metadataFile;
             this.frames = frames;
             this.sequenceGaps = sequenceGaps;

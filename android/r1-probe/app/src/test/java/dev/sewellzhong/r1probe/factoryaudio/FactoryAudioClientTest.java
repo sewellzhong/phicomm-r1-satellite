@@ -143,6 +143,33 @@ public class FactoryAudioClientTest {
         throw new AssertionError("synthetic backend entered validation capture");
     }
 
+    @Test public void malformedDiagnosticShapeIsRejected() throws Exception {
+        ByteArrayOutputStream replies = new ByteArrayOutputStream();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(1)
+                .setHelloReply(FactoryAudio.HelloReply.newBuilder().setSelectedVersion(1)).build());
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setAudioFrame(FactoryAudio.AudioFrame.newBuilder()
+                        .setSequence(1).setPcmS16Le(ByteString.copyFrom(new byte[640]))
+                        .setDiagnosticOutputChannels(2)
+                        .setDiagnosticInterleavedPcmS16Le(
+                                ByteString.copyFrom(new byte[640]))).build());
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(2)
+                .setHealth(provenStreamingHealth()).build());
+        FactoryAudioClient client = new FactoryAudioClient(null,
+                new ByteArrayInputStream(replies.toByteArray()), new ByteArrayOutputStream());
+        client.negotiate();
+        try {
+            client.startCapture();
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().startsWith(
+                    "factory_audio_diagnostic_frame_format_mismatch_"));
+            return;
+        }
+        throw new AssertionError("malformed diagnostic frame accepted");
+    }
+
     @Test public void explicitAgentErrorIsSurfacedWithoutFallback() throws Exception {
         ByteArrayOutputStream replies = new ByteArrayOutputStream();
         FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
