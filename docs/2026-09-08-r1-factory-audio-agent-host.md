@@ -218,6 +218,23 @@ v80设备APK SHA-256为`5883f28d2eb11aed9b6b14581b848b2b1fd628a876e4628f813f8a3b
 
 提交`519def937b28b095dbfd0e63ea17cb7e6ed30e9e`实现上述受控播放同步采集。正式
 `tools/factory_audio/check.sh`通过56项；新增Java纯逻辑JUnit 4项使用缓存API类库完成
-Java 8定向编译和运行。公开文件扫描360项0发现，凭据扫描无泄漏。当前主机缺少Android
-SDK，完整Gradle入口在解析SDK位置时停止，故本次没有完整APK、lint或hostcheck
-哈希。没有连接ADB、没有构建设备签名APK、没有修改boot；v82及AEC仍待实机验证。
+Java 8定向编译和运行。首次运行时未发现Android SDK路径，故当时完整Gradle入口在解析SDK
+位置停止。
+
+同日后续在提交`76a2b4fba029a50d6bc090cae93e8cd691ff9b36`发现并固定本机SDK/NDK路径后，重新执行
+`python3 tools/dev/prepare.py`及离线`bash tools/dev/check.sh`。统一检查通过Android 171项、
+lint与hostcheck构建、native 32项、R0恢复73项及桌面演练、原厂音频56项、HA 44项和
+HA 2026.8.2容器配置加载；公开扫描361项0发现，凭据扫描无泄漏。随后省略`hostCheck`
+再次执行`testDebugUnitTest lintDebug assembleDebug`，生成包名`dev.sewellzhong.r1probe`、
+versionCode 82、min/target SDK 22的设备APK。v1/v2签名验证通过，证书SHA-256与v79一致为
+`0be7a3643442658354c185ec53cb50e73bc1516a56f2760ca46f2c932c1d2639`，APK SHA-256为
+`b115b5077da502a7fbe9efd8a21e2cee6c2e5ae084e8c176d8ace79d52db1c73`。候选仅保留在被忽略的
+本地`test-results/2026-09-11-r1-sample01-v82-candidate/`，不提交含私有提示音的APK。
+
+本次重建的ARMv7代理SHA-256仍为
+`d06325edb1b048bec990c822a015986b762a27263cc8d5ffd0e9a7ad337e5843`，与v81主机基线一致；但设备
+当前v13 boot内仍是v80代理
+`4a2e7e8d4be302cd4e87bac88a838bccdc2f1058cccaa20762e0202133e13be0`。双通道诊断旁路由代理提供，
+所以实机采集前仍须以双份一致的当前boot为输入生成固定候选，并执行身份/范围核对、boot双读、
+单次写入和复位前完整读回门禁。没有连接ADB、没有修改boot、没有安装APK或采集录音；v82运行时
+通道形状、播放参考覆盖、AEC消除量、四麦独立响应及DSP质量仍待实机验证。
