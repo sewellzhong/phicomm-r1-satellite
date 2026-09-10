@@ -231,8 +231,10 @@ class AgentTest(unittest.TestCase):
         self.assertEqual("MOCK_UNI_4MIC_V1.1", health.vendor_board_version)
         self.assertEqual(4, health.raw_mic_channels)
         self.assertEqual(0, health.aec_reference_channels)
+        self.assertEqual(2, health.configured_aec_reference_channels)
         self.assertTrue(health.array_processing_active)
         self.assertFalse(health.aec_active)
+        self.assertTrue(health.aec_configured)
         frame = self.receive().audio_frame
         self.assertEqual(145, frame.doa_degrees)
         self.assertTrue(frame.doa_valid)

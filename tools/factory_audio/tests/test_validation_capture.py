@@ -36,8 +36,10 @@ class ValidationCaptureAuditTest(unittest.TestCase):
             "vendor_board_version=UNI_4MIC_HAL_ANDROID_V1.1",
             "raw_mic_channels_claimed=4",
             "aec_reference_channels_claimed=0",
+            "aec_reference_channels_configured=2",
             "array_processing_claimed=true",
             "aec_active_claimed=false",
+            "aec_configured=true",
             f"frames={frames}",
             f"pcm_bytes={frames * 640}",
             "first_sequence=1",
@@ -158,7 +160,22 @@ class ValidationCaptureAuditTest(unittest.TestCase):
             result["claim_boundary"])
         self.assertEqual(60, result["controlled_playback_reference"]["music_volume_percent"])
         self.assertEqual(10, result["controlled_playback_reference"]["elapsed_clock_tolerance_ms"])
+        self.assertEqual(2, result["configured_aec_reference_channels"])
+        self.assertTrue(result["aec_configured"])
+        self.assertEqual(0, result["claimed_aec_reference_channels"])
+        self.assertFalse(result["claimed_aec_active"])
         self.assertIn("aec_cancellation_effect", result["unverified"])
+
+    def test_configured_aec_does_not_permit_attested_aec_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wav, metadata = self.fixture(root)
+            text = metadata.read_text().replace(
+                "aec_reference_channels_claimed=0",
+                "aec_reference_channels_claimed=2")
+            metadata.write_text(text)
+            with self.assertRaisesRegex(RuntimeError, "unproven_aec_channels_claimed"):
+                audit_module.audit(wav, metadata, "r1-sample01")
 
     def test_playback_elapsed_clock_tolerance_is_bounded(self):
         self.assertTrue(audit_module.playback_elapsed_consistent(5396, 5394.49))

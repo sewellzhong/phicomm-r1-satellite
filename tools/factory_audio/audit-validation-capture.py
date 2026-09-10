@@ -145,6 +145,14 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
     require(values.get("vendor_board_version"), "validation_board_version_missing")
     require(integer(values, "raw_mic_channels_claimed") == 4,
             "validation_four_mic_claim_missing")
+    require(integer(values, "aec_reference_channels_configured") == 2,
+            "validation_aec_configuration_missing")
+    require(values.get("aec_configured") == "true",
+            "validation_aec_configuration_missing")
+    require(integer(values, "aec_reference_channels_claimed") == 0,
+            "validation_unproven_aec_channels_claimed")
+    require(values.get("aec_active_claimed") == "false",
+            "validation_unproven_aec_activity_claimed")
     require(values.get("array_processing_claimed") == "true",
             "validation_array_claim_missing")
     frames = integer(values, "frames")
@@ -281,6 +289,9 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
         "doa_circular_stats": circular_histogram_stats(histogram),
         "claimed_aec_reference_channels": integer(values, "aec_reference_channels_claimed"),
         "claimed_aec_active": values.get("aec_active_claimed") == "true",
+        "configured_aec_reference_channels": integer(
+            values, "aec_reference_channels_configured"),
+        "aec_configured": values.get("aec_configured") == "true",
         "claim_boundary": claim_boundary,
         "diagnostic_output": diagnostic,
         "controlled_playback_reference": playback_reference,

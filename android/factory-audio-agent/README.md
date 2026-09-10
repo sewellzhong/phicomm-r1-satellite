@@ -10,8 +10,11 @@ the proven input/output shape. It dynamically loads the library already present
 on the device, follows the audited 3448 initialization sequence, disables vendor
 debug recording, exposes DOA, and emits one 16 kHz S16LE mono channel. It rejects
 playback-reference messages and reports AEC inactive until a real R1 test proves
-the two hardware references and playback-source coverage. This prevents an
-initialized library from being mistaken for a proven factory AEC chain.
+the two hardware references and playback-source coverage. Separate health fields
+report that the pinned 3448 vendor topology configures two AEC reference channels
+and enables AEC; those configuration fields are never accepted as attestation.
+This prevents an initialized library from being mistaken for a proven factory AEC
+chain and makes the previous conservative zero/false values unambiguous.
 
 The production socket is `/dev/socket/r1_factory_audio`. The agent requires an
 explicit `--expected-uid`, uses mode `0660`, and verifies each connection with

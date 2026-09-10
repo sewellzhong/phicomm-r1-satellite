@@ -31,6 +31,11 @@ class AudioBackend {
   virtual uint32_t aec_reference_channels() const { return 0; }
   virtual bool array_processing_active() const { return false; }
   virtual bool aec_active() const { return false; }
+  // Configuration is intentionally separate from attestation.  A vendor config
+  // can declare AEC inputs without proving that a particular playback reached
+  // them or that cancellation occurred in the emitted stream.
+  virtual uint32_t configured_aec_reference_channels() const { return 0; }
+  virtual bool aec_configured() const { return false; }
 };
 
 class SyntheticBackend final : public AudioBackend {
@@ -71,6 +76,10 @@ class VendorBackend final : public AudioBackend {
   uint32_t aec_reference_channels() const override { return 0; }
   bool array_processing_active() const override { return initialized_; }
   bool aec_active() const override { return false; }
+  uint32_t configured_aec_reference_channels() const override {
+    return initialized_ ? 2 : 0;
+  }
+  bool aec_configured() const override { return initialized_; }
 
  private:
   bool resolve_symbols();

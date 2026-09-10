@@ -69,6 +69,10 @@ message Health {
   uint32 aec_reference_channels = 9;
   bool array_processing_active = 10;
   bool aec_active = 11;
+  // Vendor topology/configuration only. These fields never attest playback
+  // reference coverage or cancellation in the emitted stream.
+  uint32 configured_aec_reference_channels = 12;
+  bool aec_configured = 13;
 }
 
 message AudioFrame {

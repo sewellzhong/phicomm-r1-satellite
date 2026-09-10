@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("82")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.82-factory-audio-aec-capture")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("83")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.83-factory-audio-aec-boundary")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

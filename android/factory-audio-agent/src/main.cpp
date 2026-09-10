@@ -260,6 +260,8 @@ std::vector<uint8_t> health_message(bool streaming, int reference_state,
   append_uint(&result, 9, backend.aec_reference_channels());
   append_bool(&result, 10, backend.array_processing_active());
   append_bool(&result, 11, backend.aec_active());
+  append_uint(&result, 12, backend.configured_aec_reference_channels());
+  append_bool(&result, 13, backend.aec_configured());
   return result;
 }
 

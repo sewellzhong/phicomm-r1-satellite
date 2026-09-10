@@ -188,8 +188,11 @@ final class FactoryAudioValidationCapture {
             metadata.println("vendor_board_version=" + health.getVendorBoardVersion());
             metadata.println("raw_mic_channels_claimed=" + health.getRawMicChannels());
             metadata.println("aec_reference_channels_claimed=" + health.getAecReferenceChannels());
+            metadata.println("aec_reference_channels_configured="
+                    + health.getConfiguredAecReferenceChannels());
             metadata.println("array_processing_claimed=" + health.getArrayProcessingActive());
             metadata.println("aec_active_claimed=" + health.getAecActive());
+            metadata.println("aec_configured=" + health.getAecConfigured());
             metadata.println("frames=" + frames);
             metadata.println("pcm_bytes=" + pcmBytes);
             metadata.println("first_sequence=" + firstSequence);
