@@ -140,7 +140,8 @@ class ValidationCaptureAuditTest(unittest.TestCase):
                 handle.write("playback_reference_lead_in_ms=1000\n")
                 handle.write(f"playback_started_monotonic_ns={playback_started}\n")
                 handle.write(f"playback_completed_monotonic_ns={playback_completed}\n")
-                handle.write("playback_elapsed_ms=1050\n")
+                # Device wall-time duration may quantize slightly above monotonic endpoints.
+                handle.write("playback_elapsed_ms=1102\n")
                 handle.write("music_volume_index=9\n")
                 handle.write("music_volume_max_index=15\n")
                 handle.write("music_volume_percent=60\n")
@@ -156,7 +157,12 @@ class ValidationCaptureAuditTest(unittest.TestCase):
             "transport_reported_doa_and_controlled_playback_capture",
             result["claim_boundary"])
         self.assertEqual(60, result["controlled_playback_reference"]["music_volume_percent"])
+        self.assertEqual(10, result["controlled_playback_reference"]["elapsed_clock_tolerance_ms"])
         self.assertIn("aec_cancellation_effect", result["unverified"])
+
+    def test_playback_elapsed_clock_tolerance_is_bounded(self):
+        self.assertTrue(audit_module.playback_elapsed_consistent(5396, 5394.49))
+        self.assertFalse(audit_module.playback_elapsed_consistent(5405, 5394.49))
 
     def test_requires_playback_sidecar_when_metadata_claims_it(self):
         with tempfile.TemporaryDirectory() as directory:

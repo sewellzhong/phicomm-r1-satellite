@@ -12,6 +12,7 @@ import wave
 
 
 EXPECTED_BACKEND = "unisound_uni4mic_3448"
+PLAYBACK_ELAPSED_CLOCK_TOLERANCE_MS = 10
 
 
 def require(condition, message):
@@ -43,6 +44,10 @@ def integer(values, key):
         return int(values[key])
     except ValueError as error:
         raise RuntimeError(f"metadata_{key}_invalid") from error
+
+
+def playback_elapsed_consistent(reported_ms, observed_ms):
+    return 0 < reported_ms <= observed_ms + PLAYBACK_ELAPSED_CLOCK_TOLERANCE_MS
 
 
 def circular_histogram_stats(histogram):
@@ -232,7 +237,7 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
         require(playback_completed <= capture_started + integer(values, "elapsed_ms") * 1_000_000,
                 "validation_playback_reference_outside_capture")
         observed_playback_ms = (playback_completed - playback_started) / 1_000_000
-        require(0 < playback_elapsed_ms <= observed_playback_ms + 1,
+        require(playback_elapsed_consistent(playback_elapsed_ms, observed_playback_ms),
                 "validation_playback_reference_elapsed_invalid")
         volume_index = integer(values, "music_volume_index")
         volume_max_index = integer(values, "music_volume_max_index")
@@ -249,6 +254,7 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
             "started_monotonic_ns": playback_started,
             "completed_monotonic_ns": playback_completed,
             "elapsed_ms": playback_elapsed_ms,
+            "elapsed_clock_tolerance_ms": PLAYBACK_ELAPSED_CLOCK_TOLERANCE_MS,
             "music_volume_index": volume_index,
             "music_volume_max_index": volume_max_index,
             "music_volume_percent": volume_percent,
