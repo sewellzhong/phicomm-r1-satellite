@@ -66,6 +66,17 @@ python3 tools/recovery/rehearse.py
 已补充证明 R1 上的 HAL/MicArray 初始化和真人原厂唤醒，但仍未证明实际 PCM、DOA、
 AEC消除量或 DSP 输出质量。hostcheck APK、mock 库和未过门槛的代理都不得部署为设备候选。
 
+2026-09-10在不连接设备的前提下，从已双读复核的Loader image A/B副本提取system分区，
+两份805,306,368字节镜像的SHA-256一致。固定白名单内的原厂APK、JNI、四麦HAL、
+圆形/线性MicArray、软件AEC库、配置及AK7755 data2固件完成来源复核和私有反汇编。
+原APK调用证据确认 `openAudioIn(2)` 及4,800字节读取缓冲，但该长度不能证明有效输出通道；
+当前代理的显式通道参数和AEC失败关闭策略保持不变。详见
+[system与原厂音频离线审计](2026-09-10-r1-system-audio-offline-audit.md)。
+
+离线审计增量的统一检查通过Android 168项、lint、native 32项、恢复73项与桌面演练、
+原厂代理/策略/ABI/离线审计37项、HA 44项、API 22 ARMv7交叉构建、公开审计及凭据扫描。
+hostcheck APK和ARMv7代理哈希与上述已记录基线一致；本步没有构建设备签名APK。
+
 ## 实机续接入口
 
 2026-09-08 的只读预检已确认 `r1-sample01` 为 3448/API 22、SELinux Enforcing、

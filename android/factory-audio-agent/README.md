@@ -26,3 +26,10 @@ Host build and tests are run by `bash tools/factory_audio/check.sh`. When the
 pinned SDK/NDK is available, the same check builds Android API 22 ARMv7; the
 CMake project rejects other Android ABIs and newer API levels. Vendor tests use
 a self-owned mock shared library and never copy an R1 library into the build.
+
+`tools/factory_audio/audit-offline-chain.py` separately verifies and extracts
+the system partition from the private A/B image chunks, then audits a fixed
+allowlist of factory-audio inputs. All extracted bytes and disassembly remain
+under ignored private storage. The public reference records hashes and static
+JNI facts only; a 4,800-byte original read buffer does not prove its runtime
+channel layout and therefore cannot unlock the production backend.

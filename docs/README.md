@@ -20,6 +20,8 @@
 
 - [r1-sample01 原厂 boot/recovery 离线基线](2026-09-10-r1-boot-recovery-baseline.md)：从已复核Loader image双份副本提取原厂kernel、boot、recovery，记录Android boot image、ramdisk、RSCE/DTB及音频硬件约束；不改变R0门槛。
 
+- [r1-sample01 system与原厂音频离线审计](2026-09-10-r1-system-audio-offline-audit.md)：从已复核Loader image双份提取system，固定白名单校验原厂音频材料并记录APK/JNI静态接口；实际通道、PCM、DOA和AEC仍待实机证明。
+
 - [全链路优化分析与开发任务 O1～O8](2026-09-07-r1-chain-optimization.md)：现状证据、任务依赖、HA 外部交接及验证要求；已纳入后续开发，未视为实现或验收。
 
 - [首台功能盘点、必要性与语音/HA 双入口管理](2026-09-07-r1-feature-requirements.md)：2026-09-07 用户确认的目标需求，未实现项及验收状态分别记录。

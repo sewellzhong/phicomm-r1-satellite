@@ -1,5 +1,9 @@
 {
   "abi": "armeabi-v7a",
+  "device": {
+    "build_fingerprint": "Android/rk322x_echo/rk322x_echo:5.1.1/LMY49F/3448:user/release-keys",
+    "id": "r1-sample01"
+  },
   "configuration": {
     "aec_enabled_in_unisound_config": true,
     "aec_filter_count": 12,
@@ -13,9 +17,33 @@
   },
   "libraries": {
     "libUni4micHalJNI.so": "629593e759fbeade5960361b631d69296ebe47df1e889ce64a8cb7128aa25886",
+    "libUniLinearMicArray.so": "74b29ca53acb5890a65711936fe860661773018cc5fc156d904e8506dc90ab92",
     "libUniMicArray.so": "bc49e20aa671053932b1cfc21cb1d6492ac428a4c24d5d6cebcddc7f573769b9",
+    "libaec.so": "3a4f8d92b404a24e7d93b483f3fe0c887f05b90db3a71a4ce531102ac10afd05",
     "libuni4michal.so": "ce49904fd7e82446fed671f9ed8da398480ab7c3263bc6a29aafd0f13c1d504a",
     "libuni4michalchance.so": "24de008fc20cd60111c1ba33fd2743f193f8b5f71a93bcafac13497c8fcd72fb"
+  },
+  "offline_provenance": {
+    "ak7755_cram_data2_sha256": "c92d623efdf2a3a25b529c08ae97c95491c7f1966c9ecc3a2b22feb08e3a93d4",
+    "ak7755_ofreg_data2_sha256": "60651af8c30aa3b38feeee60588a8664ee80b4071953a4dd3d96158e5fc875ca",
+    "ak7755_pram_data2_sha256": "c85ca43c9ee53febea15ffdd1b59b49d23c67b47ff7811862751bb6e528dce1a",
+    "system_partition_bytes": 805306368,
+    "system_partition_sha256": "51f125c7b385a9d9306897d733f3d5674f7efc7ac79b36433138a50b9ad0d242",
+    "unisound_apk_sha256": "a0548242414666d27df9b099e85ab69697cc5c1599f019ce34dd2460f8841bd7"
+  },
+  "original_java_contract": {
+    "four_mic_manager_class": "com.unisound.sdk.x",
+    "four_mic_read_buffer_bytes": 4800,
+    "jni_class": "com.unisound.jni.Uni4micHalJNI",
+    "jni_read_signature": "readData(long, byte[], int): int",
+    "open_audio_in_argument": 2,
+    "runtime_output_channels": "pending",
+    "static_evidence_offsets": {
+      "close_sequence": "classes.dex:0x26ab18-0x26ab28",
+      "initialization_sequence": "classes.dex:0x26ac14-0x26ac78",
+      "open_and_start": "classes.dex:0x26a9f2-0x26aa06",
+      "read_and_callback": "classes.dex:0x26acfe-0x26ad14"
+    }
   },
   "native_call_sequence": [
     "uni_4mic_hal_init(1)",
@@ -32,5 +60,6 @@
   "return_contracts": {
     "uni_4mic_pcm_read": "forwards tinyalsa pcm_read status: 0 success, negative failure"
   },
+  "schema_version": 1,
   "status": "static_abi_confirmed_runtime_shape_pending"
 }
