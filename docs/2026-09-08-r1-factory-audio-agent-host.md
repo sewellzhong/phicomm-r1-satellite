@@ -45,6 +45,20 @@ APK 客户端固定请求 PCM S16LE、16 kHz、单声道、20 ms/帧，并校验
 运行时通道形状、AEC消除量和DSP质量为未验证。诊断WAV可能包含家庭对话，默认只保留在
 本地，不提交仓库。
 
+v81代码提交`f7723c945da5dc222b5d058f6265c3492db6e335`在同一v1协议中增加向后兼容字段，只有`startUnattestedValidationCapture()`显式请求时，
+代理才附带原厂读取缓冲中的全部交错输出通道；生产`startCapture()`不会发送该旁路。
+验证动作在原单声道WAV之外保存`-diagnostic-stereo.wav`，元数据绑定文件名、通道数、长度和
+SHA-256。离线审计逐通道统计非零样本、峰值、RMS、两通道相同样本数，并核对生产单声道
+实际映射到哪一路。该证据只能回答原厂接口本次实际返回的输出形状，不能把两路输出解释为
+四个独立麦克风，也不能证明AEC消除量或DSP质量。v81主机代码尚未部署到R1。
+
+v81统一主机检查通过：Android 171项、lint、native工具32项、R0恢复73项与桌面演练、
+原厂代理/策略/ABI/离线审计50项、HA 44项、配置加载、公开审计和API 22 ARMv7交叉构建。
+hostcheck APK SHA-256为
+`517b3fa7dc46d5cba801a7e51099bd93cb9e5f6f1e0aa12a7ac5b32b443676a7`，ARMv7代理
+SHA-256为`d06325edb1b048bec990c822a015986b762a27263cc8d5ffd0e9a7ad337e5843`。
+两者均为主机产物，未签名为设备候选，也未连接ADB或HA。
+
 ## 主机验证
 
 运行：
@@ -133,9 +147,13 @@ adb -s <adb-serial> shell am broadcast \
 
 ```bash
 python3 tools/factory_audio/audit-validation-capture.py \
-  --device r1-sample01 --wav <local-wav> --metadata <local-meta> \
+  --device r1-sample01 --wav <local-wav> \
+  --diagnostic-wav <local-diagnostic-stereo-wav> --metadata <local-meta> \
   --output <new-local-report.json>
 ```
+
+旧v80采集没有诊断旁路，继续省略`--diagnostic-wav`即可复核；其报告会继续将运行时通道形状
+列为未验证。v81必须同时拉回三个文件，缺少或篡改双通道旁路时审计拒绝。
 
 ## 2026-09-11实机结果
 
