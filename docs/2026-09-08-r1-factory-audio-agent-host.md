@@ -238,3 +238,33 @@ versionCode 82、min/target SDK 22的设备APK。v1/v2签名验证通过，证�
 所以实机采集前仍须以双份一致的当前boot为输入生成固定候选，并执行身份/范围核对、boot双读、
 单次写入和复位前完整读回门禁。没有连接ADB、没有修改boot、没有安装APK或采集录音；v82运行时
 通道形状、播放参考覆盖、AEC消除量、四麦独立响应及DSP质量仍待实机验证。
+
+为避免放宽只接受原厂boot的首次植入构建器，新增
+`tools/factory_audio/update-experimental-boot-agent.py`作为独立增量路径。它要求现场新读出的当前
+boot A/B逐字节哈希一致，并绑定当前候选清单、当前overlay清单、设备身份、精确boot地址/长度、
+Rockchip扩展SHA及旧代理嵌入哈希；新代理还须以命令行固定SHA-256并确认为ARM ELF32。构建与
+重解析会核对kernel、second/DTB、地址、页大小和除代理外所有cpio条目及元数据不变，私有输出
+清单只允许`ramdisk_agent`一项变化；同一路径、硬链接或符号链接不能充当两份当前boot。主机已有历史v13镜像和一次写后读回，但它们不替代本轮
+现场双读，因此尚未生成可写入的v14固定候选。
+
+现场在完成Android身份/fingerprint核对并从Loader取得两份当前boot后，离线生成命令为：
+
+```bash
+python3 tools/factory_audio/update-experimental-boot-agent.py \
+  --current-boot-a <fresh-current-boot-a.img> \
+  --current-boot-b <fresh-current-boot-b.img> \
+  --current-boot-manifest <v13-boot-image-manifest.json> \
+  --current-overlay-manifest <v13-overlay-manifest.json> \
+  --agent <pinned-v81-armv7-agent> \
+  --expected-agent-sha256 d06325edb1b048bec990c822a015986b762a27263cc8d5ffd0e9a7ad337e5843 \
+  --output-dir <new-private-v14-candidate-directory>
+```
+
+构建器不接触设备也不执行写入。生成后仍须由私有写入器重新核对现场身份、工具哈希、LBA
+98304/24576扇区、候选哈希和单次写入，并在复位前完整读回匹配；任何不符立即停止。
+
+统一检查通过原厂音频61项（其中增量构建器5项）、Android 171项及lint/hostcheck、native
+32项、R0恢复73项与演练、HA 44项和HA 2026.8.2配置加载。另以两份独立构建且一致的历史
+v13镜像完成真实格式兼容演练，成功识别旧代理`4a2e7e8d…13be0`和新代理
+`d06325ed…e5843`，演练镜像为`53911d71…e7110`，私有清单为`e042a09e…84b1`。该演练输入
+不是本轮设备新读副本，产物明确不得写入。
