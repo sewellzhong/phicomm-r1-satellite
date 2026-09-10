@@ -4,7 +4,7 @@
 
 本手册服务于[原厂四麦与音频调校优先路线](2026-09-08-r1-factory-audio-root-plan.md)的 R0 门槛。`r1-recovery.py` 只读取已经导出的本地镜像，生成哈希清单并判断门槛状态；它没有设备传输、擦除或写入能力。`r1-rockusb-readonly.py` 提供固定只读查询；`r1-rockusb-ram-loader.py` 只允许离线构建校验和在确认 `bcdUSB=2.00` Maskrom 后单次加载RAM。两者都不提供复位、存储切换、写入或擦除入口。完整备份、低层恢复入口和受控完整回刷均须在 `r1-sample01` 真机完成，因此当前状态仍是“待验证”。
 
-任何永久 Root、补丁 boot、SELinux、recovery、system 或分区改写都必须等待本手册的最终门槛报告为 `pass`，或用户明确例外对应的 `pass_with_exception`。不得把普通 ADB 文件备份、公开 OTA 或旧版 APK 回退基线当成完整 eMMC 恢复基线。
+默认情况下，任何永久Root、补丁boot、SELinux、recovery、system或分区改写都必须等待本手册的最终门槛报告为`pass`，或用户明确例外对应的`pass_with_exception`。2026-09-11的[免拆分级授权](2026-09-11-r1-no-disassembly-authorization.md)另行允许当前`r1-sample01`/3448基线在R0 pending时，按目标分区双读、候选固定、单次写入和复位前完整读回门禁推进必要的boot/system/recovery修改；这不会让本工具报告通过。不得把普通ADB文件备份、公开OTA或旧版APK回退基线当成完整eMMC恢复基线。
 
 默认要求所有实际镜像放在仓库外的两份独立加密存储。建议在本地使用已忽略的 `local-recovery/` 只保存清单草稿和脱敏报告，不放镜像、凭据、原厂库、APK、DSP 固件、校准或修改镜像。
 
@@ -156,7 +156,7 @@ python3 tools/recovery/r1-recovery.py verify-copies \
 1. 在不依赖 Android 正常启动和网络 ADB 的条件下，再次进入同一低层入口并完成一次只读识别，将结果记为 `low_level_entry: pass`。仅能从正常 Android 重启进入不算完成。
 2. 先制定断电、失败启动和工具中断的恢复步骤。确认两份备份仍通过复读后，才执行一次受控完整回刷；写入目标、偏移和长度必须与清单逐项一致。
 3. 回刷后核对启动、ADB、Wi-Fi、蓝牙、麦克风、扬声器、中央键/音量环、灯效，以及原厂 Audio HAL、四麦库、DSP 固件和校准文件哈希。
-4. 任何失败均记录为 `fail`，停止 Root 和系统修改；不得改写门槛或静默使用公开 OTA 补齐未知区域。
+4. 任何失败均记录为`fail`，不得改写门槛或静默使用公开OTA补齐未知区域。默认停止Root和系统修改；当前首台若继续使用2026-09-11分级授权，必须另按目标分区风险门禁记录，不能冒充R0恢复验证。
 
 恢复状态 JSON 使用 `pending`、`pass`、`fail`，并保持设备身份与清单完全一致。每个 `pass` 必须登记仓库外证据的相对路径和 SHA-256；缺少证据的“通过”会被门槛工具拒绝：
 
@@ -185,4 +185,4 @@ python3 tools/recovery/r1-recovery.py gate-report \
   --output local-recovery/gate-report.json
 ```
 
-只有报告为 `pass` 或与用户明确例外完全匹配的 `pass_with_exception` 后，才进入 R1 临时 Root、补丁 boot 和受限 SELinux 环境实验。`pending` 不代表失败，但绝不授权写入；`fail` 必须先闭环恢复问题。
+默认只有报告为`pass`或与用户明确例外完全匹配的`pass_with_exception`后，才进入R1临时Root、补丁boot和受限SELinux环境实验。`pending`不代表失败。当前`r1-sample01`/3448是唯一例外：可按2026-09-11免拆分级授权推进必要的boot/system/recovery目标分区操作；Loader、分区表、物理首4 MiB、擦除、格式化和整盘覆盖仍不得执行。R0的`fail`仍须如实保留并先评估影响。

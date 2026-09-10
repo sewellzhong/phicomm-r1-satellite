@@ -133,6 +133,12 @@ v2.3.0 和私有音频源打开，真人“小讯小讯”到达唤醒事件；�
 init继承socket；固定策略工具只改写未加载的policy v26副本，boot构建器保持kernel、DTB、
 second、地址和页大小不变。详见[boot-only风险实验](2026-09-10-r1-boot-only-risk-experiment.md)。
 
+2026-09-11后续开发改按[免拆分级授权](2026-09-11-r1-no-disassembly-authorization.md)：当前
+首台和3448基线在较低权限路线有可复现实机不足证据后，可按目标分区双读、候选固定、单次
+写入和复位前读回门禁使用必要的boot/system/recovery修改。现有overlay渲染器和boot写入器
+并未因此自动获得system/recovery能力；真正需要时必须先实现同等级失败关闭工具并完成主机
+测试。Loader、分区表、物理首4 MiB、擦除、格式化和整盘覆盖仍须另行授权，R0保持`pending`。
+
 代理实际运行且用户明确同意采集诊断音频后，可由受 `DUMP` 权限保护的ADB shell显式触发：
 
 ```bash
