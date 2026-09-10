@@ -13,6 +13,10 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 DEVICE = ROOT / "android/factory-audio-agent/device"
 BOOT_REFERENCE = ROOT / "docs/references/r1-3448-boot-baseline.json"
+RISK_KEYS = {
+    "incomplete_full_emmc_backup", "no_independent_recovery_entry",
+    "permanent_device_loss", "data_loss",
+}
 
 
 def load(path):
@@ -32,15 +36,51 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
+def outside_repository(path, message):
+    path = Path(path).resolve()
+    try:
+        path.relative_to(ROOT)
+        raise RuntimeError(message)
+    except ValueError:
+        return path
+
+
+def authorize(gate, boot, risk_path):
+    if gate.get("status") in ("pass", "pass_with_exception"):
+        require(risk_path is None, "risk_acceptance_not_allowed_after_r0_pass")
+        return {"mode": "r0_gate", "gate_status": gate["status"]}
+    require(gate.get("status") == "pending", "r0_gate_status_invalid")
+    require(risk_path is not None, "r0_gate_not_passed")
+    path = outside_repository(risk_path, "risk_acceptance_must_be_outside_repository")
+    risk = load(path)
+    require(risk.get("schema_version") == 1, "risk_acceptance_schema_invalid")
+    require(risk.get("decision") == "accept_boot_partition_brick_risk"
+            and risk.get("accepted") is True, "risk_acceptance_decision_invalid")
+    require(risk.get("device") == gate.get("device"), "risk_acceptance_device_mismatch")
+    require(risk.get("scope") == ["boot"], "risk_acceptance_scope_invalid")
+    require(risk.get("original_boot_sha256")
+            == boot.get("partitions", {}).get("boot", {}).get("sha256"),
+            "risk_acceptance_boot_hash_mismatch")
+    risks = risk.get("risks", {})
+    require(set(risks) == RISK_KEYS and all(risks.values()), "risk_acceptance_risks_incomplete")
+    recorded = risk.get("recorded_at")
+    require(isinstance(recorded, str) and recorded.startswith("2026-09-10"),
+            "risk_acceptance_date_invalid")
+    return {"mode": "explicit_device_limited_risk_acceptance", "gate_status": "pending",
+            "risk_acceptance_sha256": digest(path)}
+
+
 def render(args):
     gate = load(args.gate_report)
-    require(gate.get("status") in ("pass", "pass_with_exception"), "r0_gate_not_passed")
     require(gate.get("device", {}).get("id") == "r1-sample01", "gate_device_mismatch")
+    if gate.get("status") == "pending":
+        require(getattr(args, "risk_acceptance", None) is not None, "r0_gate_not_passed")
     boot = load(args.boot_baseline_report)
     require(boot.get("status") == "pass", "boot_baseline_not_passed")
     require(boot.get("device", {}).get("id") == "r1-sample01", "boot_baseline_device_mismatch")
     require(boot.get("device", {}).get("fingerprint")
             == gate["device"].get("fingerprint"), "boot_baseline_fingerprint_mismatch")
+    authorization = authorize(gate, boot, getattr(args, "risk_acceptance", None))
     require(boot.get("reference_sha256") == digest(BOOT_REFERENCE),
             "boot_baseline_reference_mismatch")
     boot_reference = load(BOOT_REFERENCE)
@@ -67,12 +107,7 @@ def render(args):
     ).stdout
     require("Class:                             ELF32" in header
             and "Machine:                           ARM" in header, "agent_not_arm_elf32")
-    output = Path(args.output_dir).resolve()
-    try:
-        output.relative_to(ROOT)
-        raise RuntimeError("private_overlay_must_be_outside_repository")
-    except ValueError:
-        pass
+    output = outside_repository(args.output_dir, "private_overlay_must_be_outside_repository")
     require(not output.exists(), "output_directory_already_exists")
     (output / "sbin").mkdir(parents=True)
     (output / "sepolicy").mkdir()
@@ -90,7 +125,7 @@ def render(args):
         "boot_baseline_manifest_sha256": boot["baseline_manifest_sha256"],
         "boot_baseline_reference_sha256": boot["reference_sha256"],
         "device": gate["device"],
-        "gate_status": gate["status"],
+        "authorization": authorization,
         "output_channel": args.output_channel,
         "output_channels": args.output_channels,
         "satellite_uid": client_uid,
@@ -106,6 +141,7 @@ def render(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gate-report", required=True)
+    parser.add_argument("--risk-acceptance")
     parser.add_argument("--boot-baseline-report", required=True)
     parser.add_argument("--preflight", required=True)
     parser.add_argument("--abi-report", required=True)

@@ -17,10 +17,13 @@ The production socket is `/dev/socket/r1_factory_audio`. The agent requires an
 explicit `--expected-uid`, uses mode `0660`, and verifies each connection with
 `SO_PEERCRED`. The supplied init template binds the socket as root, changes its
 group to the satellite UID, clears supplementary groups, and drops to the
-Android `audio` UID/GID before loading the backend. The SELinux template defines
+Android `audio` UID/GID before loading the backend. For boot deployment the agent
+accepts only the named stream socket inherited from Android init; host tests retain
+the explicit filesystem socket path. The SELinux template defines
 a dedicated domain without network or block-device access. It is staging input,
-not a deployable policy: unresolved output-channel tokens and an incomplete R0
-gate make the renderer fail closed.
+not a deployable policy by itself: unresolved output-channel tokens make the renderer
+fail closed. A pending R0 is accepted only with the exact external, device-limited
+boot brick-risk record; this never changes R0's status.
 
 Host build and tests are run by `bash tools/factory_audio/check.sh`. When the
 pinned SDK/NDK is available, the same check builds Android API 22 ARMv7; the

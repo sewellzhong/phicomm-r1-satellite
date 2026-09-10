@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
 #include <grp.h>
@@ -438,10 +439,34 @@ bool safe_remove_socket(const std::string& path) {
   return unlink(path.c_str()) == 0;
 }
 
+int inherited_control_socket(const std::string& name) {
+  if (name.empty() || name.find_first_not_of(
+      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") != std::string::npos) {
+    return -1;
+  }
+  std::string variable = "ANDROID_SOCKET_" + name;
+  int fd = -1;
+  if (!parse_bounded_int(getenv(variable.c_str()), 0, std::numeric_limits<int>::max(), &fd)
+      || fcntl(fd, F_GETFD) < 0) {
+    return -1;
+  }
+  int type = 0;
+  socklen_t type_length = sizeof(type);
+  sockaddr_storage address{};
+  socklen_t address_length = sizeof(address);
+  if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &type_length) != 0 || type != SOCK_STREAM
+      || getsockname(fd, reinterpret_cast<sockaddr*>(&address), &address_length) != 0
+      || address.ss_family != AF_UNIX) {
+    return -1;
+  }
+  return fd;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
   std::string socket_path = "/dev/socket/r1_factory_audio";
+  std::string init_socket_name;
   long expected_uid = -1;
   long drop_uid = -1;
   long drop_gid = -1;
@@ -470,6 +495,9 @@ int main(int argc, char** argv) {
       }
     }
     else if (argument == "--socket" && index + 1 < argc) socket_path = argv[++index];
+    else if (argument == "--init-socket-name" && index + 1 < argc) {
+      init_socket_name = argv[++index];
+    }
     else if (argument == "--drop-uid" && index + 1 < argc) {
       char* end = nullptr;
       drop_uid = strtol(argv[++index], &end, 10);
@@ -523,7 +551,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "invalid_vendor_backend_shape\n");
     return 2;
   }
-  if (expected_uid < 0 || socket_path.empty() || socket_path[0] != '/') {
+  if (expected_uid < 0 || (init_socket_name.empty()
+      && (socket_path.empty() || socket_path[0] != '/'))) {
     fprintf(stderr, "expected_uid_and_absolute_socket_required\n");
     return 2;
   }
@@ -531,26 +560,33 @@ int main(int argc, char** argv) {
     fprintf(stderr, "drop_uid_and_gid_required_together\n");
     return 2;
   }
-  if (!safe_remove_socket(socket_path)) {
-    fprintf(stderr, "refusing_to_replace_non_socket\n");
-    return 2;
+  bool owns_socket_path = init_socket_name.empty();
+  int server = owns_socket_path ? socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0)
+                                : inherited_control_socket(init_socket_name);
+  if (server < 0) { perror(owns_socket_path ? "socket" : "init_socket"); return 1; }
+  if (owns_socket_path) {
+    if (!safe_remove_socket(socket_path)) {
+      fprintf(stderr, "refusing_to_replace_non_socket\n"); close(server); return 2;
+    }
+    sockaddr_un address{};
+    address.sun_family = AF_UNIX;
+    if (socket_path.size() >= sizeof(address.sun_path)) {
+      fprintf(stderr, "socket_path_too_long\n"); close(server); return 2;
+    }
+    memcpy(address.sun_path, socket_path.c_str(), socket_path.size() + 1);
+    mode_t old_mask = umask(0007);
+    int bind_result = bind(server, reinterpret_cast<sockaddr*>(&address), sizeof(address));
+    umask(old_mask);
+    if (bind_result != 0 || chmod(socket_path.c_str(), 0660) != 0
+        || (drop_uid >= 0 && chown(socket_path.c_str(), static_cast<uid_t>(drop_uid),
+                                   static_cast<gid_t>(expected_uid)) != 0)) {
+      perror("bind_socket"); close(server); safe_remove_socket(socket_path); return 1;
+    }
   }
-  int server = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-  if (server < 0) { perror("socket"); return 1; }
-  sockaddr_un address{};
-  address.sun_family = AF_UNIX;
-  if (socket_path.size() >= sizeof(address.sun_path)) {
-    fprintf(stderr, "socket_path_too_long\n"); close(server); return 2;
-  }
-  memcpy(address.sun_path, socket_path.c_str(), socket_path.size() + 1);
-  mode_t old_mask = umask(0007);
-  int bind_result = bind(server, reinterpret_cast<sockaddr*>(&address), sizeof(address));
-  umask(old_mask);
-  if (bind_result != 0 || chmod(socket_path.c_str(), 0660) != 0
-      || (drop_uid >= 0 && chown(socket_path.c_str(), static_cast<uid_t>(drop_uid),
-                                 static_cast<gid_t>(expected_uid)) != 0)
-      || listen(server, 1) != 0) {
-    perror("bind_listen"); close(server); safe_remove_socket(socket_path); return 1;
+  if (listen(server, 1) != 0) {
+    perror("listen"); close(server);
+    if (owns_socket_path) safe_remove_socket(socket_path);
+    return 1;
   }
   if (drop_uid >= 0) {
     if (geteuid() != 0 || setgroups(0, nullptr) != 0
@@ -558,7 +594,9 @@ int main(int argc, char** argv) {
         || setuid(static_cast<uid_t>(drop_uid)) != 0
         || geteuid() != static_cast<uid_t>(drop_uid)
         || getegid() != static_cast<gid_t>(drop_gid)) {
-      perror("privilege_drop"); close(server); safe_remove_socket(socket_path); return 1;
+      perror("privilege_drop"); close(server);
+      if (owns_socket_path) safe_remove_socket(socket_path);
+      return 1;
     }
   }
   signal(SIGINT, on_signal);
@@ -592,6 +630,6 @@ int main(int argc, char** argv) {
     close(client);
   }
   close(server);
-  safe_remove_socket(socket_path);
+  if (owns_socket_path) safe_remove_socket(socket_path);
   return 0;
 }

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "decision": "accept_boot_partition_brick_risk",
+  "accepted": true,
+  "device": {
+    "id": "r1-sample01",
+    "hardware": "replace-with-current-hardware",
+    "fingerprint": "replace-with-current-full-fingerprint"
+  },
+  "scope": ["boot"],
+  "original_boot_sha256": "replace-with-current-boot-sha256",
+  "risks": {
+    "incomplete_full_emmc_backup": true,
+    "no_independent_recovery_entry": true,
+    "permanent_device_loss": true,
+    "data_loss": true
+  },
+  "recorded_at": "replace-with-user-decision-date"
+}

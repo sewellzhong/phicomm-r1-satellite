@@ -1,2 +1,2 @@
-/sbin/r1-factory-audio-agent        u:object_r:r1_factory_audio_exec:s0
-/dev/socket/r1_factory_audio        u:object_r:r1_factory_audio_socket:s0
+/sbin/r1-factory-audio-agent        u:object_r:r1_factory_audio:s0
+/dev/socket/r1_factory_audio        u:object_r:r1_factory_audio:s0

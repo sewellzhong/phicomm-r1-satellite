@@ -114,6 +114,11 @@ overlay渲染器才生成暂存目录；它本身永不刷机。2026-09-10新增
 私有kernel/boot/recovery双份文件及其来源证据，并把固定公开参考和私有清单哈希写入overlay
 清单，详见[原厂boot/recovery离线基线](2026-09-10-r1-boot-recovery-baseline.md)。
 
+后续决策：用户于2026-09-10接受仅`r1-sample01`、仅boot范围的不可恢复变砖风险。R0仍为
+`pending`；渲染器只在外部风险记录精确绑定设备、原boot哈希和范围时接受该状态。代理现支持
+init继承socket；固定策略工具只改写未加载的policy v26副本，boot构建器保持kernel、DTB、
+second、地址和页大小不变。详见[boot-only风险实验](2026-09-10-r1-boot-only-risk-experiment.md)。
+
 代理实际运行且用户明确同意采集诊断音频后，可由受 `DUMP` 权限保护的ADB shell显式触发：
 
 ```bash

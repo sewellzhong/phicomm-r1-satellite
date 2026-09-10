@@ -2,6 +2,7 @@
 # verify the package UID is still 10010 and substitute the final library/output shape.
 service r1_factory_audio /sbin/r1-factory-audio-agent \
     --expected-uid 10010 --drop-uid 1041 --drop-gid 1041 \
+    --init-socket-name r1_factory_audio \
     --vendor-library /system/lib/libuni4michal.so \
     --vendor-open-channels 2 --vendor-output-channels @PROVEN_OUTPUT_CHANNELS@ \
     --vendor-output-channel @PROVEN_OUTPUT_CHANNEL@
@@ -9,6 +10,7 @@ service r1_factory_audio /sbin/r1-factory-audio-agent \
     user root
     group root
     seclabel u:r:r1_factory_audio:s0
+    socket r1_factory_audio stream 0660 root 10010 u:object_r:r1_factory_audio:s0
     disabled
 
 # Start only after the deployment gate has verified package UID, vendor hashes and

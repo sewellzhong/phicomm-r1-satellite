@@ -173,6 +173,33 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(3, result.returncode)
         self.assertIn("factory_backend_unimplemented", result.stderr)
 
+    def test_android_init_socket_is_inherited_without_rebinding_path(self):
+        self.client.close()
+        self.stop_agent()
+        inherited_path = Path(self.temporary.name) / "init.sock"
+        inherited = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        inherited.bind(str(inherited_path))
+        environment = dict(os.environ)
+        environment["ANDROID_SOCKET_r1_factory_audio"] = str(inherited.fileno())
+        self.agent = subprocess.Popen([
+            str(AGENT), "--fake", "--expected-uid", str(os.getuid()),
+            "--init-socket-name", "r1_factory_audio"
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=environment,
+            pass_fds=(inherited.fileno(),))
+        self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.client.settimeout(2)
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                self.client.connect(str(inherited_path))
+                break
+            except (ConnectionRefusedError, FileNotFoundError):
+                if self.agent.poll() is not None or time.monotonic() >= deadline:
+                    self.fail(self.agent.stderr.read().decode())
+                time.sleep(0.01)
+        inherited.close()
+        self.negotiate()
+
     def test_vendor_backend_requires_explicit_shape_and_reports_only_proven_state(self):
         self.client.close()
         self.stop_agent()

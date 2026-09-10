@@ -1,0 +1,18 @@
+diff --git a/jni/sepolicy-inject/sepolicy-inject.c b/jni/sepolicy-inject/sepolicy-inject.c
+index cd77438..bcb644f 100644
+--- a/jni/sepolicy-inject/sepolicy-inject.c
++++ b/jni/sepolicy-inject/sepolicy-inject.c
+@@ -104,13 +104,6 @@ int create_domain(char *d, policydb_t *policy) {
+ 		fprintf(stderr, "creating %s failed\n",d);
+ 		exit(1);
+ 	}
+-
+-	extern int policydb_index_decls(policydb_t * p);
+-	if (policydb_index_decls(policy)) {
+-		exit(1);
+-	}
+-
+-	set_attr("domain", policy, value);
+ 	return value;
+ }
+ 
