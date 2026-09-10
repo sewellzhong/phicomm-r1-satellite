@@ -93,6 +93,56 @@ public class FactoryAudioClientTest {
         throw new AssertionError("unattested capture remained usable");
     }
 
+    @Test public void validationCaptureAcceptsIdentifiedVendorWithoutClaimingProduction()
+            throws Exception {
+        ByteArrayOutputStream replies = new ByteArrayOutputStream();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(1)
+                .setHelloReply(FactoryAudio.HelloReply.newBuilder().setSelectedVersion(1)).build());
+        FactoryAudio.Health partial = FactoryAudio.Health.newBuilder()
+                .setCaptureState(FactoryAudio.CaptureState.CAPTURE_STATE_STREAMING)
+                .setBackendName(FactoryAudioAttestation.PROVEN_BACKEND)
+                .setVendorBoardVersion("UNI_4MIC_HAL_ANDROID_V1.1")
+                .setRawMicChannels(4).setArrayProcessingActive(true)
+                .setAecReferenceChannels(0).setAecActive(false).build();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(2).setHealth(partial).build());
+        FactoryAudioClient client = new FactoryAudioClient(null,
+                new ByteArrayInputStream(replies.toByteArray()), new ByteArrayOutputStream());
+        client.negotiate();
+        assertEquals(partial, client.startUnattestedValidationCapture());
+        try {
+            FactoryAudioAttestation.requireProductionChain(partial);
+        } catch (IOException expected) {
+            assertEquals("factory_audio_chain_not_attested", expected.getMessage());
+            return;
+        }
+        throw new AssertionError("validation-only health granted production capture");
+    }
+
+    @Test public void validationCaptureRejectsSyntheticBackend() throws Exception {
+        ByteArrayOutputStream replies = new ByteArrayOutputStream();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(1)
+                .setHelloReply(FactoryAudio.HelloReply.newBuilder().setSelectedVersion(1)).build());
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(2)
+                .setHealth(FactoryAudio.Health.newBuilder()
+                        .setCaptureState(FactoryAudio.CaptureState.CAPTURE_STATE_STREAMING)
+                        .setBackendName("synthetic-fake").setRawMicChannels(4)
+                        .setArrayProcessingActive(true).setVendorBoardVersion("fake")).build());
+        FactoryAudioClient client = new FactoryAudioClient(null,
+                new ByteArrayInputStream(replies.toByteArray()), new ByteArrayOutputStream());
+        client.negotiate();
+        try {
+            client.startUnattestedValidationCapture();
+        } catch (IOException expected) {
+            assertEquals("factory_audio_validation_chain_not_identified", expected.getMessage());
+            return;
+        }
+        throw new AssertionError("synthetic backend entered validation capture");
+    }
+
     @Test public void explicitAgentErrorIsSurfacedWithoutFallback() throws Exception {
         ByteArrayOutputStream replies = new ByteArrayOutputStream();
         FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()

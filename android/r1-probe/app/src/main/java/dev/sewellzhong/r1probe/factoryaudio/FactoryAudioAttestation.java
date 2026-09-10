@@ -10,6 +10,17 @@ public final class FactoryAudioAttestation {
 
     private FactoryAudioAttestation() {}
 
+    /** Minimum identity check for a bounded validation capture; never grants production use. */
+    static void requireValidationChain(FactoryAudio.Health health) throws IOException {
+        if (health == null
+                || !PROVEN_BACKEND.equals(health.getBackendName())
+                || health.getRawMicChannels() != 4
+                || !health.getArrayProcessingActive()
+                || health.getVendorBoardVersion().isEmpty()) {
+            throw new IOException("factory_audio_validation_chain_not_identified");
+        }
+    }
+
     public static void requireProductionChain(FactoryAudio.Health health) throws IOException {
         if (health == null
                 || !PROVEN_BACKEND.equals(health.getBackendName())

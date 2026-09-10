@@ -20,7 +20,8 @@ public final class ProbeCommandReceiver extends BroadcastReceiver {
         final String nonce = valueOrDefault(intent.getStringExtra("probe_nonce"), "manual");
         if (!"stereo_record".equals(action) && !"play".equals(action)
                 && !"process_wav".equals(action) && !"processed_record".equals(action)
-                && !"processed_compare".equals(action)) {
+                && !"processed_compare".equals(action)
+                && !"factory_audio_validate".equals(action)) {
             Log.e(AUDIO_TAG, "R1_COMMAND_REJECTED nonce=" + nonce + " error=unsupported_action");
             return;
         }
@@ -41,6 +42,8 @@ public final class ProbeCommandReceiver extends BroadcastReceiver {
                         recordProcessed(context, intent, nonce);
                     } else if ("processed_compare".equals(action)) {
                         recordProcessedComparison(context, intent, nonce);
+                    } else if ("factory_audio_validate".equals(action)) {
+                        recordFactoryAudioValidation(context, intent, nonce);
                     } else {
                         play(context, intent, nonce);
                     }
@@ -181,6 +184,22 @@ public final class ProbeCommandReceiver extends BroadcastReceiver {
                 + " clipped_samples=" + result.stats.clippedSamples);
     }
 
+    private static void recordFactoryAudioValidation(Context context, Intent intent, String nonce)
+            throws Exception {
+        int durationSeconds = clamp(intent.getIntExtra("duration_seconds", 10), 1, 30);
+        String sampleId = FileNames.sanitize(intent.getStringExtra("sample_id"));
+        Log.i(AUDIO_TAG, "R1_FACTORY_AUDIO_VALIDATION_START nonce=" + nonce
+                + " duration_seconds=" + durationSeconds);
+        FactoryAudioValidationCapture.Result result = FactoryAudioValidationCapture.record(
+                diagnosticsDir(context), durationSeconds, sampleId);
+        Log.i(AUDIO_TAG, "R1_FACTORY_AUDIO_VALIDATION_COMPLETE nonce=" + nonce
+                + " wav_path=" + result.wavFile.getAbsolutePath()
+                + " metadata_path=" + result.metadataFile.getAbsolutePath()
+                + " frames=" + result.frames
+                + " sequence_gaps=" + result.sequenceGaps
+                + " doa_valid_frames=" + result.doaValidFrames);
+    }
+
     private static File diagnosticsDir(Context context) {
         File external = context.getExternalFilesDir(null);
         if (external == null) {
@@ -202,6 +221,9 @@ public final class ProbeCommandReceiver extends BroadcastReceiver {
         }
         if ("processed_compare".equals(action)) {
             return "R1_PROCESSED_COMPARE_FAILED";
+        }
+        if ("factory_audio_validate".equals(action)) {
+            return "R1_FACTORY_AUDIO_VALIDATION_FAILED";
         }
         return "process_wav".equals(action)
                 ? "R1_PROCESSING_FAILED" : "R1_AUDIO_PLAYBACK_FAILED";

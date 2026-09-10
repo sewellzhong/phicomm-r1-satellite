@@ -34,6 +34,17 @@ APK 客户端固定请求 PCM S16LE、16 kHz、单声道、20 ms/帧，并校验
 客户端内静默重试。代理检测到流式客户端断开后释放后端，下一目标 UID 客户端可重新
 协商并从新的采集序列开始。
 
+为解除“尚未证明AEC所以生产入口拒绝、生产入口拒绝所以无法取证”的闭环，APK新增
+`factory_audio_validate` 限时诊断动作。它与生产 `startCapture()` 分离，只接受已识别的
+3448原厂后端、四麦声明、阵列激活声明和非空板级版本；不要求也不伪造尚未证明的AEC
+字段。诊断最长30秒，写入16 kHz单声道WAV及元数据，记录帧序号、代理丢帧、DOA有效数、
+10度直方图和WAV哈希。接收器仍受系统 `DUMP` 权限保护，普通应用不能触发。
+
+拉回本地后用 `tools/factory_audio/audit-validation-capture.py` 复核格式、哈希、帧连续性和
+元数据边界。审计的 `pass` 仅表示传输及上报DOA字段自洽，报告固定保留四麦独立响应、
+运行时通道形状、AEC消除量和DSP质量为未验证。诊断WAV可能包含家庭对话，默认只保留在
+本地，不提交仓库。
+
 ## 主机验证
 
 运行：
@@ -79,6 +90,13 @@ AEC消除量或 DSP 输出质量。hostcheck APK、mock 库和未过门槛的代
 原厂代理/策略/ABI/离线审计39项、HA 44项、API 22 ARMv7交叉构建、公开审计及凭据扫描。
 hostcheck APK和ARMv7代理哈希与上述已记录基线一致；本步没有构建设备签名APK。
 
+验证采集增量的统一检查通过Android 170项、lint、native 32项、恢复73项与桌面演练、
+原厂代理/策略/ABI/离线审计42项、HA 44项、配置加载、API 22 ARMv7交叉构建、公开审计
+及凭据扫描。hostcheck APK SHA-256为
+`661ccc32b74b62b26cb2263fd9f93687e3a365ddaf0c3f941022979d8ecb1348`；ARMv7代理未变，
+SHA-256仍为`d89cf581f8069151e8a262a18934ab40de46013c4b64558fccca3e6999f372df`。
+本步没有连接ADB/HA，也没有构建设备签名APK或采集真实录音。
+
 ## 实机续接入口
 
 2026-09-08 的只读预检已确认 `r1-sample01` 为 3448/API 22、SELinux Enforcing、
@@ -95,3 +113,21 @@ v2.3.0 和私有音频源打开，真人“小讯小讯”到达唤醒事件；�
 overlay渲染器才生成暂存目录；它本身永不刷机。2026-09-10新增的boot基线门禁会复读
 私有kernel/boot/recovery双份文件及其来源证据，并把固定公开参考和私有清单哈希写入overlay
 清单，详见[原厂boot/recovery离线基线](2026-09-10-r1-boot-recovery-baseline.md)。
+
+代理实际运行且用户明确同意采集诊断音频后，可由受 `DUMP` 权限保护的ADB shell显式触发：
+
+```bash
+adb -s <adb-serial> shell am broadcast \
+  -n dev.sewellzhong.r1probe/.ProbeCommandReceiver \
+  -a dev.sewellzhong.r1probe.COMMAND \
+  --es probe_action factory_audio_validate --ei duration_seconds 10 \
+  --es sample_id <non-personal-sample-id> --es probe_nonce <unique-nonce>
+```
+
+完成日志会给出WAV和元数据路径。将两者拉到仓库外的本地目录后执行：
+
+```bash
+python3 tools/factory_audio/audit-validation-capture.py \
+  --device r1-sample01 --wav <local-wav> --metadata <local-meta> \
+  --output <new-local-report.json>
+```

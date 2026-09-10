@@ -70,6 +70,19 @@ public final class FactoryAudioClient implements Closeable {
     }
 
     public synchronized void startCapture() throws IOException {
+        startCapture(true);
+    }
+
+    /**
+     * Starts a bounded evidence capture before AEC attestation exists. This is deliberately
+     * separate from startCapture(): callers must never feed its frames to the satellite path.
+     */
+    public synchronized FactoryAudio.Health startUnattestedValidationCapture() throws IOException {
+        return startCapture(false);
+    }
+
+    private FactoryAudio.Health startCapture(boolean requireProductionAttestation)
+            throws IOException {
         requireOpen();
         require(negotiated, "factory_audio_not_negotiated");
         require(!capturing, "factory_audio_already_capturing");
@@ -85,8 +98,13 @@ public final class FactoryAudioClient implements Closeable {
                 != FactoryAudio.CaptureState.CAPTURE_STATE_STREAMING) {
             throw new IOException("factory_audio_start_not_streaming");
         }
+        FactoryAudio.Health health = reply.getHealth();
         try {
-            FactoryAudioAttestation.requireProductionChain(reply.getHealth());
+            if (requireProductionAttestation) {
+                FactoryAudioAttestation.requireProductionChain(health);
+            } else {
+                FactoryAudioAttestation.requireValidationChain(health);
+            }
         } catch (IOException rejected) {
             // Closing the transport makes the agent release its single capture owner.
             // Do not leave an unattested backend streaming or permit this client to retry it.
@@ -99,6 +117,7 @@ public final class FactoryAudioClient implements Closeable {
             throw rejected;
         }
         capturing = true;
+        return health;
     }
 
     public synchronized FactoryAudio.AudioFrame readFrame() throws IOException {
