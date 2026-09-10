@@ -8,9 +8,22 @@ v80 建立自有的原厂音频代理公共骨架。协议固定为版本 1，�
 其他进程。它不监听网络端口，一次只服务一个采集客户端。
 
 协议支持版本协商、开始/停止、健康状态、640 字节 PCM 帧、DOA 字段、播放参考、
-丢帧计数和结构化错误。唯一可运行后端是必须显式指定的 `--fake` 合成静音后端；
-未指定时以 `factory_backend_unimplemented` 退出。公开源码不包含原厂库、设备节点、
-校准、固件、Root 工具、SELinux 策略或刷写命令。
+丢帧计数和结构化错误。除必须显式指定的 `--fake` 合成后端外，现已加入真实动态
+后端：只从指定绝对路径加载设备已有的 3448 原厂库，调用已审计的
+`init(1) → debug(0) → algorithm(0) → pcm_open(2) → start/read/DOA → stop/close/release`
+序列。静态反汇编同时确认 `pcm_read` 转发 tinyalsa 状态码（`0` 成功、负数失败），
+不把返回值误当字节数。输出通道数和选用通道必须显式提供，未证明时不能生成启动配置。
+
+真实后端不会把原厂二进制打包进 APK、代理或仓库。ABI 审计只接受
+`r1-sample01` 已观察到的两个 SHA-256 和所需 ARM ELF32 符号。健康协议新增板级
+版本、原始麦克风数、AEC 参考数、阵列处理和 AEC 生效字段；APK 只有在后端名、
+板级版本、四麦、双参考、阵列和 AEC 全部成立时才接受为生产原厂链。当前代码有意
+上报 AEC 未证明并拒绝外加软件参考，所以仍不能进入生产采集。
+
+启动模板先以 root 创建 socket，限定为卫星 UID 10010 可访问，然后清空附加组并降权
+到 Android `audio` UID/GID 1041，才接受连接及初始化后端。专用 SELinux 域只声明
+系统只读文件、`audio_device` 和本地 socket 权限，没有网络、块设备或 permissive
+授权。它仍是待合入目标 boot sepolicy 的模板，不是已部署策略。
 
 APK 客户端固定请求 PCM S16LE、16 kHz、单声道、20 ms/帧，并校验每帧恰好
 640 字节。`factory_proxy` 是显式来源标识，尚未成为默认采集链；代理错误会直接上报，
@@ -35,20 +48,37 @@ python3 tools/recovery/rehearse.py
 后端时失败关闭。若主机配置了固定 Android NDK，脚本同时构建 API 22、
 `armeabi-v7a` 代理。
 
-本次统一主机检查实际通过 Android 163 项单元测试、lint、hostcheck APK、32 项工具
-测试、18 项 R0 测试与桌面演练、7 项代理 socket 契约测试（含断连释放，以及 1,000/90,000 帧的
-20 秒及 30 分钟音频预算加速演练）、API 22 ARMv7 代理
+当前增量测试覆盖真实后端必须显式选型、符号/调用顺序、DOA 编码、单/双通道选择、
+调试关闭、释放路径、生产证明拒绝，以及启动/SELinux 模板和私有 overlay 门槛。
+统一 `tools/dev/check.sh` 实际通过 Android 168 项单元测试、lint、hostcheck APK、
+32 项工具测试、21 项 R0 测试与桌面演练、24 项代理/策略/ABI/受控窗口测试、API 22 ARMv7
 交叉构建、HA 44 项测试和配置加载检查。hostcheck APK SHA-256 为
-`c96d3dcd38129d65dce63127b5a722885bf93f97455e2cf15c0ef52514201108`；ARMv7
-合成代理 SHA-256 为
-`9124d100f40372b29539ba57842149963e96fc6887b026b4cbd5206dafe4a4ff`。
+`a1c11ddb8d9a91acf73aaaa27e8ee22a772482450bde66c16dd964b2b1a63a37`；ARMv7
+代理 SHA-256 为
+`d89cf581f8069151e8a262a18934ab40de46013c4b64558fccca3e6999f372df`。
 
-这些结果只证明公共协议和合成状态机，不证明 R1 原厂四麦、MicArray、DOA、AEC
-或 DSP 可用；hostcheck APK 和合成代理都不得部署为设备候选。
+2026-09-10新增原厂boot基线门禁后，增量检查通过73项恢复测试与桌面演练、26项
+代理/策略/ABI/受控窗口测试、主机及API 22 ARMv7代理构建、公开文件审计和凭据扫描。
+`tools/factory_audio/check.sh` 改为使用统一准备流程生成的固定Python环境，避免系统Python
+缺少protobuf时在测试收集阶段产生环境假失败。
+
+这些结果证明公共协议、代理状态机和对已审计 ABI 的主机替身调用；后续受控原厂窗口
+已补充证明 R1 上的 HAL/MicArray 初始化和真人原厂唤醒，但仍未证明实际 PCM、DOA、
+AEC消除量或 DSP 输出质量。hostcheck APK、mock 库和未过门槛的代理都不得部署为设备候选。
 
 ## 实机续接入口
 
-先按 R0 手册完成完整 eMMC 双副本、低层入口和受控回刷，使门槛报告为 `pass`。
-随后只读确认真实 UID、socket 所有权、原厂符号、设备节点、初始化顺序、播放参考
-来源和 AVC 拒绝，再实现动态原厂后端及最小 SELinux 域。任何字段或调用假设与
-实机冲突时，以实机证据修改协议适配层，不把假后端结果继承为实机通过。
+2026-09-08 的只读预检已确认 `r1-sample01` 为 3448/API 22、SELinux Enforcing、
+卫星 UID 10010、原厂包保持隐藏、四个原厂音频库哈希匹配，配置声明四麦圆阵、双
+AEC 参考、AEC 开启及调试路径。该结果只说明测试前状态正确，不说明算法已运行。
+
+WAN 阻断下的原厂窗口已经完成：同一进程报告四麦、双参考、AEC 开启、MicArray
+v2.3.0 和私有音频源打开，真人“小讯小讯”到达唤醒事件；生成的 4 麦/2 AEC/输出
+调试 WAV 均为 0 帧，不能确定代理输出通道或量化 AEC。详见
+[受控运行记录](2026-09-08-r1-original-chain-smoke.md)。
+
+下一步按 R0 手册完成完整 eMMC、低层入口和受控回刷。只有门槛为 `pass` 或用户
+明确接受的 `pass_with_exception`，且原厂boot基线、ABI、预检和通道证明都匹配，私有
+overlay渲染器才生成暂存目录；它本身永不刷机。2026-09-10新增的boot基线门禁会复读
+私有kernel/boot/recovery双份文件及其来源证据，并把固定公开参考和私有清单哈希写入overlay
+清单，详见[原厂boot/recovery离线基线](2026-09-10-r1-boot-recovery-baseline.md)。

@@ -63,6 +63,11 @@ message Health {
   uint64 frames_sent = 4;
   uint64 frames_dropped = 5;
   string failure_reason = 6;
+  string vendor_board_version = 7;
+  uint32 raw_mic_channels = 8;
+  uint32 aec_reference_channels = 9;
+  bool array_processing_active = 10;
+  bool aec_active = 11;
 }
 
 message AudioFrame {

@@ -1,0 +1,13 @@
+diff --git a/main.cpp b/main.cpp
+index f6908d2..817daae 100644
+--- a/main.cpp
++++ b/main.cpp
+@@ -2474,6 +2474,7 @@ bool read_lba(
+ 		memset(pBuf, 0, nSectorSize * DEFAULT_RW_LBA);
+ 		iRead = (uiLen >= DEFAULT_RW_LBA) ? DEFAULT_RW_LBA : uiLen;
+-		iRet = pComm->RKU_ReadLBA(uiBegin + iTotalRead, iRead, pBuf);
++		iRet = pComm->RKU_ReadLBA(
++				uiBegin + iTotalRead, iRead, pBuf, RWMETHOD_LBA);
+ 		if (ERR_SUCCESS == iRet) {
+ 			uiLen -= iRead;
+ 			iTotalRead += iRead;

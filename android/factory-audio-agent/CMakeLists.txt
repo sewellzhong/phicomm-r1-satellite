@@ -1,10 +1,15 @@
 cmake_minimum_required(VERSION 3.18)
 project(r1_factory_audio_agent LANGUAGES CXX)
 
-add_executable(r1-factory-audio-agent src/main.cpp)
+add_executable(r1-factory-audio-agent src/main.cpp src/audio_backend.cpp)
 target_compile_features(r1-factory-audio-agent PRIVATE cxx_std_17)
 target_compile_options(r1-factory-audio-agent PRIVATE -Wall -Wextra -Werror)
 target_link_options(r1-factory-audio-agent PRIVATE "-Wl,--hash-style=both")
+target_link_libraries(r1-factory-audio-agent PRIVATE dl)
+
+if(NOT ANDROID)
+  add_library(r1-factory-audio-vendor-mock SHARED tests/vendor_mock.cpp)
+endif()
 
 if(ANDROID)
   if(NOT ANDROID_ABI STREQUAL "armeabi-v7a")

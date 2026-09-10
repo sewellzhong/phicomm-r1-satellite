@@ -85,6 +85,19 @@ public final class FactoryAudioClient implements Closeable {
                 != FactoryAudio.CaptureState.CAPTURE_STATE_STREAMING) {
             throw new IOException("factory_audio_start_not_streaming");
         }
+        try {
+            FactoryAudioAttestation.requireProductionChain(reply.getHealth());
+        } catch (IOException rejected) {
+            // Closing the transport makes the agent release its single capture owner.
+            // Do not leave an unattested backend streaming or permit this client to retry it.
+            closed = true;
+            negotiated = false;
+            pendingFrames.clear();
+            if (socket != null) {
+                try { socket.close(); } catch (IOException ignored) {}
+            }
+            throw rejected;
+        }
         capturing = true;
     }
 

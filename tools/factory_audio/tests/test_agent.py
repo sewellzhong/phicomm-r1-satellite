@@ -14,6 +14,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 AGENT = ROOT / "local-deps/build/factory-audio-agent-host/r1-factory-audio-agent"
+VENDOR_MOCK = ROOT / "local-deps/build/factory-audio-agent-host/libr1-factory-audio-vendor-mock.so"
 PROTO = ROOT / "protocol/factory_audio/factory_audio.proto"
 PROTOC = ROOT / "local-deps/protoc-3.25.5/protoc"
 
@@ -85,7 +86,7 @@ class AgentTest(unittest.TestCase):
             length -= len(chunk)
         return b"".join(chunks)
 
-    def negotiate(self):
+    def negotiate(self, expected_backend="synthetic-fake"):
         request = self.pb.Envelope(protocol_version=1, request_id=1)
         request.hello.minimum_version = 1
         request.hello.maximum_version = 1
@@ -93,7 +94,7 @@ class AgentTest(unittest.TestCase):
         self.send(request)
         reply = self.receive()
         self.assertEqual(1, reply.hello_reply.selected_version)
-        self.assertEqual("synthetic-fake", reply.hello_reply.backend_name)
+        self.assertEqual(expected_backend, reply.hello_reply.backend_name)
 
     def test_negotiate_stream_reference_health_and_stop(self):
         self.negotiate()
@@ -171,6 +172,54 @@ class AgentTest(unittest.TestCase):
         ], capture_output=True, text=True)
         self.assertEqual(3, result.returncode)
         self.assertIn("factory_backend_unimplemented", result.stderr)
+
+    def test_vendor_backend_requires_explicit_shape_and_reports_only_proven_state(self):
+        self.client.close()
+        self.stop_agent()
+        self.agent = subprocess.Popen([
+            str(AGENT), "--expected-uid", str(os.getuid()),
+            "--socket", str(self.socket_path),
+            "--vendor-library", str(VENDOR_MOCK),
+            "--vendor-open-channels", "2",
+            "--vendor-output-channels", "2",
+            "--vendor-output-channel", "1",
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        deadline = time.monotonic() + 5
+        while self.agent.poll() is None and not self.socket_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(self.socket_path.exists())
+        self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.client.settimeout(2)
+        self.client.connect(str(self.socket_path))
+        self.negotiate("unisound_uni4mic_3448")
+        start = self.pb.Envelope(protocol_version=1, request_id=2)
+        start.start_capture.format.sample_rate_hz = 16000
+        start.start_capture.format.channels = 1
+        start.start_capture.format.sample_width_bytes = 2
+        start.start_capture.format.frame_duration_ms = 20
+        self.send(start)
+        health = self.receive().health
+        self.assertEqual("unisound_uni4mic_3448", health.backend_name)
+        self.assertEqual("MOCK_UNI_4MIC_V1.1", health.vendor_board_version)
+        self.assertEqual(4, health.raw_mic_channels)
+        self.assertEqual(0, health.aec_reference_channels)
+        self.assertTrue(health.array_processing_active)
+        self.assertFalse(health.aec_active)
+        frame = self.receive().audio_frame
+        self.assertEqual(145, frame.doa_degrees)
+        self.assertTrue(frame.doa_valid)
+        self.assertEqual((1, 3), struct.unpack_from("<hh", frame.pcm_s16le))
+
+    def test_vendor_backend_rejects_unproven_defaults(self):
+        self.client.close()
+        self.stop_agent()
+        result = subprocess.run([
+            str(AGENT), "--expected-uid", str(os.getuid()),
+            "--socket", str(self.socket_path),
+            "--vendor-library", str(VENDOR_MOCK),
+        ], capture_output=True, text=True)
+        self.assertEqual(2, result.returncode)
+        self.assertIn("invalid_vendor_backend_shape", result.stderr)
 
     def test_disconnect_releases_capture_and_next_client_can_start(self):
         self.negotiate()

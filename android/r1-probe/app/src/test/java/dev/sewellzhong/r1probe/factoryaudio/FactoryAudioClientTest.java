@@ -14,6 +14,15 @@ import java.io.IOException;
 import org.junit.Test;
 
 public class FactoryAudioClientTest {
+    private static FactoryAudio.Health.Builder provenStreamingHealth() {
+        return FactoryAudio.Health.newBuilder()
+                .setCaptureState(FactoryAudio.CaptureState.CAPTURE_STATE_STREAMING)
+                .setBackendName(FactoryAudioAttestation.PROVEN_BACKEND)
+                .setVendorBoardVersion("UNI_4MIC_HAL_ANDROID_V1.1")
+                .setRawMicChannels(4).setAecReferenceChannels(2)
+                .setArrayProcessingActive(true).setAecActive(true);
+    }
+
     @Test public void framingRoundTripsEnvelope() throws Exception {
         FactoryAudio.Envelope expected = FactoryAudio.Envelope.newBuilder()
                 .setProtocolVersion(1).setRequestId(7)
@@ -47,8 +56,7 @@ public class FactoryAudioClientTest {
                         .setSequence(1).setPcmS16Le(ByteString.copyFrom(new byte[640]))).build());
         FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
                 .setProtocolVersion(1).setRequestId(2)
-                .setHealth(FactoryAudio.Health.newBuilder().setCaptureState(
-                        FactoryAudio.CaptureState.CAPTURE_STATE_STREAMING)).build());
+                .setHealth(provenStreamingHealth()).build());
         ByteArrayOutputStream requests = new ByteArrayOutputStream();
         FactoryAudioClient client = new FactoryAudioClient(null,
                 new ByteArrayInputStream(replies.toByteArray()), requests);
@@ -56,6 +64,33 @@ public class FactoryAudioClientTest {
         client.startCapture();
         assertEquals(1, client.readFrame().getSequence());
         assertTrue(requests.size() > 0);
+    }
+
+    @Test public void unattestedStartIsRejectedAndClientIsClosed() throws Exception {
+        ByteArrayOutputStream replies = new ByteArrayOutputStream();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(1)
+                .setHelloReply(FactoryAudio.HelloReply.newBuilder().setSelectedVersion(1)).build());
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(2)
+                .setHealth(FactoryAudio.Health.newBuilder()
+                        .setCaptureState(FactoryAudio.CaptureState.CAPTURE_STATE_STREAMING)
+                        .setBackendName("synthetic-fake")).build());
+        FactoryAudioClient client = new FactoryAudioClient(null,
+                new ByteArrayInputStream(replies.toByteArray()), new ByteArrayOutputStream());
+        client.negotiate();
+        try {
+            client.startCapture();
+        } catch (IOException expected) {
+            assertEquals("factory_audio_chain_not_attested", expected.getMessage());
+            try {
+                client.health();
+            } catch (IOException closed) {
+                assertEquals("factory_audio_client_closed", closed.getMessage());
+                return;
+            }
+        }
+        throw new AssertionError("unattested capture remained usable");
     }
 
     @Test public void explicitAgentErrorIsSurfacedWithoutFallback() throws Exception {
@@ -119,8 +154,7 @@ public class FactoryAudioClientTest {
                 .setHelloReply(FactoryAudio.HelloReply.newBuilder().setSelectedVersion(1)).build());
         FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
                 .setProtocolVersion(1).setRequestId(2)
-                .setHealth(FactoryAudio.Health.newBuilder().setCaptureState(
-                        FactoryAudio.CaptureState.CAPTURE_STATE_STREAMING)).build());
+                .setHealth(provenStreamingHealth()).build());
         FactoryAudioClient client = new FactoryAudioClient(null,
                 new ByteArrayInputStream(replies.toByteArray()), new ByteArrayOutputStream());
         client.negotiate();

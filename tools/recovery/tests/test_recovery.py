@@ -73,6 +73,31 @@ class RecoveryToolTest(unittest.TestCase):
         )
 
     @staticmethod
+    def single_host_policy():
+        return {
+            "accepted_risks": ["plaintext_sensitive_data", "single_point_loss"],
+            "decision_date": "2026-09-08",
+            "device_id": "r1-sample01",
+            "mode": recovery.SINGLE_HOST_POLICY,
+        }
+
+    def single_host_layout(self):
+        layout = self.layout()
+        for area in layout["areas"]:
+            area["full_image"]["copies"] = [
+                {"storage_id": "copy-a", "path": "full.img", "encrypted_storage": False}
+            ]
+            for region in area["regions"]:
+                region["copies"] = [
+                    {"storage_id": "copy-a", "path": region["name"] + ".img",
+                     "encrypted_storage": False}
+                ]
+        layout["files"][0]["copies"] = [
+            {"storage_id": "copy-a", "path": "audio-hal.bin", "encrypted_storage": False}
+        ]
+        return layout
+
+    @staticmethod
     def encoded(value):
         return (json.dumps(value, sort_keys=True) + "\n").encode()
 
@@ -85,7 +110,76 @@ class RecoveryToolTest(unittest.TestCase):
 
     def test_cli_has_no_device_write_or_transport_command(self):
         commands = set(recovery.parser()._subparsers._group_actions[0].choices)
-        self.assertEqual({"create-manifest", "verify-copies", "gate-report"}, commands)
+        self.assertEqual(
+            {"create-manifest", "verify-copies", "gate-report", "assemble-full-emmc"},
+            commands,
+        )
+
+    def test_assemble_full_emmc_validates_and_joins_two_copies(self):
+        prefix_root = self.root / "prefix"
+        body_root = self.root / "body"
+        prefix_root.mkdir()
+        body_root.mkdir()
+        prefix_copies = []
+        body_copies = []
+        for label in ("a", "b"):
+            prefix_file = prefix_root / f"first-{label}.bin"
+            prefix_file.write_bytes(b"p" * 512)
+            body_dir = body_root / f"copy-{label}"
+            body_dir.mkdir()
+            body_file = body_dir / "chunk.bin"
+            body_file.write_bytes(b"b" * 512)
+            prefix_copies.append({
+                "storage_id": f"local-copy-{label}", "file": prefix_file.name,
+                "size": 512, "sha256": recovery.sha256_file(prefix_file),
+            })
+            body_copies.append({
+                "storage_id": f"local-copy-{label}",
+                "file": str(body_file.relative_to(body_root)),
+                "size": 512, "sha256": recovery.sha256_file(body_file),
+            })
+        prefix_evidence = prefix_root / "prefix.json"
+        prefix_evidence.write_text(json.dumps({
+            "device_id": "r1-sample01", "status": "pass",
+            "operation": "loader-first4m",
+            "first4m": {"bytes": 512, "copies": prefix_copies},
+        }))
+        body_evidence = body_root / "body.json"
+        body_evidence.write_text(json.dumps({
+            "device_id": "r1-sample01", "status": "pass",
+            "operation": "loader-image-copy",
+            "address_space": {"image_bytes": 512},
+            "chunks": [{"index": 0, "start_sector": 0, "bytes": 512,
+                        "copies": body_copies}],
+        }))
+        result = recovery.assemble_full_emmc(
+            prefix_evidence, body_evidence, self.root / "assembled",
+            "r1-sample01", physical_bytes=1024, first4m_bytes=512,
+        )
+        self.assertEqual("pass", result["status"])
+        self.assertEqual(2, len(result["copies"]))
+        for copy in result["copies"]:
+            target = self.root / "assembled" / copy["file"]
+            self.assertEqual(b"p" * 512 + b"b" * 512, target.read_bytes())
+            self.assertEqual(0o600, target.stat().st_mode & 0o777)
+
+    def test_assemble_rejects_body_gap(self):
+        prefix = self.root / "prefix.json"
+        body = self.root / "body.json"
+        prefix.write_text(json.dumps({
+            "device_id": "r1-sample01", "status": "pass",
+            "operation": "loader-first4m", "first4m": {"bytes": 512},
+        }))
+        body.write_text(json.dumps({
+            "device_id": "r1-sample01", "status": "pass",
+            "operation": "loader-image-copy", "address_space": {"image_bytes": 512},
+            "chunks": [{"index": 0, "start_sector": 1, "bytes": 512, "copies": []}],
+        }))
+        with self.assertRaisesRegex(recovery.ValidationError, "sequence_invalid"):
+            recovery.assemble_full_emmc(
+                prefix, body, self.root / "assembled", "r1-sample01",
+                physical_bytes=1024, first4m_bytes=512,
+            )
 
     def test_json_evidence_is_not_overwritten(self):
         output = self.root / "evidence.json"
@@ -121,6 +215,51 @@ class RecoveryToolTest(unittest.TestCase):
         layout["areas"][0]["regions"][1]["copies"][0]["encrypted_storage"] = False
         with self.assertRaisesRegex(recovery.ValidationError, "requires_encrypted_storage"):
             self.manifest(layout)
+
+    def test_single_host_plaintext_requires_explicit_exception(self):
+        with self.assertRaisesRegex(recovery.ValidationError, "at_least_two_copies_required"):
+            self.manifest(self.single_host_layout())
+
+    def test_single_host_plaintext_exception_is_device_scoped(self):
+        policy = self.single_host_policy()
+        manifest = recovery.create_manifest(
+            self.single_host_layout(),
+            {"id": "r1-sample01", "hardware": "rk3229", "fingerprint": "firmware/3448"},
+            {"tool": "synthetic-reader", "version": "1"},
+            {"copy-a": self.a},
+            policy,
+        )
+        self.assertEqual(recovery.SINGLE_HOST_POLICY, manifest["storage_policy"]["mode"])
+        policy["device_id"] = "another-device"
+        with self.assertRaisesRegex(recovery.ValidationError, "device_mismatch"):
+            recovery.create_manifest(
+                self.single_host_layout(),
+                {"id": "r1-sample01", "hardware": "rk3229", "fingerprint": "firmware/3448"},
+                {"tool": "synthetic-reader", "version": "1"},
+                {"copy-a": self.a},
+                policy,
+            )
+
+    def test_single_host_complete_gate_is_pass_with_exception(self):
+        manifest = recovery.create_manifest(
+            self.single_host_layout(),
+            {"id": "r1-sample01", "hardware": "rk3229", "fingerprint": "firmware/3448"},
+            {"tool": "synthetic-reader", "version": "1"},
+            {"copy-a": self.a},
+            self.single_host_policy(),
+        )
+        manifest_bytes = self.encoded(manifest)
+        verification = recovery.verify_copies(manifest, {"copy-a": self.a}, manifest_bytes)
+        state = {
+            "device": manifest["device"],
+            "low_level_entry": self.passed("low-level.json"),
+            "controlled_full_restore": self.passed("restore.json"),
+            "post_restore_checks": {
+                name: self.passed(f"post-restore/{name}.json") for name in recovery.RECOVERY_CHECKS
+            },
+        }
+        report = recovery.gate_report(manifest, manifest_bytes, verification, state)
+        self.assertEqual("pass_with_exception", report["status"])
 
     def test_full_image_covering_sensitive_region_must_be_sensitive(self):
         layout = self.layout()

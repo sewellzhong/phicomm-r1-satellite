@@ -1,0 +1,24 @@
+type r1_factory_audio, domain;
+type r1_factory_audio_exec, exec_type, file_type;
+type r1_factory_audio_socket, file_type;
+
+init_daemon_domain(r1_factory_audio)
+
+# Vendor libraries and immutable array/calibration configuration.
+allow r1_factory_audio system_file:dir { open read search getattr };
+allow r1_factory_audio system_file:file { open read execute execute_no_trans getattr };
+
+# Exact PCM/mixer/I2C node types must be narrowed from r1-sample01 AVC evidence.
+# audio_device is the only currently evidenced device type; no block/network access.
+allow r1_factory_audio audio_device:dir { open read search getattr };
+allow r1_factory_audio audio_device:chr_file { open read write ioctl getattr };
+
+allow r1_factory_audio socket_device:dir { add_name write search };
+type_transition r1_factory_audio socket_device:sock_file r1_factory_audio_socket "r1_factory_audio";
+allow r1_factory_audio r1_factory_audio_socket:sock_file { create open read write getattr setattr unlink };
+allow r1_factory_audio self:unix_stream_socket create_stream_socket_perms;
+
+# DAC restricts the socket to GID 10010 and SO_PEERCRED checks the same UID. Keeping
+# the APK in its existing domain avoids breaking API 22 framework compatibility.
+allow untrusted_app r1_factory_audio_socket:sock_file { open read write getattr };
+unix_socket_connect(untrusted_app, r1_factory_audio, r1_factory_audio)

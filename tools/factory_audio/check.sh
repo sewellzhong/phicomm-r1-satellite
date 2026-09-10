@@ -2,6 +2,11 @@
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD_DIR="$ROOT_DIR/local-deps/build/factory-audio-agent-host"
+PYTHON_BIN="$ROOT_DIR/local-deps/esphome-interop-venv/bin/python"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  echo 'Run python3 tools/dev/prepare.py before the factory-audio checks' >&2
+  exit 1
+fi
 cmake --fresh -S "$ROOT_DIR/android/factory-audio-agent" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$BUILD_DIR" --parallel 4
 if [[ -n "${ANDROID_SDK_ROOT:-}" && -d "$ANDROID_SDK_ROOT/ndk/27.0.12077973" ]]; then
@@ -11,4 +16,4 @@ if [[ -n "${ANDROID_SDK_ROOT:-}" && -d "$ANDROID_SDK_ROOT/ndk/27.0.12077973" ]];
     -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-22 -DCMAKE_BUILD_TYPE=Release
   cmake --build "$ANDROID_BUILD_DIR" --parallel 4
 fi
-python3 -m unittest discover -s "$ROOT_DIR/tools/factory_audio/tests" -v
+"$PYTHON_BIN" -m unittest discover -s "$ROOT_DIR/tools/factory_audio/tests" -v

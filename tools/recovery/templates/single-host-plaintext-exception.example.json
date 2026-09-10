@@ -1,0 +1,9 @@
+{
+  "accepted_risks": [
+    "plaintext_sensitive_data",
+    "single_point_loss"
+  ],
+  "decision_date": "2026-09-08",
+  "device_id": "r1-sample01",
+  "mode": "single_host_plaintext_exception"
+}

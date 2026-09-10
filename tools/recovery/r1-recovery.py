@@ -9,12 +9,18 @@ storage roots; generated metadata contains only relative paths and hashes.
 import argparse
 import hashlib
 import json
+import os
+import shutil
+import stat
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 import sys
 
 
 SCHEMA_VERSION = 1
+DEFAULT_STORAGE_POLICY = "dual_encrypted"
+SINGLE_HOST_POLICY = "single_host_plaintext_exception"
+SINGLE_HOST_RISKS = ("plaintext_sensitive_data", "single_point_loss")
 RECOVERY_CHECKS = (
     "boot",
     "adb",
@@ -26,6 +32,8 @@ RECOVERY_CHECKS = (
     "leds",
     "factory_audio_hashes",
 )
+R1_EMMC_BYTES = 7818182656
+R1_FIRST4M_BYTES = 4194304
 
 
 class ValidationError(RuntimeError):
@@ -64,6 +72,140 @@ def stable_sha256_file(path):
     return digest
 
 
+def checked_source(path, root, expected_size, expected_hash):
+    relative = validate_relative_path(path, "source.path")
+    candidate = (root / relative).resolve(strict=True)
+    try:
+        candidate.relative_to(root)
+    except ValueError as error:
+        raise ValidationError("source_path_escapes_root") from error
+    source_stat = os.lstat(candidate)
+    if not stat.S_ISREG(source_stat.st_mode) or stat.S_ISLNK(source_stat.st_mode):
+        raise ValidationError("source_not_regular_file")
+    if source_stat.st_size != expected_size:
+        raise ValidationError("source_size_mismatch")
+    digest = stable_sha256_file(candidate)
+    if digest != expected_hash:
+        raise ValidationError("source_hash_mismatch")
+    return candidate
+
+
+def assemble_full_emmc(prefix_evidence, body_evidence, output_dir,
+                       device_id, physical_bytes=R1_EMMC_BYTES,
+                       first4m_bytes=R1_FIRST4M_BYTES):
+    if device_id != "r1-sample01":
+        raise ValidationError("assembly_device_mismatch")
+    prefix_path = Path(prefix_evidence).resolve(strict=True)
+    body_path = Path(body_evidence).resolve(strict=True)
+    prefix = load_json(prefix_path)
+    body = load_json(body_path)
+    if (prefix.get("device_id") != device_id or prefix.get("status") != "pass"
+            or prefix.get("operation") != "loader-first4m"):
+        raise ValidationError("prefix_evidence_not_passed")
+    if (body.get("device_id") != device_id or body.get("status") != "pass"
+            or body.get("operation") != "loader-image-copy"):
+        raise ValidationError("body_evidence_not_passed")
+    if prefix.get("first4m", {}).get("bytes") != first4m_bytes:
+        raise ValidationError("prefix_size_evidence_mismatch")
+    body_bytes = body.get("address_space", {}).get("image_bytes")
+    if body_bytes != physical_bytes - first4m_bytes:
+        raise ValidationError("body_size_evidence_mismatch")
+    chunks = body.get("chunks")
+    if not isinstance(chunks, list) or not chunks:
+        raise ValidationError("body_chunks_missing")
+    output_dir = Path(output_dir).resolve()
+    output_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
+    if shutil.disk_usage(output_dir).free < physical_bytes * 2 + 1024 * 1024 * 1024:
+        raise ValidationError("assembly_insufficient_free_space")
+    result = {
+        "schema_version": 1,
+        "device_id": device_id,
+        "operation": "assemble-full-emmc",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "sources": {
+            "prefix_evidence": {"path": str(prefix_path), "sha256": sha256_file(prefix_path)},
+            "body_evidence": {"path": str(body_path), "sha256": sha256_file(body_path)},
+        },
+        "physical_bytes": physical_bytes,
+        "copies": [],
+        "status": "running",
+    }
+    prefix_root = prefix_path.parent
+    body_root = body_path.parent
+    try:
+        cursor = 0
+        for expected_index, chunk in enumerate(chunks):
+            if chunk.get("index") != expected_index or chunk.get("start_sector") != cursor // 512:
+                raise ValidationError(f"body_chunk_sequence_invalid:{expected_index}")
+            length = chunk.get("bytes")
+            if not isinstance(length, int) or length <= 0 or length % 512:
+                raise ValidationError(f"body_chunk_length_invalid:{expected_index}")
+            cursor += length
+        if cursor != body_bytes:
+            raise ValidationError("body_chunk_coverage_mismatch")
+        prefix_specs = prefix.get("first4m", {}).get("copies")
+        if not isinstance(prefix_specs, list):
+            raise ValidationError("prefix_copy_set_invalid")
+        prefix_by_storage = {
+            item.get("storage_id"): item for item in prefix_specs if isinstance(item, dict)
+        }
+        if set(prefix_by_storage) != {"local-copy-a", "local-copy-b"}:
+            raise ValidationError("prefix_copy_set_invalid")
+
+        for label in ("a", "b"):
+            storage_id = f"local-copy-{label}"
+            prefix_spec = prefix_by_storage[storage_id]
+            prefix_source = checked_source(
+                prefix_spec["file"], prefix_root, first4m_bytes, prefix_spec["sha256"]
+            )
+            destination_dir = output_dir / f"copy-{label}"
+            destination_dir.mkdir(mode=0o700)
+            destination = destination_dir / "full-emmc.img"
+            digest = hashlib.sha256()
+            written = 0
+            with destination.open("xb") as target:
+                os.chmod(destination, 0o600)
+                sources = [(prefix_source, first4m_bytes, prefix_spec["sha256"])]
+                for expected_index, chunk in enumerate(chunks):
+                    copies = {item["storage_id"]: item for item in chunk["copies"]}
+                    if set(copies) != {"local-copy-a", "local-copy-b"}:
+                        raise ValidationError(f"body_chunk_copy_set_invalid:{expected_index}")
+                    spec = copies[storage_id]
+                    sources.append((
+                        checked_source(spec["file"], body_root, chunk["bytes"], spec["sha256"]),
+                        chunk["bytes"], spec["sha256"],
+                    ))
+                for source, expected_size, _ in sources:
+                    copied = 0
+                    with source.open("rb") as stream:
+                        while block := stream.read(1024 * 1024):
+                            target.write(block)
+                            digest.update(block)
+                            copied += len(block)
+                    if copied != expected_size:
+                        raise ValidationError("source_changed_during_assembly")
+                    written += copied
+            if written != physical_bytes or destination.stat().st_size != physical_bytes:
+                raise ValidationError(f"assembled_size_mismatch:{label}")
+            result["copies"].append({
+                "storage_id": storage_id,
+                "file": str(destination.relative_to(output_dir)),
+                "size": written,
+                "sha256": digest.hexdigest(),
+            })
+        if result["copies"][0]["sha256"] != result["copies"][1]["sha256"]:
+            raise ValidationError("assembled_copy_hash_mismatch")
+        result["status"] = "pass"
+    except Exception as error:
+        result["status"] = "stopped"
+        result["error"] = str(error)
+        raise
+    finally:
+        result["finished_at"] = datetime.now(timezone.utc).isoformat()
+        write_json(output_dir / "assembly.json", result)
+    return result
+
+
 def sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -92,6 +234,40 @@ def validate_relative_path(value, field="path"):
     if path.is_absolute() or ".." in path.parts or value.startswith("~"):
         raise ValidationError(f"{field}_must_be_safe_relative_path")
     return value
+
+
+def validate_storage_policy(policy, device_id=None):
+    if policy is None:
+        return {"mode": DEFAULT_STORAGE_POLICY}
+    if not isinstance(policy, dict):
+        raise ValidationError("storage_policy_must_be_object")
+    mode = policy.get("mode")
+    if mode == DEFAULT_STORAGE_POLICY:
+        if set(policy) != {"mode"}:
+            raise ValidationError("default_storage_policy_has_unexpected_fields")
+        return {"mode": DEFAULT_STORAGE_POLICY}
+    if mode != SINGLE_HOST_POLICY:
+        raise ValidationError("unsupported_storage_policy")
+    expected_fields = {"mode", "device_id", "decision_date", "accepted_risks"}
+    if set(policy) != expected_fields:
+        raise ValidationError("single_host_policy_fields_invalid")
+    exception_device = require_text(policy.get("device_id"), "storage_policy.device_id")
+    if exception_device != "r1-sample01" or (device_id is not None and exception_device != device_id):
+        raise ValidationError("single_host_policy_device_mismatch")
+    decision_date = require_text(policy.get("decision_date"), "storage_policy.decision_date")
+    try:
+        datetime.strptime(decision_date, "%Y-%m-%d")
+    except ValueError as error:
+        raise ValidationError("storage_policy_decision_date_invalid") from error
+    risks = policy.get("accepted_risks")
+    if not isinstance(risks, list) or sorted(risks) != sorted(SINGLE_HOST_RISKS):
+        raise ValidationError("single_host_policy_risks_not_acknowledged")
+    return {
+        "accepted_risks": list(SINGLE_HOST_RISKS),
+        "decision_date": decision_date,
+        "device_id": exception_device,
+        "mode": SINGLE_HOST_POLICY,
+    }
 
 
 def parse_storages(values):
@@ -155,9 +331,11 @@ def validate_regions(area):
     return ordered
 
 
-def validate_copies(copy_specs, classification, storages, expected_size):
-    if not isinstance(copy_specs, list) or len(copy_specs) < 2:
-        raise ValidationError("at_least_two_copies_required")
+def validate_copies(copy_specs, classification, storages, expected_size, storage_policy):
+    single_host = storage_policy["mode"] == SINGLE_HOST_POLICY
+    minimum_copies = 1 if single_host else 2
+    if not isinstance(copy_specs, list) or len(copy_specs) < minimum_copies:
+        raise ValidationError("at_least_one_copy_required" if single_host else "at_least_two_copies_required")
     metadata = []
     identities = set()
     storage_ids = set()
@@ -173,7 +351,7 @@ def validate_copies(copy_specs, classification, storages, expected_size):
         identities.add(identity)
         storage_ids.add(storage_id)
         encrypted = copy.get("encrypted_storage") is True
-        if classification == "sensitive" and not encrypted:
+        if classification == "sensitive" and not encrypted and not single_host:
             raise ValidationError(f"sensitive_copy_requires_encrypted_storage:{storage_id}:{relative}")
         size = path.stat().st_size
         if size != expected_size:
@@ -187,19 +365,21 @@ def validate_copies(copy_specs, classification, storages, expected_size):
             "size": size,
             "storage_id": storage_id,
         })
-    if len(storage_ids) < 2:
+    if len(storage_ids) < minimum_copies:
         raise ValidationError("copies_require_distinct_storage_ids")
     if len(hashes) != 1:
         raise ValidationError("copy_hash_mismatch")
     return metadata, next(iter(hashes))
 
 
-def artifact_from_spec(area_name, kind, spec, offset, length, storages, default_source):
+def artifact_from_spec(area_name, kind, spec, offset, length, storages, default_source, storage_policy):
     name = require_text(spec.get("name", area_name if kind == "full" else None), "artifact.name")
     classification = spec.get("classification")
     if classification not in ("non_sensitive", "sensitive"):
         raise ValidationError(f"invalid_classification:{area_name}:{name}")
-    copies, digest = validate_copies(spec.get("copies"), classification, storages, length)
+    copies, digest = validate_copies(
+        spec.get("copies"), classification, storages, length, storage_policy
+    )
     source = spec.get("source", default_source)
     if not isinstance(source, dict):
         raise ValidationError("artifact_source_must_be_object")
@@ -219,9 +399,11 @@ def artifact_from_spec(area_name, kind, spec, offset, length, storages, default_
     }
 
 
-def create_manifest(layout, identity, source, storages):
+def create_manifest(layout, identity, source, storages, storage_policy=None):
     if layout.get("schema_version") != SCHEMA_VERSION:
         raise ValidationError("unsupported_layout_schema_version")
+    device_id = require_text(identity.get("id"), "device.id")
+    storage_policy = validate_storage_policy(storage_policy, device_id)
     areas = layout.get("areas")
     if not isinstance(areas, list) or not areas:
         raise ValidationError("areas_required")
@@ -241,10 +423,13 @@ def create_manifest(layout, identity, source, storages):
         if any(region.get("classification") == "sensitive" for region in regions):
             if full.get("classification") != "sensitive":
                 raise ValidationError(f"full_image_must_be_sensitive:{area_name}")
-        artifacts.append(artifact_from_spec(area_name, "full", full, 0, area_size, storages, source))
+        artifacts.append(artifact_from_spec(
+            area_name, "full", full, 0, area_size, storages, source, storage_policy
+        ))
         for region in regions:
             artifacts.append(artifact_from_spec(
-                area_name, "region", region, region["offset"], region["length"], storages, source
+                area_name, "region", region, region["offset"], region["length"], storages,
+                source, storage_policy
             ))
         area_records.append({
             "name": area_name,
@@ -265,7 +450,7 @@ def create_manifest(layout, identity, source, storages):
         file_names.add(name)
         length = require_positive_int(file_spec.get("length"), f"file.{name}.length")
         artifacts.append(artifact_from_spec(
-            "device-files", "file", file_spec, 0, length, storages, source
+            "device-files", "file", file_spec, 0, length, storages, source, storage_policy
         ))
     manifest = {
         "artifacts": artifacts,
@@ -273,10 +458,11 @@ def create_manifest(layout, identity, source, storages):
         "device": {
             "fingerprint": require_text(identity.get("fingerprint"), "device.fingerprint"),
             "hardware": require_text(identity.get("hardware"), "device.hardware"),
-            "id": require_text(identity.get("id"), "device.id"),
+            "id": device_id,
         },
         "layout": {"areas": area_records},
         "schema_version": SCHEMA_VERSION,
+        "storage_policy": storage_policy,
         "source": {
             "tool": require_text(source.get("tool"), "source.tool"),
             "version": require_text(source.get("version"), "source.version"),
@@ -291,6 +477,8 @@ def validate_manifest(manifest):
     device = manifest.get("device", {})
     for field in ("id", "hardware", "fingerprint"):
         require_text(device.get(field), f"device.{field}")
+    storage_policy = validate_storage_policy(manifest.get("storage_policy"), device.get("id"))
+    minimum_copies = 1 if storage_policy["mode"] == SINGLE_HOST_POLICY else 2
     source = manifest.get("source", {})
     require_text(source.get("tool"), "source.tool")
     require_text(source.get("version"), "source.version")
@@ -314,15 +502,19 @@ def validate_manifest(manifest):
         require_positive_int(artifact.get("length"), "artifact.length")
         digest = validate_sha256(artifact.get("sha256"), "artifact")
         copies = artifact.get("copies")
-        if not isinstance(copies, list) or len(copies) < 2:
-            raise ValidationError("manifest_requires_two_copies")
+        if not isinstance(copies, list) or len(copies) < minimum_copies:
+            raise ValidationError(
+                "manifest_requires_one_copy" if minimum_copies == 1 else "manifest_requires_two_copies"
+            )
         storage_ids = set()
         for copy in copies:
             storage_ids.add(require_text(copy.get("storage_id"), "copy.storage_id"))
             validate_relative_path(copy.get("path"), "copy.path")
-            if artifact["classification"] == "sensitive" and copy.get("encrypted_storage") is not True:
+            if (artifact["classification"] == "sensitive"
+                    and copy.get("encrypted_storage") is not True
+                    and storage_policy["mode"] != SINGLE_HOST_POLICY):
                 raise ValidationError("manifest_sensitive_copy_not_encrypted")
-        if len(storage_ids) < 2:
+        if len(storage_ids) < minimum_copies:
             raise ValidationError("manifest_requires_distinct_storage_ids")
         artifact_source = artifact.get("source", {})
         require_text(artifact_source.get("tool"), "artifact.source.tool")
@@ -361,6 +553,8 @@ def validate_manifest(manifest):
 
 def verify_copies(manifest, storages, manifest_bytes):
     validate_manifest(manifest)
+    storage_policy = validate_storage_policy(manifest.get("storage_policy"), manifest["device"]["id"])
+    minimum_storages = 1 if storage_policy["mode"] == SINGLE_HOST_POLICY else 2
     failures = []
     checked = []
     seen_files = set()
@@ -377,7 +571,9 @@ def verify_copies(manifest, storages, manifest_bytes):
                 storage_ids.add(storage_id)
                 size_ok = path.stat().st_size == artifact["length"]
                 hash_ok = stable_sha256_file(path) == artifact["sha256"]
-                encryption_ok = artifact["classification"] != "sensitive" or copy.get("encrypted_storage") is True
+                encryption_ok = (artifact["classification"] != "sensitive"
+                                 or copy.get("encrypted_storage") is True
+                                 or storage_policy["mode"] == SINGLE_HOST_POLICY)
                 if not (size_ok and hash_ok and encryption_ok):
                     failures.append({"artifact": artifact_key, "reason": "copy_verification_failed", "storage_id": storage_id})
                 checked.append({
@@ -388,7 +584,7 @@ def verify_copies(manifest, storages, manifest_bytes):
                 })
             except (OSError, ValidationError):
                 failures.append({"artifact": artifact_key, "reason": "copy_unavailable"})
-        if len(storage_ids) < 2:
+        if len(storage_ids) < minimum_storages:
             failures.append({"artifact": artifact_key, "reason": "independent_storages_missing"})
     return {
         "checked": checked,
@@ -401,6 +597,7 @@ def verify_copies(manifest, storages, manifest_bytes):
 
 def gate_report(manifest, manifest_bytes, verification, recovery):
     validate_manifest(manifest)
+    storage_policy = validate_storage_policy(manifest.get("storage_policy"), manifest["device"]["id"])
     failures = []
     pending = []
     expected_manifest_hash = sha256_bytes(manifest_bytes)
@@ -454,13 +651,21 @@ def gate_report(manifest, manifest_bytes, verification, recovery):
     checks = recovery.get("post_restore_checks", {})
     for name in RECOVERY_CHECKS:
         evaluate_record(f"post_restore:{name}", checks.get(name))
-    status = "fail" if failures else "pending" if pending else "pass"
+    if failures:
+        status = "fail"
+    elif pending:
+        status = "pending"
+    elif storage_policy["mode"] == SINGLE_HOST_POLICY:
+        status = "pass_with_exception"
+    else:
+        status = "pass"
     return {
         "device": manifest["device"],
         "failures": sorted(set(failures)),
         "manifest_sha256": expected_manifest_hash,
         "pending": sorted(set(pending)),
         "schema_version": SCHEMA_VERSION,
+        "storage_policy": storage_policy,
         "status": status,
     }
 
@@ -476,6 +681,7 @@ def parser():
     create.add_argument("--tool", required=True)
     create.add_argument("--tool-version", required=True)
     create.add_argument("--storage", action="append", default=[], metavar="ID=PATH")
+    create.add_argument("--policy-exception", help="Explicit device-scoped storage policy exception JSON")
     create.add_argument("--output", required=True)
     verify = commands.add_parser("verify-copies", help="Re-read and verify every image copy")
     verify.add_argument("--manifest", required=True)
@@ -486,12 +692,23 @@ def parser():
     gate.add_argument("--verification", required=True)
     gate.add_argument("--recovery-state", required=True)
     gate.add_argument("--output", required=True)
+    assemble = commands.add_parser("assemble-full-emmc", help="Assemble two full images from verified prefix and body")
+    assemble.add_argument("--prefix-evidence", required=True)
+    assemble.add_argument("--body-evidence", required=True)
+    assemble.add_argument("--device-id", required=True)
+    assemble.add_argument("--output", required=True)
     return root
 
 
 def main(argv=None):
     args = parser().parse_args(argv)
     try:
+        if args.command == "assemble-full-emmc":
+            result = assemble_full_emmc(
+                args.prefix_evidence, args.body_evidence, args.output, args.device_id
+            )
+            print(f"R0 full eMMC assembly: {result['status']}")
+            return 0
         if args.command == "create-manifest":
             layout = load_json(args.layout)
             manifest = create_manifest(
@@ -499,6 +716,7 @@ def main(argv=None):
                 {"id": args.device_id, "hardware": args.hardware, "fingerprint": args.fingerprint},
                 {"tool": args.tool, "version": args.tool_version},
                 parse_storages(args.storage),
+                load_json(args.policy_exception) if args.policy_exception else None,
             )
             write_json(args.output, manifest)
             print("R0 manifest created and copy hashes matched")
@@ -518,7 +736,7 @@ def main(argv=None):
         )
         write_json(args.output, result)
         print(f"R0 recovery gate: {result['status']}")
-        return 0 if result["status"] == "pass" else 1
+        return 0 if result["status"] in ("pass", "pass_with_exception") else 1
     except (AttributeError, KeyError, OSError, TypeError, ValueError, json.JSONDecodeError, ValidationError) as error:
         print(f"R0 recovery tool refused operation: {error}", file=sys.stderr)
         return 2

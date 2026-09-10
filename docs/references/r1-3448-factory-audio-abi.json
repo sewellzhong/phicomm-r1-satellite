@@ -1,0 +1,36 @@
+{
+  "abi": "armeabi-v7a",
+  "configuration": {
+    "aec_enabled_in_unisound_config": true,
+    "aec_filter_count": 12,
+    "aec_frame_shift": 256,
+    "array_radius_cm": 3.5,
+    "array_type": "circle",
+    "mic_count": 4,
+    "pcm_card": 1,
+    "pcm_device": 0,
+    "speaker_reference_channels": 2
+  },
+  "libraries": {
+    "libUni4micHalJNI.so": "629593e759fbeade5960361b631d69296ebe47df1e889ce64a8cb7128aa25886",
+    "libUniMicArray.so": "bc49e20aa671053932b1cfc21cb1d6492ac428a4c24d5d6cebcddc7f573769b9",
+    "libuni4michal.so": "ce49904fd7e82446fed671f9ed8da398480ab7c3263bc6a29aafd0f13c1d504a",
+    "libuni4michalchance.so": "24de008fc20cd60111c1ba33fd2743f193f8b5f71a93bcafac13497c8fcd72fb"
+  },
+  "native_call_sequence": [
+    "uni_4mic_hal_init(1)",
+    "set4MicDebugMode(0)",
+    "close4MicAlgorithm(0)",
+    "uni_4mic_pcm_open(2)",
+    "uni_4mic_pcm_start(handle)",
+    "uni_4mic_pcm_read(handle, buffer, length)",
+    "get4MicDoaResult()",
+    "uni_4mic_pcm_stop(handle)",
+    "uni_4mic_pcm_close(handle)",
+    "uni_4mic_hal_release()"
+  ],
+  "return_contracts": {
+    "uni_4mic_pcm_read": "forwards tinyalsa pcm_read status: 0 success, negative failure"
+  },
+  "status": "static_abi_confirmed_runtime_shape_pending"
+}

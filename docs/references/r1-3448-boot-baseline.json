@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "device": {
+    "id": "r1-sample01",
+    "fingerprint": "Android/rk322x_echo/rk322x_echo:5.1.1/LMY49F/3448:user/release-keys",
+    "hardware": "rk30board"
+  },
+  "baseline_manifest_sha256": "ec39874ca30a82ccf72c582141c340c3c095ff06142bd3e963ef7f348a280e40",
+  "source_evidence": {
+    "inventory_sha256": "d4aca94a305d683982e19ad0f6f9a62adfaa1811a1730cc0db8b4b0f5213ebad",
+    "copy_manifest_sha256": "ba784e8e248f4e9b1e8eb21fcce1ccd7f59aeeb8d7983718c88b28e376436f61",
+    "copy_verification_sha256": "aaee3fcbc0b8cf6d4825e4f3982bb19f68625447590c48ec0376e3cc8608514b"
+  },
+  "partitions": {
+    "kernel": {
+      "bytes": 12582912,
+      "sha256": "0c5a68e77346e290250c655bbad782fec731346bc0263ee997fdf1e575ef8169"
+    },
+    "boot": {
+      "bytes": 12582912,
+      "sha256": "f904c534e62323dbbcaccf159056c5dcb3797cfcce6eaf2edcbd39c0ed50ad58"
+    },
+    "recovery": {
+      "bytes": 33554432,
+      "sha256": "05bdb5266fb0c3e326b7d884687e05f27680bd6751890225c54c7fd24c33209e"
+    }
+  },
+  "android_boot": {
+    "magic": "ANDROID!",
+    "page_size": 16384,
+    "kernel_size": 7735864,
+    "kernel_addr": 1614839808,
+    "ramdisk_addr": 1644167168,
+    "second_size": 271360,
+    "second_addr": 1626341376,
+    "tags_addr": 1611169792,
+    "boot_ramdisk_size": 1492140,
+    "recovery_ramdisk_size": 2962916,
+    "kernel_sha256": "9ae541809bf9f05ae00145876814fbc4d049e19801bf15a23c6a579b0d5d40a8",
+    "second_sha256": "3f0b6aa367b5c9bc8a2f357d759fb60fab4106748ebd59552226395eabe9bf1d",
+    "dtb_offset_in_second": 2048,
+    "dtb_size": 79298,
+    "dtb_sha256": "ac5f7f3b6a4612486ab348a3bdb6aabb41439b9999115dc540720f76e0f44993"
+  },
+  "status": "approved_original_input_only"
+}

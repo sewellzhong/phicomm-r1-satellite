@@ -12,6 +12,14 @@
 
 - [r1-sample01 R0 完整备份与回刷操作手册](2026-09-08-r1-r0-recovery-runbook.md)：无设备阶段的主机清单与校验工具用法，以及设备到手后的只读盘点、双副本、低层恢复和受控回刷步骤。
 
+- [原厂音频代理主机开发记录](2026-09-08-r1-factory-audio-agent-host.md)：真实库动态后端、最小权限边界、严格链路证明字段、只读预检和待完成实机门槛。
+
+- [r1-sample01 原厂链受控运行记录](2026-09-08-r1-original-chain-smoke.md)：WAN 阻断下的原厂四麦/MicArray实际初始化、真人原厂唤醒、空调试文件边界及安全恢复结果。
+
+- [r1-sample01 Type-C 与 RockUSB 入口识别](2026-09-09-r1-maskrom-entry.md)：有效数据线对照、静态Maskrom名称与实际 `bcdUSB=2.01` Loader判定、固定只读查询及外部RAM Loader发送前停止证据。
+
+- [r1-sample01 原厂 boot/recovery 离线基线](2026-09-10-r1-boot-recovery-baseline.md)：从已复核Loader image双份副本提取原厂kernel、boot、recovery，记录Android boot image、ramdisk、RSCE/DTB及音频硬件约束；不改变R0门槛。
+
 - [全链路优化分析与开发任务 O1～O8](2026-09-07-r1-chain-optimization.md)：现状证据、任务依赖、HA 外部交接及验证要求；已纳入后续开发，未视为实现或验收。
 
 - [首台功能盘点、必要性与语音/HA 双入口管理](2026-09-07-r1-feature-requirements.md)：2026-09-07 用户确认的目标需求，未实现项及验收状态分别记录。

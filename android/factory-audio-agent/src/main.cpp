@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <signal.h>
+#include <grp.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -13,8 +14,11 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
+
+#include "audio_backend.h"
 
 namespace {
 
@@ -38,6 +42,18 @@ uint64_t monotonic_ns() {
   return static_cast<uint64_t>(value.tv_sec) * 1000000000ULL + value.tv_nsec;
 }
 
+bool parse_bounded_int(const char* text, int minimum, int maximum, int* value) {
+  if (text == nullptr || value == nullptr) return false;
+  char* end = nullptr;
+  errno = 0;
+  long parsed = strtol(text, &end, 10);
+  if (errno != 0 || end == text || *end != '\0' || parsed < minimum || parsed > maximum) {
+    return false;
+  }
+  *value = static_cast<int>(parsed);
+  return true;
+}
+
 void append_varint(std::vector<uint8_t>* out, uint64_t value) {
   while (value >= 0x80) {
     out->push_back(static_cast<uint8_t>(value) | 0x80);
@@ -58,6 +74,12 @@ void append_uint(std::vector<uint8_t>* out, uint32_t field, uint64_t value) {
 
 void append_bool(std::vector<uint8_t>* out, uint32_t field, bool value) {
   if (value) append_uint(out, field, 1);
+}
+
+void append_sint32(std::vector<uint8_t>* out, uint32_t field, int32_t value) {
+  uint32_t zigzag = (static_cast<uint32_t>(value) << 1)
+      ^ static_cast<uint32_t>(value >> 31);
+  append_uint(out, field, zigzag);
 }
 
 void append_bytes(std::vector<uint8_t>* out, uint32_t field, const uint8_t* data, size_t size) {
@@ -223,14 +245,20 @@ std::vector<uint8_t> error_message(int code, const std::string& detail) {
 
 std::vector<uint8_t> health_message(bool streaming, int reference_state,
                                     uint64_t frames, uint64_t dropped,
+                                    const AudioBackend& backend,
                                     const std::string& failure = "") {
   std::vector<uint8_t> result;
   append_uint(&result, 1, streaming ? kStreaming : kIdle);
   append_uint(&result, 2, reference_state);
-  append_string(&result, 3, "synthetic-fake");
+  append_string(&result, 3, backend.name());
   append_uint(&result, 4, frames);
   append_uint(&result, 5, dropped);
   append_string(&result, 6, failure);
+  append_string(&result, 7, backend.board_version());
+  append_uint(&result, 8, backend.raw_mic_channels());
+  append_uint(&result, 9, backend.aec_reference_channels());
+  append_bool(&result, 10, backend.array_processing_active());
+  append_bool(&result, 11, backend.aec_active());
   return result;
 }
 
@@ -253,39 +281,6 @@ struct ClientState {
   uint64_t last_reference_ns = 0;
   uint64_t frame_period_ns = kDefaultFramePeriodNs;
   std::vector<uint8_t> input;
-};
-
-class AudioBackend {
- public:
-  virtual ~AudioBackend() = default;
-  virtual const char* name() const = 0;
-  virtual bool initialize() = 0;
-  virtual bool start() = 0;
-  virtual bool read_frame(std::vector<uint8_t>* pcm) = 0;
-  virtual bool submit_playback_reference(const std::vector<uint8_t>& pcm) = 0;
-  virtual void stop() = 0;
-  virtual void release() = 0;
-};
-
-class SyntheticBackend final : public AudioBackend {
- public:
-  const char* name() const override { return "synthetic-fake"; }
-  bool initialize() override { initialized_ = true; return true; }
-  bool start() override { streaming_ = initialized_; return streaming_; }
-  bool read_frame(std::vector<uint8_t>* pcm) override {
-    if (!streaming_) return false;
-    pcm->assign(kFrameBytes, 0);
-    return true;
-  }
-  bool submit_playback_reference(const std::vector<uint8_t>& pcm) override {
-    return initialized_ && pcm.size() == kFrameBytes;
-  }
-  void stop() override { streaming_ = false; }
-  void release() override { streaming_ = false; initialized_ = false; }
-
- private:
-  bool initialized_ = false;
-  bool streaming_ = false;
 };
 
 int reference_state(const ClientState& state) {
@@ -332,18 +327,19 @@ bool handle_request(int fd, const Request& request, ClientState* state, AudioBac
     state->sequence = 0;
     state->next_frame_ns = monotonic_ns() + state->frame_period_ns;
     return send_envelope(fd, envelope(request.request_id, 15,
-        health_message(true, reference_state(*state), state->sequence, state->dropped)));
+        health_message(true, reference_state(*state), state->sequence, state->dropped, *backend)));
   }
   if (request.payload_field == 13) {
     backend->stop();
     backend->release();
     state->streaming = false;
     return send_envelope(fd, envelope(request.request_id, 15,
-        health_message(false, reference_state(*state), state->sequence, state->dropped)));
+        health_message(false, reference_state(*state), state->sequence, state->dropped, *backend)));
   }
   if (request.payload_field == 14) {
     return send_envelope(fd, envelope(request.request_id, 15,
-        health_message(state->streaming, reference_state(*state), state->sequence, state->dropped)));
+        health_message(state->streaming, reference_state(*state), state->sequence, state->dropped,
+                       *backend)));
   }
   if (request.payload_field == 17) {
     if (!state->streaming) {
@@ -358,22 +354,24 @@ bool handle_request(int fd, const Request& request, ClientState* state, AudioBac
     }
     state->last_reference_ns = monotonic_ns();
     return send_envelope(fd, envelope(request.request_id, 15,
-        health_message(state->streaming, kReferenceActive, state->sequence, state->dropped)));
+        health_message(state->streaming, kReferenceActive, state->sequence, state->dropped,
+                       *backend)));
   }
   return reply_error(fd, request.request_id, 7, "request_not_supported");
 }
 
 bool emit_frame(int fd, ClientState* state, AudioBackend* backend) {
   std::vector<uint8_t> audio;
-  std::vector<uint8_t> pcm;
-  if (!backend->read_frame(&pcm) || pcm.size() != kFrameBytes) {
+  BackendFrame frame;
+  if (!backend->read_frame(&frame) || frame.pcm.size() != kFrameBytes) {
     return reply_error(fd, 0, 3, "backend_read_failed");
   }
   append_uint(&audio, 1, ++state->sequence);
   append_uint(&audio, 2, monotonic_ns());
-  append_bytes(&audio, 3, pcm.data(), pcm.size());
+  append_bytes(&audio, 3, frame.pcm.data(), frame.pcm.size());
   append_uint(&audio, 4, state->dropped);
-  append_bool(&audio, 6, false);
+  if (frame.doa_valid) append_sint32(&audio, 5, frame.doa_degrees);
+  append_bool(&audio, 6, frame.doa_valid);
   append_uint(&audio, 7, reference_state(*state));
   return send_envelope(fd, envelope(0, 16, audio));
 }
@@ -445,12 +443,50 @@ bool safe_remove_socket(const std::string& path) {
 int main(int argc, char** argv) {
   std::string socket_path = "/dev/socket/r1_factory_audio";
   long expected_uid = -1;
+  long drop_uid = -1;
+  long drop_gid = -1;
   bool fake = false;
+  VendorBackendOptions vendor_options;
   uint64_t frame_period_ns = kDefaultFramePeriodNs;
   for (int index = 1; index < argc; ++index) {
     std::string argument = argv[index];
     if (argument == "--fake") fake = true;
+    else if (argument == "--vendor-library" && index + 1 < argc) {
+      vendor_options.library_path = argv[++index];
+    } else if (argument == "--vendor-open-channels" && index + 1 < argc) {
+      if (!parse_bounded_int(argv[++index], 1, 8, &vendor_options.open_channels)) {
+        fprintf(stderr, "invalid_vendor_open_channels\n");
+        return 2;
+      }
+    } else if (argument == "--vendor-output-channels" && index + 1 < argc) {
+      if (!parse_bounded_int(argv[++index], 1, 8, &vendor_options.output_channels)) {
+        fprintf(stderr, "invalid_vendor_output_channels\n");
+        return 2;
+      }
+    } else if (argument == "--vendor-output-channel" && index + 1 < argc) {
+      if (!parse_bounded_int(argv[++index], 0, 7, &vendor_options.output_channel)) {
+        fprintf(stderr, "invalid_vendor_output_channel\n");
+        return 2;
+      }
+    }
     else if (argument == "--socket" && index + 1 < argc) socket_path = argv[++index];
+    else if (argument == "--drop-uid" && index + 1 < argc) {
+      char* end = nullptr;
+      drop_uid = strtol(argv[++index], &end, 10);
+      if (!end || *end != '\0' || drop_uid <= 0
+          || static_cast<unsigned long>(drop_uid) > std::numeric_limits<uid_t>::max()) {
+        fprintf(stderr, "invalid_drop_uid\n");
+        return 2;
+      }
+    } else if (argument == "--drop-gid" && index + 1 < argc) {
+      char* end = nullptr;
+      drop_gid = strtol(argv[++index], &end, 10);
+      if (!end || *end != '\0' || drop_gid <= 0
+          || static_cast<unsigned long>(drop_gid) > std::numeric_limits<gid_t>::max()) {
+        fprintf(stderr, "invalid_drop_gid\n");
+        return 2;
+      }
+    }
     else if (argument == "--expected-uid" && index + 1 < argc) {
       char* end = nullptr;
       expected_uid = strtol(argv[++index], &end, 10);
@@ -468,16 +504,31 @@ int main(int argc, char** argv) {
       }
       frame_period_ns = static_cast<uint64_t>(value) * 1000ULL;
     } else {
-      fprintf(stderr, "usage: r1-factory-audio-agent --expected-uid UID [--fake] [--socket PATH]\n");
+      fprintf(stderr, "usage: r1-factory-audio-agent --expected-uid UID [--fake | "
+                      "--vendor-library PATH --vendor-open-channels 2 "
+                      "--vendor-output-channels 1|2 --vendor-output-channel N] [--socket PATH]\n");
       return 2;
     }
   }
-  if (!fake) {
+  bool vendor = !vendor_options.library_path.empty();
+  if (fake == vendor) {
     fprintf(stderr, "factory_backend_unimplemented\n");
     return 3;
   }
+  if (vendor && (vendor_options.library_path[0] != '/'
+      || vendor_options.open_channels != 2
+      || (vendor_options.output_channels != 1 && vendor_options.output_channels != 2)
+      || vendor_options.output_channel < 0
+      || vendor_options.output_channel >= vendor_options.output_channels)) {
+    fprintf(stderr, "invalid_vendor_backend_shape\n");
+    return 2;
+  }
   if (expected_uid < 0 || socket_path.empty() || socket_path[0] != '/') {
     fprintf(stderr, "expected_uid_and_absolute_socket_required\n");
+    return 2;
+  }
+  if ((drop_uid < 0) != (drop_gid < 0)) {
+    fprintf(stderr, "drop_uid_and_gid_required_together\n");
     return 2;
   }
   if (!safe_remove_socket(socket_path)) {
@@ -495,8 +546,20 @@ int main(int argc, char** argv) {
   mode_t old_mask = umask(0007);
   int bind_result = bind(server, reinterpret_cast<sockaddr*>(&address), sizeof(address));
   umask(old_mask);
-  if (bind_result != 0 || chmod(socket_path.c_str(), 0660) != 0 || listen(server, 1) != 0) {
+  if (bind_result != 0 || chmod(socket_path.c_str(), 0660) != 0
+      || (drop_uid >= 0 && chown(socket_path.c_str(), static_cast<uid_t>(drop_uid),
+                                 static_cast<gid_t>(expected_uid)) != 0)
+      || listen(server, 1) != 0) {
     perror("bind_listen"); close(server); safe_remove_socket(socket_path); return 1;
+  }
+  if (drop_uid >= 0) {
+    if (geteuid() != 0 || setgroups(0, nullptr) != 0
+        || setgid(static_cast<gid_t>(drop_gid)) != 0
+        || setuid(static_cast<uid_t>(drop_uid)) != 0
+        || geteuid() != static_cast<uid_t>(drop_uid)
+        || getegid() != static_cast<gid_t>(drop_gid)) {
+      perror("privilege_drop"); close(server); safe_remove_socket(socket_path); return 1;
+    }
   }
   signal(SIGINT, on_signal);
   signal(SIGTERM, on_signal);
@@ -522,8 +585,10 @@ int main(int argc, char** argv) {
       close(client);
       continue;
     }
-    SyntheticBackend backend;
-    serve_client(client, &backend, frame_period_ns);
+    std::unique_ptr<AudioBackend> backend;
+    if (fake) backend.reset(new SyntheticBackend());
+    else backend.reset(new VendorBackend(vendor_options));
+    serve_client(client, backend.get(), frame_period_ns);
     close(client);
   }
   close(server);
