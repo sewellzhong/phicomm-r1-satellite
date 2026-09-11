@@ -147,6 +147,85 @@ public class FactoryAudioClientTest {
         assertTrue(start.getVendorDebugFiles());
     }
 
+    @Test public void micArrayValidationRequiresActiveHealthAndSetsOnlyTapFlags()
+            throws Exception {
+        ByteArrayOutputStream replies = new ByteArrayOutputStream();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(1)
+                .setHelloReply(FactoryAudio.HelloReply.newBuilder().setSelectedVersion(1)).build());
+        FactoryAudio.Health health = FactoryAudio.Health.newBuilder()
+                .setCaptureState(FactoryAudio.CaptureState.CAPTURE_STATE_STREAMING)
+                .setBackendName(FactoryAudioAttestation.PROVEN_BACKEND)
+                .setVendorBoardVersion("UNI_4MIC_HAL_ANDROID_V1.1")
+                .setRawMicChannels(4).setArrayProcessingActive(true)
+                .setMicarrayDiagnosticTapActive(true).build();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(2).setHealth(health).build());
+        ByteArrayOutputStream requests = new ByteArrayOutputStream();
+        FactoryAudioClient client = new FactoryAudioClient(null,
+                new ByteArrayInputStream(replies.toByteArray()), requests);
+        client.negotiate();
+        assertEquals(health, client.startMicArrayDiagnosticValidationCapture());
+
+        ByteArrayInputStream encoded = new ByteArrayInputStream(requests.toByteArray());
+        FactoryAudioFraming.read(encoded);
+        FactoryAudio.StartCapture start = FactoryAudioFraming.read(encoded).getStartCapture();
+        assertTrue(start.getIncludeDiagnosticOutput());
+        assertTrue(start.getMicarrayDiagnosticTap());
+        assertTrue(!start.getVendorDebugFiles());
+    }
+
+    @Test public void micArrayValidationRejectsInactiveTap() throws Exception {
+        ByteArrayOutputStream replies = new ByteArrayOutputStream();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(1)
+                .setHelloReply(FactoryAudio.HelloReply.newBuilder().setSelectedVersion(1)).build());
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(2)
+                .setHealth(provenStreamingHealth()).build());
+        FactoryAudioClient client = new FactoryAudioClient(null,
+                new ByteArrayInputStream(replies.toByteArray()), new ByteArrayOutputStream());
+        client.negotiate();
+        try {
+            client.startMicArrayDiagnosticValidationCapture();
+        } catch (IOException expected) {
+            assertEquals("factory_audio_micarray_tap_not_active", expected.getMessage());
+            return;
+        }
+        throw new AssertionError("inactive MicArray tap entered validation capture");
+    }
+
+    @Test public void malformedMicArrayTapPayloadIsRejected() throws Exception {
+        ByteArrayOutputStream replies = new ByteArrayOutputStream();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(1)
+                .setHelloReply(FactoryAudio.HelloReply.newBuilder().setSelectedVersion(1)).build());
+        FactoryAudio.MicArrayDiagnosticCall malformed =
+                FactoryAudio.MicArrayDiagnosticCall.newBuilder()
+                        .setSequence(1).setSamplesPerChannel(256)
+                        .setRawMicChannels(4).setEchoReferenceChannels(2)
+                        .setRawMicPcmS16Le(ByteString.copyFrom(new byte[2048]))
+                        .setEchoReferencePcmS16Le(ByteString.copyFrom(new byte[1022]))
+                        .build();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setAudioFrame(FactoryAudio.AudioFrame.newBuilder()
+                        .setSequence(1).setPcmS16Le(ByteString.copyFrom(new byte[640]))
+                        .addMicarrayDiagnosticCalls(malformed)).build());
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(2)
+                .setHealth(provenStreamingHealth().setMicarrayDiagnosticTapActive(true)).build());
+        FactoryAudioClient client = new FactoryAudioClient(null,
+                new ByteArrayInputStream(replies.toByteArray()), new ByteArrayOutputStream());
+        client.negotiate();
+        try {
+            client.startMicArrayDiagnosticValidationCapture();
+        } catch (IOException expected) {
+            assertEquals("factory_audio_micarray_tap_shape_mismatch", expected.getMessage());
+            return;
+        }
+        throw new AssertionError("malformed MicArray tap payload was buffered");
+    }
+
     @Test public void validationCaptureRejectsSyntheticBackend() throws Exception {
         ByteArrayOutputStream replies = new ByteArrayOutputStream();
         FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()

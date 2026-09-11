@@ -202,13 +202,19 @@ public final class ProbeCommandReceiver extends BroadcastReceiver {
         int volumeMaxIndex = playbackReference == null ? -1
                 : audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         boolean vendorDebugFiles = intent.getBooleanExtra("vendor_debug_files", false);
+        boolean micArrayDiagnosticTap = intent.getBooleanExtra(
+                "micarray_diagnostic_tap", false);
+        if (vendorDebugFiles && micArrayDiagnosticTap) {
+            throw new IllegalArgumentException("factory_audio_diagnostics_must_be_isolated");
+        }
         Log.i(AUDIO_TAG, "R1_FACTORY_AUDIO_VALIDATION_START nonce=" + nonce
                 + " duration_seconds=" + durationSeconds
                 + " playback_reference=" + (playbackReference != null)
-                + " vendor_debug_files=" + vendorDebugFiles);
+                + " vendor_debug_files=" + vendorDebugFiles
+                + " micarray_diagnostic_tap=" + micArrayDiagnosticTap);
         FactoryAudioValidationCapture.Result result = FactoryAudioValidationCapture.record(
                 diagnostics, durationSeconds, sampleId, playbackReference,
-                volumeIndex, volumeMaxIndex, vendorDebugFiles);
+                volumeIndex, volumeMaxIndex, vendorDebugFiles, micArrayDiagnosticTap);
         Log.i(AUDIO_TAG, "R1_FACTORY_AUDIO_VALIDATION_COMPLETE nonce=" + nonce
                 + " wav_path=" + result.wavFile.getAbsolutePath()
                 + " diagnostic_wav_path=" + (result.diagnosticWavFile == null
@@ -216,7 +222,8 @@ public final class ProbeCommandReceiver extends BroadcastReceiver {
                 + " metadata_path=" + result.metadataFile.getAbsolutePath()
                 + " frames=" + result.frames
                 + " sequence_gaps=" + result.sequenceGaps
-                + " doa_valid_frames=" + result.doaValidFrames);
+                + " doa_valid_frames=" + result.doaValidFrames
+                + " micarray_diagnostic_tap_calls=" + result.micArrayCalls);
     }
 
     private static File diagnosticsDir(Context context) {

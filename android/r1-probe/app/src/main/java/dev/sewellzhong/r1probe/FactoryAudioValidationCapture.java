@@ -29,12 +29,19 @@ final class FactoryAudioValidationCapture {
             File playbackReferenceFile, int musicVolumeIndex, int musicVolumeMaxIndex)
             throws Exception {
         return record(outputDirectory, durationSeconds, sampleId, playbackReferenceFile,
-                musicVolumeIndex, musicVolumeMaxIndex, false);
+                musicVolumeIndex, musicVolumeMaxIndex, false, false);
     }
 
     static Result record(File outputDirectory, int durationSeconds, String sampleId,
             File playbackReferenceFile, int musicVolumeIndex, int musicVolumeMaxIndex,
             boolean vendorDebugFiles) throws Exception {
+        return record(outputDirectory, durationSeconds, sampleId, playbackReferenceFile,
+                musicVolumeIndex, musicVolumeMaxIndex, vendorDebugFiles, false);
+    }
+
+    static Result record(File outputDirectory, int durationSeconds, String sampleId,
+            File playbackReferenceFile, int musicVolumeIndex, int musicVolumeMaxIndex,
+            boolean vendorDebugFiles, boolean micArrayDiagnosticTap) throws Exception {
         if (durationSeconds < 1 || durationSeconds > 30) {
             throw new IllegalArgumentException("factory_audio_validation_duration_out_of_range");
         }
@@ -62,7 +69,20 @@ final class FactoryAudioValidationCapture {
         int diagnosticChannels = 0;
         int diagnosticSelectedOutputChannel = 0;
         int diagnosticPcmBytes = 0;
+        long micArrayCalls = 0;
+        long micArrayFirstSequence = 0;
+        long micArrayLastSequence = 0;
+        long micArraySequenceGaps = 0;
+        long micArrayRawBytes = 0;
+        long micArrayEchoBytes = 0;
+        long micArrayAsrBytes = 0;
+        long micArrayVadBytes = 0;
+        long micArrayRawNonzeroBytes = 0;
+        long micArrayEchoNonzeroBytes = 0;
+        long micArrayAsrNonzeroBytes = 0;
+        long micArrayVadNonzeroBytes = 0;
         FactoryAudio.Health startHealth;
+        FactoryAudio.Health finalHealth = null;
         PlaybackRun playback = null;
 
         FileOutputStream output = new FileOutputStream(wavFile);
@@ -71,9 +91,10 @@ final class FactoryAudioValidationCapture {
             output.write(WavHeader.create(0));
             FactoryAudioClient client = FactoryAudioClient.connect();
             try {
-                startHealth = vendorDebugFiles
-                        ? client.startVendorDebugValidationCapture()
-                        : client.startUnattestedValidationCapture();
+                startHealth = micArrayDiagnosticTap
+                        ? client.startMicArrayDiagnosticValidationCapture()
+                        : (vendorDebugFiles ? client.startVendorDebugValidationCapture()
+                                : client.startUnattestedValidationCapture());
                 if (playbackReferenceFile != null) {
                     playback = new PlaybackRun(playbackReferenceFile);
                     playback.start();
@@ -125,9 +146,37 @@ final class FactoryAudioValidationCapture {
                         diagnosticOutput.write(diagnostic);
                         diagnosticPcmBytes += diagnostic.length;
                     }
+                    for (FactoryAudio.MicArrayDiagnosticCall call
+                            : frame.getMicarrayDiagnosticCallsList()) {
+                        long callSequence = call.getSequence();
+                        if (micArrayLastSequence != 0 && callSequence <= micArrayLastSequence) {
+                            throw new IllegalStateException(
+                                    "factory_audio_micarray_tap_non_monotonic_sequence_"
+                                            + callSequence);
+                        }
+                        if (micArrayFirstSequence == 0) micArrayFirstSequence = callSequence;
+                        if (micArrayLastSequence != 0 && callSequence > micArrayLastSequence + 1) {
+                            micArraySequenceGaps += callSequence - micArrayLastSequence - 1;
+                        }
+                        micArrayLastSequence = callSequence;
+                        micArrayCalls++;
+                        byte[] raw = call.getRawMicPcmS16Le().toByteArray();
+                        byte[] echo = call.getEchoReferencePcmS16Le().toByteArray();
+                        byte[] asr = call.getAsrPcmS16Le().toByteArray();
+                        byte[] vad = call.getVadPcmS16Le().toByteArray();
+                        micArrayRawBytes += raw.length;
+                        micArrayEchoBytes += echo.length;
+                        micArrayAsrBytes += asr.length;
+                        micArrayVadBytes += vad.length;
+                        micArrayRawNonzeroBytes += countNonzero(raw);
+                        micArrayEchoNonzeroBytes += countNonzero(echo);
+                        micArrayAsrNonzeroBytes += countNonzero(asr);
+                        micArrayVadNonzeroBytes += countNonzero(vad);
+                    }
                     frames++;
                 }
                 if (playback != null) playback.await(playbackPcmBytes);
+                finalHealth = client.health();
                 client.stopCapture();
             } finally {
                 client.close();
@@ -171,9 +220,14 @@ final class FactoryAudioValidationCapture {
                 diagnosticChannels > 0 ? diagnosticWavFile.getName() : "",
                 diagnosticChannels > 0 ? sha256(diagnosticWavFile) : "",
                 startedAtNanos, playbackReferenceFile, playbackPcmBytes,
-                musicVolumeIndex, musicVolumeMaxIndex, playback, vendorDebugFiles);
+                musicVolumeIndex, musicVolumeMaxIndex, playback, vendorDebugFiles,
+                micArrayDiagnosticTap, finalHealth, micArrayCalls, micArrayFirstSequence,
+                micArrayLastSequence, micArraySequenceGaps, micArrayRawBytes,
+                micArrayEchoBytes, micArrayAsrBytes, micArrayVadBytes,
+                micArrayRawNonzeroBytes, micArrayEchoNonzeroBytes,
+                micArrayAsrNonzeroBytes, micArrayVadNonzeroBytes);
         return new Result(wavFile, diagnosticChannels > 0 ? diagnosticWavFile : null,
-                metadataFile, frames, sequenceGaps, doaValidFrames);
+                metadataFile, frames, sequenceGaps, doaValidFrames, micArrayCalls);
     }
 
     private static void writeMetadata(File file, int durationSeconds, long startedAtEpochMillis,
@@ -184,7 +238,13 @@ final class FactoryAudioValidationCapture {
             String diagnosticWavName, String diagnosticWavSha256,
             long captureStartedAtNanos, File playbackReferenceFile, int playbackPcmBytes,
             int musicVolumeIndex, int musicVolumeMaxIndex, PlaybackRun playback,
-            boolean vendorDebugFiles) throws Exception {
+            boolean vendorDebugFiles, boolean micArrayDiagnosticTap,
+            FactoryAudio.Health finalHealth, long micArrayCalls,
+            long micArrayFirstSequence, long micArrayLastSequence,
+            long micArraySequenceGaps, long micArrayRawBytes, long micArrayEchoBytes,
+            long micArrayAsrBytes, long micArrayVadBytes, long micArrayRawNonzeroBytes,
+            long micArrayEchoNonzeroBytes, long micArrayAsrNonzeroBytes,
+            long micArrayVadNonzeroBytes) throws Exception {
         PrintWriter metadata = new PrintWriter(file, "UTF-8");
         try {
             metadata.println("purpose=R1 factory audio bounded validation capture");
@@ -206,6 +266,33 @@ final class FactoryAudioValidationCapture {
             metadata.println("vendor_debug_files_requested=" + vendorDebugFiles);
             metadata.println("vendor_debug_files_active="
                     + health.getVendorDebugFilesActive());
+            metadata.println("micarray_diagnostic_tap_requested=" + micArrayDiagnosticTap);
+            metadata.println("micarray_diagnostic_tap_active="
+                    + health.getMicarrayDiagnosticTapActive());
+            metadata.println("micarray_diagnostic_tap_calls=" + micArrayCalls);
+            metadata.println("micarray_diagnostic_tap_first_sequence=" + micArrayFirstSequence);
+            metadata.println("micarray_diagnostic_tap_last_sequence=" + micArrayLastSequence);
+            metadata.println("micarray_diagnostic_tap_sequence_gaps=" + micArraySequenceGaps);
+            metadata.println("micarray_diagnostic_tap_raw_bytes=" + micArrayRawBytes);
+            metadata.println("micarray_diagnostic_tap_echo_bytes=" + micArrayEchoBytes);
+            metadata.println("micarray_diagnostic_tap_asr_bytes=" + micArrayAsrBytes);
+            metadata.println("micarray_diagnostic_tap_vad_bytes=" + micArrayVadBytes);
+            metadata.println("micarray_diagnostic_tap_raw_nonzero_bytes="
+                    + micArrayRawNonzeroBytes);
+            metadata.println("micarray_diagnostic_tap_echo_nonzero_bytes="
+                    + micArrayEchoNonzeroBytes);
+            metadata.println("micarray_diagnostic_tap_asr_nonzero_bytes="
+                    + micArrayAsrNonzeroBytes);
+            metadata.println("micarray_diagnostic_tap_vad_nonzero_bytes="
+                    + micArrayVadNonzeroBytes);
+            metadata.println("micarray_diagnostic_tap_final_active="
+                    + (finalHealth != null && finalHealth.getMicarrayDiagnosticTapActive()));
+            metadata.println("micarray_diagnostic_tap_dropped="
+                    + (finalHealth == null ? -1
+                            : finalHealth.getMicarrayDiagnosticTapDropped()));
+            metadata.println("micarray_diagnostic_tap_invalid="
+                    + (finalHealth == null ? -1
+                            : finalHealth.getMicarrayDiagnosticTapInvalid()));
             metadata.println("frames=" + frames);
             metadata.println("pcm_bytes=" + pcmBytes);
             metadata.println("first_sequence=" + firstSequence);
@@ -251,6 +338,12 @@ final class FactoryAudioValidationCapture {
             result.append(values[index]);
         }
         return result.toString();
+    }
+
+    private static int countNonzero(byte[] value) {
+        int count = 0;
+        for (byte item : value) if (item != 0) count++;
+        return count;
     }
 
     private static String sha256(File file) throws Exception {
@@ -352,16 +445,18 @@ final class FactoryAudioValidationCapture {
         final int frames;
         final long sequenceGaps;
         final int doaValidFrames;
+        final long micArrayCalls;
 
         Result(File wavFile, File diagnosticWavFile, File metadataFile, int frames,
                 long sequenceGaps,
-                int doaValidFrames) {
+                int doaValidFrames, long micArrayCalls) {
             this.wavFile = wavFile;
             this.diagnosticWavFile = diagnosticWavFile;
             this.metadataFile = metadataFile;
             this.frames = frames;
             this.sequenceGaps = sequenceGaps;
             this.doaValidFrames = doaValidFrames;
+            this.micArrayCalls = micArrayCalls;
         }
     }
 }

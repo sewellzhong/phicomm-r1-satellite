@@ -70,7 +70,7 @@ public final class FactoryAudioClient implements Closeable {
     }
 
     public synchronized void startCapture() throws IOException {
-        startCapture(true, false);
+        startCapture(true, false, false);
     }
 
     /**
@@ -78,16 +78,21 @@ public final class FactoryAudioClient implements Closeable {
      * separate from startCapture(): callers must never feed its frames to the satellite path.
      */
     public synchronized FactoryAudio.Health startUnattestedValidationCapture() throws IOException {
-        return startCapture(false, false);
+        return startCapture(false, false, false);
     }
 
     public synchronized FactoryAudio.Health startVendorDebugValidationCapture()
             throws IOException {
-        return startCapture(false, true);
+        return startCapture(false, true, false);
+    }
+
+    public synchronized FactoryAudio.Health startMicArrayDiagnosticValidationCapture()
+            throws IOException {
+        return startCapture(false, false, true);
     }
 
     private FactoryAudio.Health startCapture(boolean requireProductionAttestation,
-            boolean vendorDebugFiles)
+            boolean vendorDebugFiles, boolean micArrayDiagnosticTap)
             throws IOException {
         requireOpen();
         require(negotiated, "factory_audio_not_negotiated");
@@ -99,7 +104,8 @@ public final class FactoryAudioClient implements Closeable {
         send(requestId, FactoryAudio.Envelope.newBuilder().setStartCapture(
                 FactoryAudio.StartCapture.newBuilder().setFormat(format)
                         .setIncludeDiagnosticOutput(!requireProductionAttestation)
-                        .setVendorDebugFiles(vendorDebugFiles)));
+                        .setVendorDebugFiles(vendorDebugFiles)
+                        .setMicarrayDiagnosticTap(micArrayDiagnosticTap)));
         FactoryAudio.Envelope reply = readReply(requestId);
         if (!reply.hasHealth()
                 || reply.getHealth().getCaptureState()
@@ -110,6 +116,9 @@ public final class FactoryAudioClient implements Closeable {
         try {
             if (vendorDebugFiles && !health.getVendorDebugFilesActive()) {
                 throw new IOException("factory_audio_vendor_debug_not_active");
+            }
+            if (micArrayDiagnosticTap && !health.getMicarrayDiagnosticTapActive()) {
+                throw new IOException("factory_audio_micarray_tap_not_active");
             }
             if (requireProductionAttestation) {
                 FactoryAudioAttestation.requireProductionChain(health);
@@ -261,6 +270,19 @@ public final class FactoryAudioClient implements Closeable {
                         && frame.getDiagnosticSelectedOutputChannel() >= diagnosticChannels)) {
             throw new IOException("factory_audio_diagnostic_frame_format_mismatch_"
                     + diagnosticChannels + "_" + diagnosticBytes);
+        }
+        for (FactoryAudio.MicArrayDiagnosticCall call
+                : frame.getMicarrayDiagnosticCallsList()) {
+            int samples = call.getSamplesPerChannel();
+            if (call.getSequence() <= 0 || samples != 256
+                    || call.getRawMicChannels() != 4
+                    || call.getEchoReferenceChannels() != 2
+                    || call.getRawMicPcmS16Le().size() != samples * 4 * 2
+                    || call.getEchoReferencePcmS16Le().size() != samples * 2 * 2
+                    || call.getAsrPcmS16Le().size() != call.getVadPcmS16Le().size()
+                    || call.getAsrPcmS16Le().size() > samples * 2) {
+                throw new IOException("factory_audio_micarray_tap_shape_mismatch");
+            }
         }
     }
 
