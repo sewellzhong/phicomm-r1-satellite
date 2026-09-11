@@ -30,6 +30,15 @@ fixed 256-sample 4-mic/2-reference call into the local IPC, and clears its
 bounded queue when stopped. It does not need public-storage access and remains
 off for production capture.
 
+The v86 Android validation client persists those bounded copies as four WAV
+sidecars (4-mic, 2-reference, ASR, and VAD) only when the MicArray tap is
+explicitly requested. Metadata binds every sidecar's basename, channel count,
+PCM length, and SHA-256. `export-micarray-tap-capture.py` additionally requires
+an explicit recording confirmation and exact installed APK hash, exports only
+to a new directory outside the repository, runs the offline audit, removes the
+exact device files, and restores the prior listening state. This remains a
+diagnostic evidence path and does not attest AEC or production readiness.
+
 The production socket is `/dev/socket/r1_factory_audio`. The agent requires an
 explicit `--expected-uid`, uses mode `0660`, and verifies each connection with
 `SO_PEERCRED`. The supplied init template binds the socket as root, changes its

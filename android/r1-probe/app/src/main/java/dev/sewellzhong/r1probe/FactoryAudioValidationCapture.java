@@ -54,6 +54,10 @@ final class FactoryAudioValidationCapture {
         String baseName = System.currentTimeMillis() + "-factory-audio-validation-" + sampleId;
         File wavFile = new File(outputDirectory, baseName + ".wav");
         File diagnosticWavFile = new File(outputDirectory, baseName + "-diagnostic-stereo.wav");
+        File micArrayRawWavFile = new File(outputDirectory, baseName + "-micarray-4mic.wav");
+        File micArrayEchoWavFile = new File(outputDirectory, baseName + "-micarray-2aec.wav");
+        File micArrayAsrWavFile = new File(outputDirectory, baseName + "-micarray-asr.wav");
+        File micArrayVadWavFile = new File(outputDirectory, baseName + "-micarray-vad.wav");
         File metadataFile = new File(outputDirectory, baseName + ".meta.txt");
         int targetFrames = durationSeconds * FRAMES_PER_SECOND;
         int frames = 0;
@@ -87,8 +91,18 @@ final class FactoryAudioValidationCapture {
 
         FileOutputStream output = new FileOutputStream(wavFile);
         FileOutputStream diagnosticOutput = null;
+        FileOutputStream micArrayRawOutput = null;
+        FileOutputStream micArrayEchoOutput = null;
+        FileOutputStream micArrayAsrOutput = null;
+        FileOutputStream micArrayVadOutput = null;
         try {
             output.write(WavHeader.create(0));
+            if (micArrayDiagnosticTap) {
+                micArrayRawOutput = openWav(micArrayRawWavFile, 4);
+                micArrayEchoOutput = openWav(micArrayEchoWavFile, 2);
+                micArrayAsrOutput = openWav(micArrayAsrWavFile, 1);
+                micArrayVadOutput = openWav(micArrayVadWavFile, 1);
+            }
             FactoryAudioClient client = FactoryAudioClient.connect();
             try {
                 startHealth = micArrayDiagnosticTap
@@ -164,6 +178,10 @@ final class FactoryAudioValidationCapture {
                         byte[] echo = call.getEchoReferencePcmS16Le().toByteArray();
                         byte[] asr = call.getAsrPcmS16Le().toByteArray();
                         byte[] vad = call.getVadPcmS16Le().toByteArray();
+                        micArrayRawOutput.write(raw);
+                        micArrayEchoOutput.write(echo);
+                        micArrayAsrOutput.write(asr);
+                        micArrayVadOutput.write(vad);
                         micArrayRawBytes += raw.length;
                         micArrayEchoBytes += echo.length;
                         micArrayAsrBytes += asr.length;
@@ -185,49 +203,70 @@ final class FactoryAudioValidationCapture {
         } finally {
             if (playback != null) playback.cancelAndAwait();
             if (diagnosticOutput != null) diagnosticOutput.close();
+            if (micArrayRawOutput != null) micArrayRawOutput.close();
+            if (micArrayEchoOutput != null) micArrayEchoOutput.close();
+            if (micArrayAsrOutput != null) micArrayAsrOutput.close();
+            if (micArrayVadOutput != null) micArrayVadOutput.close();
             output.close();
             if (!complete) {
                 if (wavFile.exists() && !wavFile.delete()) wavFile.deleteOnExit();
                 if (diagnosticWavFile.exists() && !diagnosticWavFile.delete()) {
                     diagnosticWavFile.deleteOnExit();
                 }
+                deleteOnFailure(micArrayRawWavFile);
+                deleteOnFailure(micArrayEchoWavFile);
+                deleteOnFailure(micArrayAsrWavFile);
+                deleteOnFailure(micArrayVadWavFile);
             }
         }
 
         int pcmBytes = frames * FactoryAudioClient.FRAME_BYTES;
-        RandomAccessFile header = new RandomAccessFile(wavFile, "rw");
         try {
-            header.seek(0);
-            header.write(WavHeader.create(pcmBytes));
-        } finally {
-            header.close();
-        }
-        if (diagnosticChannels > 0) {
-            RandomAccessFile diagnosticHeader = new RandomAccessFile(diagnosticWavFile, "rw");
-            try {
-                diagnosticHeader.seek(0);
-                diagnosticHeader.write(WavHeader.create(diagnosticPcmBytes, diagnosticChannels));
-            } finally {
-                diagnosticHeader.close();
+            finalizeWav(wavFile, pcmBytes, 1);
+            if (diagnosticChannels > 0) {
+                finalizeWav(diagnosticWavFile, diagnosticPcmBytes, diagnosticChannels);
             }
+            if (micArrayDiagnosticTap) {
+                finalizeWav(micArrayRawWavFile, checkedInt(micArrayRawBytes), 4);
+                finalizeWav(micArrayEchoWavFile, checkedInt(micArrayEchoBytes), 2);
+                finalizeWav(micArrayAsrWavFile, checkedInt(micArrayAsrBytes), 1);
+                finalizeWav(micArrayVadWavFile, checkedInt(micArrayVadBytes), 1);
+            }
+            long elapsedMillis = (System.nanoTime() - startedAtNanos) / 1_000_000L;
+            writeMetadata(metadataFile, durationSeconds, startedAtEpochMillis, elapsedMillis,
+                    startHealth, frames, pcmBytes, firstSequence, lastSequence, sequenceGaps,
+                    agentDroppedFrames, doaValidFrames, doaHistogram, sha256(wavFile),
+                    diagnosticChannels, diagnosticPcmBytes,
+                    diagnosticSelectedOutputChannel,
+                    diagnosticChannels > 0 ? diagnosticWavFile.getName() : "",
+                    diagnosticChannels > 0 ? sha256(diagnosticWavFile) : "",
+                    startedAtNanos, playbackReferenceFile, playbackPcmBytes,
+                    musicVolumeIndex, musicVolumeMaxIndex, playback, vendorDebugFiles,
+                    micArrayDiagnosticTap, finalHealth, micArrayCalls, micArrayFirstSequence,
+                    micArrayLastSequence, micArraySequenceGaps, micArrayRawBytes,
+                    micArrayEchoBytes, micArrayAsrBytes, micArrayVadBytes,
+                    micArrayRawNonzeroBytes, micArrayEchoNonzeroBytes,
+                    micArrayAsrNonzeroBytes, micArrayVadNonzeroBytes,
+                    micArrayDiagnosticTap ? micArrayRawWavFile : null,
+                    micArrayDiagnosticTap ? micArrayEchoWavFile : null,
+                    micArrayDiagnosticTap ? micArrayAsrWavFile : null,
+                    micArrayDiagnosticTap ? micArrayVadWavFile : null);
+        } catch (Exception error) {
+            deleteOnFailure(wavFile);
+            deleteOnFailure(diagnosticWavFile);
+            deleteOnFailure(micArrayRawWavFile);
+            deleteOnFailure(micArrayEchoWavFile);
+            deleteOnFailure(micArrayAsrWavFile);
+            deleteOnFailure(micArrayVadWavFile);
+            deleteOnFailure(metadataFile);
+            throw error;
         }
-        long elapsedMillis = (System.nanoTime() - startedAtNanos) / 1_000_000L;
-        writeMetadata(metadataFile, durationSeconds, startedAtEpochMillis, elapsedMillis,
-                startHealth, frames, pcmBytes, firstSequence, lastSequence, sequenceGaps,
-                agentDroppedFrames, doaValidFrames, doaHistogram, sha256(wavFile),
-                diagnosticChannels, diagnosticPcmBytes,
-                diagnosticSelectedOutputChannel,
-                diagnosticChannels > 0 ? diagnosticWavFile.getName() : "",
-                diagnosticChannels > 0 ? sha256(diagnosticWavFile) : "",
-                startedAtNanos, playbackReferenceFile, playbackPcmBytes,
-                musicVolumeIndex, musicVolumeMaxIndex, playback, vendorDebugFiles,
-                micArrayDiagnosticTap, finalHealth, micArrayCalls, micArrayFirstSequence,
-                micArrayLastSequence, micArraySequenceGaps, micArrayRawBytes,
-                micArrayEchoBytes, micArrayAsrBytes, micArrayVadBytes,
-                micArrayRawNonzeroBytes, micArrayEchoNonzeroBytes,
-                micArrayAsrNonzeroBytes, micArrayVadNonzeroBytes);
         return new Result(wavFile, diagnosticChannels > 0 ? diagnosticWavFile : null,
-                metadataFile, frames, sequenceGaps, doaValidFrames, micArrayCalls);
+                metadataFile, micArrayDiagnosticTap ? micArrayRawWavFile : null,
+                micArrayDiagnosticTap ? micArrayEchoWavFile : null,
+                micArrayDiagnosticTap ? micArrayAsrWavFile : null,
+                micArrayDiagnosticTap ? micArrayVadWavFile : null,
+                frames, sequenceGaps, doaValidFrames, micArrayCalls);
     }
 
     private static void writeMetadata(File file, int durationSeconds, long startedAtEpochMillis,
@@ -244,7 +283,9 @@ final class FactoryAudioValidationCapture {
             long micArraySequenceGaps, long micArrayRawBytes, long micArrayEchoBytes,
             long micArrayAsrBytes, long micArrayVadBytes, long micArrayRawNonzeroBytes,
             long micArrayEchoNonzeroBytes, long micArrayAsrNonzeroBytes,
-            long micArrayVadNonzeroBytes) throws Exception {
+            long micArrayVadNonzeroBytes, File micArrayRawWavFile,
+            File micArrayEchoWavFile, File micArrayAsrWavFile,
+            File micArrayVadWavFile) throws Exception {
         PrintWriter metadata = new PrintWriter(file, "UTF-8");
         try {
             metadata.println("purpose=R1 factory audio bounded validation capture");
@@ -285,6 +326,10 @@ final class FactoryAudioValidationCapture {
                     + micArrayAsrNonzeroBytes);
             metadata.println("micarray_diagnostic_tap_vad_nonzero_bytes="
                     + micArrayVadNonzeroBytes);
+            writeSidecarMetadata(metadata, "raw", micArrayRawWavFile, 4, micArrayRawBytes);
+            writeSidecarMetadata(metadata, "echo", micArrayEchoWavFile, 2, micArrayEchoBytes);
+            writeSidecarMetadata(metadata, "asr", micArrayAsrWavFile, 1, micArrayAsrBytes);
+            writeSidecarMetadata(metadata, "vad", micArrayVadWavFile, 1, micArrayVadBytes);
             metadata.println("micarray_diagnostic_tap_final_active="
                     + (finalHealth != null && finalHealth.getMicarrayDiagnosticTapActive()));
             metadata.println("micarray_diagnostic_tap_dropped="
@@ -344,6 +389,42 @@ final class FactoryAudioValidationCapture {
         int count = 0;
         for (byte item : value) if (item != 0) count++;
         return count;
+    }
+
+    private static FileOutputStream openWav(File file, int channels) throws Exception {
+        FileOutputStream output = new FileOutputStream(file);
+        output.write(WavHeader.create(0, channels));
+        return output;
+    }
+
+    private static void finalizeWav(File file, int pcmBytes, int channels) throws Exception {
+        RandomAccessFile header = new RandomAccessFile(file, "rw");
+        try {
+            header.seek(0);
+            header.write(WavHeader.create(pcmBytes, channels));
+        } finally {
+            header.close();
+        }
+    }
+
+    private static int checkedInt(long value) {
+        if (value < 0 || value > Integer.MAX_VALUE) {
+            throw new IllegalStateException("factory_audio_sidecar_too_large");
+        }
+        return (int) value;
+    }
+
+    private static void deleteOnFailure(File file) {
+        if (file.exists() && !file.delete()) file.deleteOnExit();
+    }
+
+    private static void writeSidecarMetadata(PrintWriter metadata, String name, File file,
+            int channels, long pcmBytes) throws Exception {
+        String prefix = "micarray_diagnostic_tap_" + name + "_wav_";
+        metadata.println(prefix + "name=" + (file == null ? "" : file.getName()));
+        metadata.println(prefix + "channels=" + (file == null ? 0 : channels));
+        metadata.println(prefix + "pcm_bytes=" + (file == null ? 0 : pcmBytes));
+        metadata.println(prefix + "sha256=" + (file == null ? "" : sha256(file)));
     }
 
     private static String sha256(File file) throws Exception {
@@ -442,17 +523,26 @@ final class FactoryAudioValidationCapture {
         final File wavFile;
         final File diagnosticWavFile;
         final File metadataFile;
+        final File micArrayRawWavFile;
+        final File micArrayEchoWavFile;
+        final File micArrayAsrWavFile;
+        final File micArrayVadWavFile;
         final int frames;
         final long sequenceGaps;
         final int doaValidFrames;
         final long micArrayCalls;
 
-        Result(File wavFile, File diagnosticWavFile, File metadataFile, int frames,
-                long sequenceGaps,
+        Result(File wavFile, File diagnosticWavFile, File metadataFile,
+                File micArrayRawWavFile, File micArrayEchoWavFile,
+                File micArrayAsrWavFile, File micArrayVadWavFile, int frames, long sequenceGaps,
                 int doaValidFrames, long micArrayCalls) {
             this.wavFile = wavFile;
             this.diagnosticWavFile = diagnosticWavFile;
             this.metadataFile = metadataFile;
+            this.micArrayRawWavFile = micArrayRawWavFile;
+            this.micArrayEchoWavFile = micArrayEchoWavFile;
+            this.micArrayAsrWavFile = micArrayAsrWavFile;
+            this.micArrayVadWavFile = micArrayVadWavFile;
             this.frames = frames;
             this.sequenceGaps = sequenceGaps;
             this.doaValidFrames = doaValidFrames;

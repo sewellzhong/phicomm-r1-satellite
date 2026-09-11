@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("85")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.85-micarray-tap-window")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("86")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.86-micarray-sidecar-export")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

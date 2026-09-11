@@ -93,3 +93,14 @@ python3 tools/factory_audio/probe-vendor-debug-files.py <adb-serial> \
 当前 v84 主机候选以 boot 参数和单次协议字段双重显式启用原厂 debug mode，默认生产路径继续
 关闭；健康状态必须回报实际启用，停止或断开时强制复位。源码与主机检查已完成，尚未生成、
 部署或实机验证 boot/APK 候选。
+
+## v86 MicArray sidecar 主机候选
+
+v85只读旁路实机门槛通过后，v86主机候选把同一有界窗口内的4麦、2参考、ASR和VAD载荷分别
+写为4/2/1/1声道WAV，并在元数据中绑定文件名、长度、声道和SHA-256。新增受控导出工具要求
+首台/3448/Enforcing/v86及已安装APK精确哈希，输出只允许仓库外新建`0700`目录；逐文件完成
+设备/主机哈希比对和离线审计后精确删除本轮路径并恢复监听。详见
+[sidecar主机记录](2026-09-11-r1-factory-audio-micarray-sidecar-host.md)。
+
+本步没有连接ADB或部署v86。sidecar能力尚未实机验证，且即使取得非零2参考材料，也不能在
+没有同步受控播放、时延校准和处理前后量化的情况下宣称AEC通过。

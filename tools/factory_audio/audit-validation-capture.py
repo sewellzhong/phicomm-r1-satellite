@@ -129,8 +129,36 @@ def analyze_diagnostic_wav(path, channels, selected_channel, pcm_bytes, mono_pcm
     }
 
 
+def analyze_micarray_wav(path, name, channels, pcm_bytes, nonzero_bytes):
+    path = Path(path)
+    require(path.is_file(), f"validation_micarray_{name}_wav_missing")
+    with wave.open(str(path), "rb") as recording:
+        require(recording.getnchannels() == channels,
+                f"validation_micarray_{name}_wav_channel_mismatch")
+        require(recording.getsampwidth() == 2,
+                f"validation_micarray_{name}_wav_not_s16le")
+        require(recording.getframerate() == 16000,
+                f"validation_micarray_{name}_wav_not_16khz")
+        require(recording.getcomptype() == "NONE",
+                f"validation_micarray_{name}_wav_compressed")
+        frames = recording.getnframes()
+        payload = recording.readframes(frames)
+    require(len(payload) == pcm_bytes,
+            f"validation_micarray_{name}_wav_length_mismatch")
+    require(sum(value != 0 for value in payload) == nonzero_bytes,
+            f"validation_micarray_{name}_wav_nonzero_mismatch")
+    return {
+        "name": path.name,
+        "sha256": sha256(path),
+        "channels": channels,
+        "frames": frames,
+        "pcm_bytes": pcm_bytes,
+        "nonzero_bytes": nonzero_bytes,
+    }
+
+
 def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
-          playback_reference_wav_path=None):
+          playback_reference_wav_path=None, micarray_wav_paths=None):
     require(device == "r1-sample01", "device_not_r1_sample01")
     wav_path = Path(wav_path)
     metadata_path = Path(metadata_path)
@@ -189,13 +217,36 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
         require(0 < asr_bytes == vad_bytes <= calls * 256 * 2,
                 "validation_micarray_tap_output_shape_mismatch")
         payloads = {}
-        for name, byte_count in (("raw", raw_bytes), ("echo", echo_bytes),
-                                 ("asr", asr_bytes), ("vad", vad_bytes)):
+        for name, byte_count, channels in (
+                ("raw", raw_bytes, 4), ("echo", echo_bytes, 2),
+                ("asr", asr_bytes, 1), ("vad", vad_bytes, 1)):
             nonzero = integer(values, "micarray_diagnostic_tap_" + name
                               + "_nonzero_bytes")
             require(0 < nonzero <= byte_count,
                     "validation_micarray_tap_" + name + "_payload_empty")
             payloads[name] = {"bytes": byte_count, "nonzero_bytes": nonzero}
+        sidecars = {}
+        require(micarray_wav_paths is not None,
+                "validation_micarray_sidecars_missing")
+        for name, byte_count, channels in (
+                ("raw", raw_bytes, 4), ("echo", echo_bytes, 2),
+                ("asr", asr_bytes, 1), ("vad", vad_bytes, 1)):
+            nonzero = payloads[name]["nonzero_bytes"]
+            prefix = "micarray_diagnostic_tap_" + name + "_wav_"
+            sidecar_path = micarray_wav_paths.get(name)
+            require(sidecar_path is not None,
+                    f"validation_micarray_{name}_wav_missing")
+            require(Path(sidecar_path).name == values.get(prefix + "name"),
+                    f"validation_micarray_{name}_wav_name_mismatch")
+            require(integer(values, prefix + "channels") == channels,
+                    f"validation_micarray_{name}_wav_channel_metadata_mismatch")
+            require(integer(values, prefix + "pcm_bytes") == byte_count,
+                    f"validation_micarray_{name}_wav_length_metadata_mismatch")
+            analyzed = analyze_micarray_wav(
+                sidecar_path, name, channels, byte_count, nonzero)
+            require(values.get(prefix + "sha256") == analyzed["sha256"],
+                    f"validation_micarray_{name}_wav_hash_mismatch")
+            sidecars[name] = analyzed
         require(values.get("micarray_diagnostic_tap_final_active") == "true",
                 "validation_micarray_tap_not_active_at_final_health")
         require(integer(values, "micarray_diagnostic_tap_dropped") == 0,
@@ -210,6 +261,7 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
             "dropped": 0,
             "invalid": 0,
             "payloads": payloads,
+            "sidecar_wavs": sidecars,
         }
     frames = integer(values, "frames")
     pcm_bytes = integer(values, "pcm_bytes")
@@ -373,11 +425,26 @@ def main(argv=None):
     parser.add_argument("--metadata", required=True)
     parser.add_argument("--diagnostic-wav")
     parser.add_argument("--playback-reference-wav")
+    parser.add_argument("--micarray-raw-wav")
+    parser.add_argument("--micarray-echo-wav")
+    parser.add_argument("--micarray-asr-wav")
+    parser.add_argument("--micarray-vad-wav")
     parser.add_argument("--output", required=True)
     args = parser.parse_args(argv)
     try:
+        micarray_paths = {
+            "raw": args.micarray_raw_wav,
+            "echo": args.micarray_echo_wav,
+            "asr": args.micarray_asr_wav,
+            "vad": args.micarray_vad_wav,
+        }
+        if not any(micarray_paths.values()):
+            micarray_paths = None
+        else:
+            require(all(micarray_paths.values()),
+                    "micarray_sidecar_argument_set_incomplete")
         result = audit(args.wav, args.metadata, args.device, args.diagnostic_wav,
-                       args.playback_reference_wav)
+                       args.playback_reference_wav, micarray_paths)
         output = Path(args.output)
         require(not output.exists(), "output_already_exists")
         output.parent.mkdir(parents=True, exist_ok=True)

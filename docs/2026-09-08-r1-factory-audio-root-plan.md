@@ -150,3 +150,8 @@ v15 boot和Enforcing，临时VFAT权限未保留。后续离线复核确认文�
 下一步先固定`Unisound_MicArray_Process`完整ABI，再实现默认关闭、原样转发、只读复制到本地
 IPC的诊断旁路。该结果不改变四麦独立响应、四方向DOA、AEC消除、DSP质量和R0的未验证状态；
 详见[v20实机记录](2026-09-11-r1-factory-audio-v20-device.md)与[离线写入复核](2026-09-11-r1-factory-audio-debug-write-offline.md)。
+
+随后`Unisound_MicArray_Process`只读IPC旁路已在v85实机命中；v86主机候选进一步补齐
+4麦/2参考/ASR/VAD四个WAV sidecar、元数据哈希绑定和仓库外受控导出。该候选尚未部署，
+下一门槛是首台导出实测，再进入四方向独立响应/DOA和同步受控播放AEC量化；非零缓冲本身
+不等于这些门槛通过。详见[sidecar主机记录](2026-09-11-r1-factory-audio-micarray-sidecar-host.md)。

@@ -55,6 +55,34 @@ class ValidationCaptureAuditTest(unittest.TestCase):
         ]), encoding="utf-8")
         return wav_path, metadata
 
+    def add_micarray_sidecars(self, root, metadata, calls=3):
+        paths = {}
+        metadata_values = dict(line.split("=", 1)
+                               for line in metadata.read_text(encoding="utf-8").splitlines())
+        definitions = {
+            "raw": (4, calls * 256),
+            "echo": (2, calls * 256),
+            "asr": (1, calls * 256),
+            "vad": (1, calls * 256),
+        }
+        with metadata.open("a", encoding="utf-8") as handle:
+            for name, (channels, frames) in definitions.items():
+                path = root / f"capture-micarray-{name}.wav"
+                payload_bytes = frames * channels * 2
+                nonzero = int(metadata_values[
+                    f"micarray_diagnostic_tap_{name}_nonzero_bytes"])
+                payload = bytes([1]) * nonzero + bytes(payload_bytes - nonzero)
+                with wave.open(str(path), "wb") as recording:
+                    recording.setparams((channels, 2, 16000, frames, "NONE", "not compressed"))
+                    recording.writeframes(payload)
+                handle.write(f"micarray_diagnostic_tap_{name}_wav_name={path.name}\n")
+                handle.write(f"micarray_diagnostic_tap_{name}_wav_channels={channels}\n")
+                handle.write(f"micarray_diagnostic_tap_{name}_wav_pcm_bytes={len(payload)}\n")
+                handle.write("micarray_diagnostic_tap_" + name + "_wav_sha256="
+                             + hashlib.sha256(path.read_bytes()).hexdigest() + "\n")
+                paths[name] = path
+        return paths
+
     def test_accepts_contiguous_capture_without_promoting_audio_claims(self):
         with tempfile.TemporaryDirectory() as directory:
             wav_path, metadata = self.fixture(Path(directory))
@@ -218,14 +246,41 @@ class ValidationCaptureAuditTest(unittest.TestCase):
                 handle.write("micarray_diagnostic_tap_final_active=true\n")
                 handle.write("micarray_diagnostic_tap_dropped=0\n")
                 handle.write("micarray_diagnostic_tap_invalid=0\n")
-            result = audit_module.audit(wav, metadata, "r1-sample01")
+            sidecars = self.add_micarray_sidecars(root, metadata)
+            result = audit_module.audit(
+                wav, metadata, "r1-sample01", micarray_wav_paths=sidecars)
         self.assertEqual(
             "micarray_symbol_binding_continuity_and_nonempty_payloads",
             result["claim_boundary"])
         self.assertEqual(3, result["micarray_diagnostic_tap"]["calls"])
         self.assertEqual(3072,
                          result["micarray_diagnostic_tap"]["payloads"]["echo"]["bytes"])
+        self.assertEqual(4,
+                         result["micarray_diagnostic_tap"]["sidecar_wavs"]["raw"]["channels"])
         self.assertIn("aec_cancellation_effect", result["unverified"])
+
+    def test_micarray_tap_requires_all_hash_bound_sidecars(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wav, metadata = self.fixture(root)
+            with metadata.open("a", encoding="utf-8") as handle:
+                handle.write("micarray_diagnostic_tap_requested=true\n")
+                handle.write("micarray_diagnostic_tap_active=true\n")
+                handle.write("micarray_diagnostic_tap_calls=3\n")
+                handle.write("micarray_diagnostic_tap_first_sequence=1\n")
+                handle.write("micarray_diagnostic_tap_last_sequence=3\n")
+                handle.write("micarray_diagnostic_tap_sequence_gaps=0\n")
+                handle.write("micarray_diagnostic_tap_raw_bytes=6144\n")
+                handle.write("micarray_diagnostic_tap_echo_bytes=3072\n")
+                handle.write("micarray_diagnostic_tap_asr_bytes=1536\n")
+                handle.write("micarray_diagnostic_tap_vad_bytes=1536\n")
+                for name in ("raw", "echo", "asr", "vad"):
+                    handle.write(f"micarray_diagnostic_tap_{name}_nonzero_bytes=1\n")
+                handle.write("micarray_diagnostic_tap_final_active=true\n")
+                handle.write("micarray_diagnostic_tap_dropped=0\n")
+                handle.write("micarray_diagnostic_tap_invalid=0\n")
+            with self.assertRaisesRegex(RuntimeError, "micarray_sidecars_missing"):
+                audit_module.audit(wav, metadata, "r1-sample01")
 
     def test_micarray_tap_rejects_drops_and_empty_reference_payload(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -220,10 +220,18 @@ public final class ProbeCommandReceiver extends BroadcastReceiver {
                 + " diagnostic_wav_path=" + (result.diagnosticWavFile == null
                         ? "unavailable" : result.diagnosticWavFile.getAbsolutePath())
                 + " metadata_path=" + result.metadataFile.getAbsolutePath()
+                + " micarray_raw_wav_path=" + outputPath(result.micArrayRawWavFile)
+                + " micarray_echo_wav_path=" + outputPath(result.micArrayEchoWavFile)
+                + " micarray_asr_wav_path=" + outputPath(result.micArrayAsrWavFile)
+                + " micarray_vad_wav_path=" + outputPath(result.micArrayVadWavFile)
                 + " frames=" + result.frames
                 + " sequence_gaps=" + result.sequenceGaps
                 + " doa_valid_frames=" + result.doaValidFrames
                 + " micarray_diagnostic_tap_calls=" + result.micArrayCalls);
+    }
+
+    private static String outputPath(File file) {
+        return file == null ? "unavailable" : file.getAbsolutePath();
     }
 
     private static File diagnosticsDir(Context context) {
