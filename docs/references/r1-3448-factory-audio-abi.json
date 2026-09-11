@@ -48,6 +48,14 @@
       "read_and_callback": "classes.dex:0x26acfe-0x26ad14"
     }
   },
+  "debug_artifact_contract": {
+    "configured_directory": "/sdcard/unidata/",
+    "debug_flag_struct_offset": "0x1ec",
+    "payload_writer": "internal MicArray processing worker, not uni_4mic_pcm_read",
+    "worker_write_sizes_bytes": [2048, 1024, "runtime output length"],
+    "stock_real_wake_result": "waking files zero bytes; waked files WAV headers with zero frames",
+    "runtime_conclusion": "fixed debug files do not provide payload evidence on r1-sample01 firmware 3448"
+  },
   "native_call_sequence": [
     "uni_4mic_hal_init(1)",
     "set4MicDebugMode(0)",
@@ -107,11 +115,17 @@
       {"contains": "uni_hal_4mic_array_compute_DOA", "offset": "0x00003999"}
     ],
     "libuni4michal.so.disassembly.txt": [
+      {"contains": "ldr.w\tr3, [r4, #0x1ec]", "offset": "0x00002204"},
+      {"contains": "cbz\tr3", "offset": "0x00002208"},
+      {"contains": "blx", "offset": "0x00002226"},
+      {"contains": "blx", "offset": "0x0000224a"},
+      {"contains": "blx", "offset": "0x00002508"},
       {"contains": "uni_4mic_pcm_read", "offset": "0x00002a80"},
       {"contains": "blx", "offset": "0x00002ae0"},
       {"contains": "cmp", "offset": "0x00002ae4"},
       {"contains": "bge", "offset": "0x00002ae6"},
-      {"contains": "mov.w", "offset": "0x00002af4"}
+      {"contains": "mov.w", "offset": "0x00002af4"},
+      {"contains": "str.w\tr5, [r4, #0x1ec]", "offset": "0x00003554"}
     ]
   },
   "schema_version": 1,

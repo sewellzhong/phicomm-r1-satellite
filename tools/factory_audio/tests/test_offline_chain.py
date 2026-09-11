@@ -225,6 +225,11 @@ class OfflineChainTest(unittest.TestCase):
         self.assertEqual(1, contract["default_four_mic_debug_mode_argument"])
         self.assertTrue(contract["read_buffer_runtime_configurable"])
         self.assertEqual("pending", contract["runtime_output_channels"])
+        debug_contract = reference["debug_artifact_contract"]
+        self.assertEqual("/sdcard/unidata/", debug_contract["configured_directory"])
+        self.assertEqual("0x1ec", debug_contract["debug_flag_struct_offset"])
+        self.assertIn("not uni_4mic_pcm_read", debug_contract["payload_writer"])
+        self.assertIn("zero frames", debug_contract["stock_real_wake_result"])
 
 
 if __name__ == "__main__":

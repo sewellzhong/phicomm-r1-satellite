@@ -145,6 +145,8 @@ hostcheck APK仍为`517b3fa7dc46d5cba801a7e51099bd93cb9e5f6f1e0aa12a7ac5b32b4436
 在Enforcing下逐步验证临时VFAT策略、安全目录创建拦截、原厂wake生命周期、正确代理域及
 诊断专用附加组。v20已创建固定`waking_file_4mic.wav`、`waking_file_2aec.wav`和
 `waking_file_out.wav`，但三个文件均为0字节；没有可用于AEC校准的有效载荷。设备已恢复
-v15 boot和Enforcing，临时VFAT权限未保留。当前先离线核对原厂APK调用、读取返回值与包长
-语义，在形成新的最小候选前不重复录音或继续增权。该结果不改变四麦独立响应、四方向DOA、
-AEC消除、DSP质量和R0的未验证状态；详见[v20实机记录](2026-09-11-r1-factory-audio-v20-device.md)。
+v15 boot和Enforcing，临时VFAT权限未保留。后续离线复核确认文件有效载荷由原厂内部MicArray
+线程直接`fwrite`，不经过代理读取循环；原厂真实唤醒也只有0帧/空头，因此固定文件路线停止。
+下一步先固定`Unisound_MicArray_Process`完整ABI，再实现默认关闭、原样转发、只读复制到本地
+IPC的诊断旁路。该结果不改变四麦独立响应、四方向DOA、AEC消除、DSP质量和R0的未验证状态；
+详见[v20实机记录](2026-09-11-r1-factory-audio-v20-device.md)与[离线写入复核](2026-09-11-r1-factory-audio-debug-write-offline.md)。

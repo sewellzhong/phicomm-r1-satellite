@@ -30,6 +30,7 @@
 
 ## 阶段与版本记录
 
+- [2026-09-11-r1-factory-audio-debug-write-offline](2026-09-11-r1-factory-audio-debug-write-offline.md)
 - [2026-09-11-r1-factory-audio-v20-device](2026-09-11-r1-factory-audio-v20-device.md)
 - [2026-09-11-r1-factory-audio-v84-device](2026-09-11-r1-factory-audio-v84-device.md)
 - [2026-09-11-r1-vendor-debug-probe](2026-09-11-r1-vendor-debug-probe.md)
