@@ -337,6 +337,55 @@ class BootAgentUpdateTest(unittest.TestCase):
             self.assertEqual(update.digest(first_agent), second["old_agent_sha256"])
             self.assertEqual(update.digest(second_agent), second["new_agent_sha256"])
 
+    def test_update_accepts_third_agent_with_verified_parent_manifest(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            root = Path(directory)
+            args, _, _ = self.fixture(root)
+            previous_reference = update.REFERENCE
+            update.REFERENCE = root / "reference.json"
+            try:
+                with mock.patch.object(update, "assert_agent_elf32_arm"):
+                    update.build(args)
+                first_image = Path(args.output_dir) / "boot-agent-update.img"
+                first_manifest = Path(args.output_dir) / "manifest.json"
+                for name in ("second-a.img", "second-b.img"):
+                    (root / name).write_bytes(first_image.read_bytes())
+                second_agent = root / "second-agent"
+                second_agent.write_bytes(b"second-arm-agent")
+                args.current_boot_a = root / "second-a.img"
+                args.current_boot_b = root / "second-b.img"
+                args.current_boot_manifest = first_manifest
+                args.agent = second_agent
+                args.expected_agent_sha256 = update.digest(second_agent)
+                args.output_dir = root / "second-output"
+                with mock.patch.object(update, "assert_agent_elf32_arm"):
+                    update.build(args)
+                second_image = Path(args.output_dir) / "boot-agent-update.img"
+                second_manifest = Path(args.output_dir) / "manifest.json"
+                for name in ("third-a.img", "third-b.img"):
+                    (root / name).write_bytes(second_image.read_bytes())
+                third_agent = root / "third-agent"
+                third_agent.write_bytes(b"third-arm-agent")
+                args.current_boot_a = root / "third-a.img"
+                args.current_boot_b = root / "third-b.img"
+                args.current_boot_manifest = second_manifest
+                args.agent = third_agent
+                args.expected_agent_sha256 = update.digest(third_agent)
+                args.output_dir = root / "third-output"
+                with mock.patch.object(update, "assert_agent_elf32_arm"):
+                    with self.assertRaisesRegex(
+                            update.UpdateError, "parent_boot_manifest_required"):
+                        update.build(args)
+                args.parent_boot_manifest = first_manifest
+                with mock.patch.object(update, "assert_agent_elf32_arm"):
+                    third = update.build(args)
+            finally:
+                update.REFERENCE = previous_reference
+            self.assertEqual(update.digest(second_agent), third["old_agent_sha256"])
+            self.assertEqual(update.digest(third_agent), third["new_agent_sha256"])
+            self.assertEqual(update.digest(first_manifest),
+                             third["lineage_parent_boot_manifest_sha256"])
+
     def test_update_refuses_unrelated_candidate_init_change(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as directory:
             root = Path(directory)

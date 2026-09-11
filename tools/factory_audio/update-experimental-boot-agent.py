@@ -135,6 +135,10 @@ def build(args):
     current_b = secure_file(args.current_boot_b, "current_boot_b")
     require(not os.path.samefile(current_a, current_b), "current_boot_copies_not_independent")
     current_manifest_path = secure_file(args.current_boot_manifest, "current_boot_manifest")
+    parent_manifest_path = None
+    if getattr(args, "parent_boot_manifest", None) is not None:
+        parent_manifest_path = secure_file(
+            args.parent_boot_manifest, "parent_boot_manifest")
     current_overlay_path = secure_file(args.current_overlay_manifest, "current_overlay_manifest")
     agent = secure_file(args.agent, "agent")
     candidate_overlay_path = None
@@ -197,14 +201,44 @@ def build(args):
     require(len(matches) == 1, "current_agent_entry_not_unique")
     old_agent_hash = boot.digest_bytes(matches[0].data)
     effective_overlay = dict(overlay)
+    lineage_parent_hash = None
     if old_agent_hash != overlay.get("agent_sha256"):
         require(manifest.get("declared_changes") == ["ramdisk_agent"],
                 "embedded_agent_hash_not_overlay")
-        require(manifest.get("old_agent_sha256") == overlay.get("agent_sha256"),
-                "prior_agent_lineage_not_overlay")
+        if manifest.get("old_agent_sha256") != overlay.get("agent_sha256"):
+            require(parent_manifest_path is not None,
+                    "parent_boot_manifest_required")
+            parent = load(parent_manifest_path)
+            require(digest(parent_manifest_path)
+                    == manifest.get("current_boot_manifest_sha256"),
+                    "parent_boot_manifest_hash_mismatch")
+            require(parent.get("status") == "pass_for_device_locked_boot_write",
+                    "parent_boot_manifest_status_invalid")
+            require(parent.get("device") == manifest.get("device"),
+                    "parent_boot_manifest_device_mismatch")
+            require(parent.get("partition") == manifest.get("partition"),
+                    "parent_boot_manifest_partition_mismatch")
+            require(parent.get("authorization") == manifest.get("authorization"),
+                    "parent_boot_manifest_authorization_mismatch")
+            require(effective_overlay_manifest_hash(parent)
+                    == effective_overlay_manifest_hash(manifest),
+                    "parent_boot_overlay_hash_mismatch")
+            require(parent.get("candidate_boot_sha256")
+                    == manifest.get("current_boot_copy_a_sha256")
+                    == manifest.get("current_boot_copy_b_sha256"),
+                    "parent_boot_candidate_lineage_mismatch")
+            require(parent.get("new_agent_sha256")
+                    == manifest.get("old_agent_sha256"),
+                    "parent_agent_lineage_mismatch")
+            lineage_parent_hash = digest(parent_manifest_path)
+        else:
+            require(parent_manifest_path is None,
+                    "parent_boot_manifest_not_required")
         require(manifest.get("new_agent_sha256") == old_agent_hash,
                 "embedded_agent_hash_not_prior_candidate")
         effective_overlay["agent_sha256"] = old_agent_hash
+    else:
+        require(parent_manifest_path is None, "parent_boot_manifest_not_required")
     require(old_agent_hash != expected_hash, "agent_update_is_noop")
 
     init_matches = [entry for entry in entries if entry.name == INIT_ENTRY]
@@ -306,6 +340,8 @@ def build(args):
             candidate_overlay.get("allow_vendor_debug_files", False))
         result["allow_micarray_diagnostic_tap"] = bool(
             candidate_overlay.get("allow_micarray_diagnostic_tap", False))
+    if lineage_parent_hash is not None:
+        result["lineage_parent_boot_manifest_sha256"] = lineage_parent_hash
     result_path = output / "manifest.json"
     result_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.chmod(result_path, 0o600)
@@ -317,6 +353,7 @@ def main(argv=None):
     parser.add_argument("--current-boot-a", required=True)
     parser.add_argument("--current-boot-b", required=True)
     parser.add_argument("--current-boot-manifest", required=True)
+    parser.add_argument("--parent-boot-manifest")
     parser.add_argument("--current-overlay-manifest", required=True)
     parser.add_argument("--agent", required=True)
     parser.add_argument("--expected-agent-sha256", required=True)
