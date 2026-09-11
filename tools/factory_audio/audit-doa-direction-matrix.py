@@ -79,6 +79,7 @@ def audit(manifest_path, min_valid_fraction=0.8, min_resultant_length=0.5,
             "transport_reported_doa_and_runtime_output_shape",
             "transport_reported_doa_and_controlled_playback_capture",
             "transport_reported_doa_runtime_shape_and_controlled_playback_capture",
+            "micarray_symbol_binding_continuity_and_nonempty_payloads",
         }, f"capture_claim_boundary_invalid_{item.get('label')}")
         histogram = report.get("doa_histogram_10_degrees")
         require(isinstance(histogram, list) and len(histogram) == 36

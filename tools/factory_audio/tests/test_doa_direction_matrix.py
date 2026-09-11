@@ -14,7 +14,8 @@ SPEC.loader.exec_module(audit_module)
 
 
 class DoaDirectionMatrixAuditTest(unittest.TestCase):
-    def fixture(self, root, observed=(35, 125, 215, 305), concentrated=True):
+    def fixture(self, root, observed=(35, 125, 215, 305), concentrated=True,
+                claim_boundary="transport_reported_doa_and_runtime_output_shape"):
         captures = []
         for label, expected, angle in zip(
                 ("front", "right", "back", "left"),
@@ -30,7 +31,7 @@ class DoaDirectionMatrixAuditTest(unittest.TestCase):
             report.write_text(json.dumps({
                 "status": "pass",
                 "device": "r1-sample01",
-                "claim_boundary": "transport_reported_doa_and_runtime_output_shape",
+                "claim_boundary": claim_boundary,
                 "frames": 100,
                 "doa_valid_frames": sum(histogram),
                 "doa_valid_fraction": sum(histogram) / 100,
@@ -71,6 +72,14 @@ class DoaDirectionMatrixAuditTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             result = audit_module.audit(self.fixture(Path(directory), concentrated=False))
         self.assertEqual("fail", result["status"])
+
+    def test_accepts_micarray_integrity_capture_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = audit_module.audit(self.fixture(
+                Path(directory),
+                claim_boundary="micarray_symbol_binding_continuity_and_nonempty_payloads",
+            ))
+        self.assertEqual("pass", result["status"])
 
     def test_rejects_wrong_labels(self):
         with tempfile.TemporaryDirectory() as directory:
