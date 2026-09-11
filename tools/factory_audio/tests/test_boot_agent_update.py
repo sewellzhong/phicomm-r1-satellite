@@ -29,11 +29,12 @@ class BootAgentUpdateTest(unittest.TestCase):
         authorization = {"mode": "explicit_device_limited_risk_acceptance",
                          "gate_status": "pending", "risk_acceptance_sha256": "a" * 64}
         old_agent = b"old-arm-agent"
+        current_init = b"service r1 agent --vendor-output-channel 0\n"
         entries = [
             self.entry("sepolicy", b"enforcing-policy", 1),
             self.entry("file_contexts", b"contexts", 2),
             self.entry("init.rk30board.rc", b"import /init.r1_factory_audio.rc\n", 3),
-            self.entry("init.r1_factory_audio.rc", b"service r1 agent\n", 4),
+            self.entry("init.r1_factory_audio.rc", current_init, 4),
             self.entry(update.AGENT_ENTRY, old_agent, 5, 0o750),
         ]
         ramdisk = gzip.compress(boot.build_cpio(entries), compresslevel=9, mtime=0)
@@ -53,7 +54,10 @@ class BootAgentUpdateTest(unittest.TestCase):
             (root / name).write_bytes(image)
 
         overlay = {"device": device, "authorization": authorization,
-                   "agent_sha256": boot.digest_bytes(old_agent)}
+                   "agent_sha256": boot.digest_bytes(old_agent),
+                   "init_rc_sha256": boot.digest_bytes(current_init),
+                   "allow_vendor_debug_files": False,
+                   "output_channels": 2, "output_channel": 0}
         (root / "overlay.json").write_text(json.dumps(overlay))
         manifest = {
             "status": "pass_for_device_locked_boot_write", "device": device,
@@ -76,6 +80,8 @@ class BootAgentUpdateTest(unittest.TestCase):
             "current_overlay_manifest": root / "overlay.json",
             "agent": new_agent,
             "expected_agent_sha256": update.digest(new_agent),
+            "candidate_overlay_manifest": None,
+            "candidate_init_rc": None,
             "output_dir": root / "outside-repository-output",
         })
         return args, entries, new_agent
@@ -147,6 +153,104 @@ class BootAgentUpdateTest(unittest.TestCase):
             try:
                 with mock.patch.object(update, "assert_agent_elf32_arm"):
                     with self.assertRaisesRegex(update.UpdateError, "new_agent_hash_mismatch"):
+                        update.build(args)
+            finally:
+                update.REFERENCE = previous_reference
+
+    def test_update_changes_agent_and_exact_vendor_debug_init_flag(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            root = Path(directory)
+            args, original_entries, new_agent = self.fixture(root)
+            current_overlay = json.loads((root / "overlay.json").read_text())
+            candidate_init = (original_entries[3].data.replace(
+                b"--vendor-output-channel 0",
+                b"--vendor-output-channel 0 --allow-vendor-debug-files"))
+            candidate_overlay = dict(current_overlay)
+            candidate_overlay.update({
+                "agent_sha256": update.digest(new_agent),
+                "init_rc_sha256": boot.digest_bytes(candidate_init),
+                "allow_vendor_debug_files": True,
+            })
+            (root / "candidate-init.rc").write_bytes(candidate_init)
+            (root / "candidate-overlay.json").write_text(json.dumps(candidate_overlay))
+            args.candidate_init_rc = root / "candidate-init.rc"
+            args.candidate_overlay_manifest = root / "candidate-overlay.json"
+            previous_reference = update.REFERENCE
+            update.REFERENCE = root / "reference.json"
+            try:
+                with mock.patch.object(update, "assert_agent_elf32_arm"):
+                    result = update.build(args)
+            finally:
+                update.REFERENCE = previous_reference
+            self.assertEqual(
+                ["ramdisk_agent", "ramdisk_init_vendor_debug_flag"],
+                result["declared_changes"])
+            self.assertTrue(result["allow_vendor_debug_files"])
+            candidate = (Path(args.output_dir) / "boot-agent-update.img").read_bytes()
+            _, _, ramdisk, _ = boot.boot_parts(candidate)
+            parsed = {entry.name: entry.data
+                      for entry in boot.parse_cpio(gzip.decompress(ramdisk))}
+            self.assertEqual(candidate_init, parsed[update.INIT_ENTRY])
+
+    def test_update_refuses_unrelated_candidate_init_change(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            root = Path(directory)
+            args, original_entries, new_agent = self.fixture(root)
+            candidate_init = original_entries[3].data + b"setprop unrelated 1\n"
+            candidate_overlay = json.loads((root / "overlay.json").read_text())
+            candidate_overlay.update({
+                "agent_sha256": update.digest(new_agent),
+                "init_rc_sha256": boot.digest_bytes(candidate_init),
+                "allow_vendor_debug_files": True,
+            })
+            (root / "candidate-init.rc").write_bytes(candidate_init)
+            (root / "candidate-overlay.json").write_text(json.dumps(candidate_overlay))
+            args.candidate_init_rc = root / "candidate-init.rc"
+            args.candidate_overlay_manifest = root / "candidate-overlay.json"
+            previous_reference = update.REFERENCE
+            update.REFERENCE = root / "reference.json"
+            try:
+                with mock.patch.object(update, "assert_agent_elf32_arm"):
+                    with self.assertRaisesRegex(
+                            update.UpdateError,
+                            "candidate_init_change_not_exact_vendor_debug_flag"):
+                        update.build(args)
+            finally:
+                update.REFERENCE = previous_reference
+
+    def test_update_refuses_candidate_manifest_without_init(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            root = Path(directory)
+            args, _, _ = self.fixture(root)
+            args.candidate_overlay_manifest = root / "overlay.json"
+            with self.assertRaisesRegex(update.UpdateError, "candidate_init_rc_required"):
+                update.build(args)
+
+    def test_update_refuses_unrelated_candidate_overlay_change(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            root = Path(directory)
+            args, original_entries, new_agent = self.fixture(root)
+            candidate_init = original_entries[3].data.replace(
+                b"--vendor-output-channel 0",
+                b"--vendor-output-channel 0 --allow-vendor-debug-files")
+            candidate_overlay = json.loads((root / "overlay.json").read_text())
+            candidate_overlay.update({
+                "agent_sha256": update.digest(new_agent),
+                "init_rc_sha256": boot.digest_bytes(candidate_init),
+                "allow_vendor_debug_files": True,
+                "output_channel": 1,
+            })
+            (root / "candidate-init.rc").write_bytes(candidate_init)
+            (root / "candidate-overlay.json").write_text(json.dumps(candidate_overlay))
+            args.candidate_init_rc = root / "candidate-init.rc"
+            args.candidate_overlay_manifest = root / "candidate-overlay.json"
+            previous_reference = update.REFERENCE
+            update.REFERENCE = root / "reference.json"
+            try:
+                with mock.patch.object(update, "assert_agent_elf32_arm"):
+                    with self.assertRaisesRegex(
+                            update.UpdateError,
+                            "candidate_overlay_contract_changed:output_channel"):
                         update.build(args)
             finally:
                 update.REFERENCE = previous_reference

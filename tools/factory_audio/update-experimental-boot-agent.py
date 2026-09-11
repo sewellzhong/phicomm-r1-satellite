@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Build a device-locked R1 boot update that changes only an existing agent."""
+"""Build a device-locked R1 boot update for an existing factory-audio agent.
+
+The default mode changes only the agent binary.  A validation-only update may
+also enable the vendor debug flag in the existing init service when a complete
+candidate overlay manifest is supplied and proves that exact change.
+"""
 
 import argparse
 import gzip
@@ -17,6 +22,8 @@ ROOT = Path(__file__).resolve().parents[2]
 REFERENCE = ROOT / "docs/references/r1-3448-boot-baseline.json"
 BASE_BUILDER = Path(__file__).with_name("build-experimental-boot.py")
 AGENT_ENTRY = "sbin/r1-factory-audio-agent"
+INIT_ENTRY = "init.r1_factory_audio.rc"
+VENDOR_DEBUG_ARGUMENT = b" --allow-vendor-debug-files"
 
 _SPEC = importlib.util.spec_from_file_location("r1_experimental_boot", BASE_BUILDER)
 boot = importlib.util.module_from_spec(_SPEC)
@@ -66,6 +73,31 @@ def assert_agent_elf32_arm(path):
     require("Machine:                           ARM" in header, "agent_not_arm")
 
 
+def validate_debug_overlay_update(current_overlay, candidate_overlay, current_init,
+                                  candidate_init, agent_hash):
+    require(current_overlay.get("init_rc_sha256") == boot.digest_bytes(current_init),
+            "embedded_init_hash_not_current_overlay")
+    require(candidate_overlay.get("agent_sha256") == agent_hash,
+            "candidate_overlay_agent_hash_mismatch")
+    require(candidate_overlay.get("init_rc_sha256") == boot.digest_bytes(candidate_init),
+            "candidate_overlay_init_hash_mismatch")
+    require(not current_overlay.get("allow_vendor_debug_files", False),
+            "current_overlay_vendor_debug_already_allowed")
+    require(candidate_overlay.get("allow_vendor_debug_files") is True,
+            "candidate_overlay_vendor_debug_not_allowed")
+    allowed_changes = {"agent_sha256", "init_rc_sha256", "allow_vendor_debug_files"}
+    keys = set(current_overlay) | set(candidate_overlay)
+    for key in keys - allowed_changes:
+        require(current_overlay.get(key) == candidate_overlay.get(key),
+                f"candidate_overlay_contract_changed:{key}")
+    require(VENDOR_DEBUG_ARGUMENT not in current_init,
+            "current_init_vendor_debug_argument_present")
+    marker = b"--vendor-output-channel " + str(current_overlay.get("output_channel")).encode()
+    require(current_init.count(marker) == 1, "current_init_debug_insertion_point_invalid")
+    expected_init = current_init.replace(marker, marker + VENDOR_DEBUG_ARGUMENT, 1)
+    require(candidate_init == expected_init, "candidate_init_change_not_exact_vendor_debug_flag")
+
+
 def build(args):
     current_a = secure_file(args.current_boot_a, "current_boot_a")
     current_b = secure_file(args.current_boot_b, "current_boot_b")
@@ -73,6 +105,17 @@ def build(args):
     current_manifest_path = secure_file(args.current_boot_manifest, "current_boot_manifest")
     current_overlay_path = secure_file(args.current_overlay_manifest, "current_overlay_manifest")
     agent = secure_file(args.agent, "agent")
+    candidate_overlay_path = None
+    candidate_init_path = None
+    if getattr(args, "candidate_overlay_manifest", None) is not None:
+        require(getattr(args, "candidate_init_rc", None) is not None,
+                "candidate_init_rc_required")
+        candidate_overlay_path = secure_file(
+            args.candidate_overlay_manifest, "candidate_overlay_manifest")
+        candidate_init_path = secure_file(args.candidate_init_rc, "candidate_init_rc")
+    else:
+        require(getattr(args, "candidate_init_rc", None) is None,
+                "candidate_overlay_manifest_required")
     output = Path(args.output_dir).resolve()
     try:
         output.relative_to(ROOT)
@@ -125,14 +168,26 @@ def build(args):
             "embedded_agent_hash_not_overlay")
     require(old_agent_hash != expected_hash, "agent_update_is_noop")
 
+    init_matches = [entry for entry in entries if entry.name == INIT_ENTRY]
+    require(len(init_matches) == 1, "current_init_entry_not_unique")
+    candidate_init = None
+    candidate_overlay = None
+    if candidate_overlay_path is not None:
+        candidate_overlay = load(candidate_overlay_path)
+        candidate_init = candidate_init_path.read_bytes()
+        validate_debug_overlay_update(
+            overlay, candidate_overlay, init_matches[0].data, candidate_init, expected_hash)
+
     before = {entry.name: (entry_contract(entry), entry.data) for entry in entries}
     require(len(before) == len(entries), "cpio_duplicate_entry")
     boot.replace(entries, AGENT_ENTRY, agent.read_bytes())
+    if candidate_init is not None:
+        boot.replace(entries, INIT_ENTRY, candidate_init)
     after = {entry.name: (entry_contract(entry), entry.data) for entry in entries}
     require(set(before) == set(after), "ramdisk_entry_set_changed")
     for name in before:
         require(before[name][0] == after[name][0], f"ramdisk_metadata_changed:{name}")
-        if name != AGENT_ENTRY:
+        if name not in ({AGENT_ENTRY, INIT_ENTRY} if candidate_init is not None else {AGENT_ENTRY}):
             require(before[name][1] == after[name][1], f"ramdisk_payload_changed:{name}")
 
     new_cpio = boot.build_cpio(entries)
@@ -162,7 +217,12 @@ def build(args):
     require(set(updated) == set(before), "verified_ramdisk_entry_set_changed")
     for name in before:
         require(updated[name][0] == before[name][0], f"verified_ramdisk_metadata_changed:{name}")
-        expected_data = agent.read_bytes() if name == AGENT_ENTRY else before[name][1]
+        if name == AGENT_ENTRY:
+            expected_data = agent.read_bytes()
+        elif name == INIT_ENTRY and candidate_init is not None:
+            expected_data = candidate_init
+        else:
+            expected_data = before[name][1]
         require(updated[name][1] == expected_data, f"verified_ramdisk_payload_changed:{name}")
 
     output.mkdir(mode=0o700)
@@ -190,8 +250,14 @@ def build(args):
         "authorization": manifest["authorization"],
         "current_boot_manifest_sha256": digest(current_manifest_path),
         "current_overlay_manifest_sha256": digest(current_overlay_path),
-        "declared_changes": ["ramdisk_agent"],
+        "declared_changes": (["ramdisk_agent", "ramdisk_init_vendor_debug_flag"]
+                             if candidate_init is not None else ["ramdisk_agent"]),
     }
+    if candidate_overlay_path is not None:
+        result["candidate_overlay_manifest_sha256"] = digest(candidate_overlay_path)
+        result["current_init_rc_sha256"] = boot.digest_bytes(init_matches[0].data)
+        result["candidate_init_rc_sha256"] = boot.digest_bytes(candidate_init)
+        result["allow_vendor_debug_files"] = True
     result_path = output / "manifest.json"
     result_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.chmod(result_path, 0o600)
@@ -206,6 +272,8 @@ def main(argv=None):
     parser.add_argument("--current-overlay-manifest", required=True)
     parser.add_argument("--agent", required=True)
     parser.add_argument("--expected-agent-sha256", required=True)
+    parser.add_argument("--candidate-overlay-manifest")
+    parser.add_argument("--candidate-init-rc")
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
     try:
