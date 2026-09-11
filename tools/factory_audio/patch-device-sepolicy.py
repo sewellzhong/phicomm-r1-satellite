@@ -52,6 +52,17 @@ RULES = (
     ("r1_factory_audio", "untrusted_app", "unix_stream_socket", "accept,read,write,getattr,getopt,setopt"),
 )
 
+# Android 5.1 mounts the emulated/internal SD card with a single ``vfat``
+# security type.  VFAT cannot persist per-file SELinux xattrs, so a filename
+# transition cannot confine the vendor's hard-coded /sdcard/unidata outputs.
+# These rules are therefore intentionally separate from RULES and may only be
+# added to a short-lived diagnostic policy with an explicit risk acknowledgement.
+DIAGNOSTIC_VFAT_VENDOR_FILE_RULES = (
+    ("mediaserver", "vfat", "dir", "search,write,add_name"),
+    ("mediaserver", "vfat", "file", "create,open,write,getattr,setattr"),
+)
+DIAGNOSTIC_VFAT_RISK_ACK = "accept-mediaserver-vfat-type-wide-write"
+
 
 class PolicyError(RuntimeError):
     pass
@@ -83,6 +94,15 @@ def outside_repository(path):
         return path
 
 
+def selected_rules(diagnostic_vfat, risk_ack):
+    if diagnostic_vfat:
+        require(risk_ack == DIAGNOSTIC_VFAT_RISK_ACK,
+                "diagnostic_vfat_type_wide_risk_not_acknowledged")
+        return RULES + DIAGNOSTIC_VFAT_VENDOR_FILE_RULES
+    require(risk_ack is None, "diagnostic_vfat_profile_required_for_risk_acknowledgement")
+    return RULES
+
+
 def patch(args):
     require(re.fullmatch(r"[A-Za-z0-9._:-]+", args.serial), "adb_serial_invalid")
     original = Path(args.original_policy).resolve(strict=True)
@@ -91,6 +111,9 @@ def patch(args):
     require(patcher.is_file() and not patcher.is_symlink(), "policy_patcher_invalid")
     require(digest(original) == args.original_sha256, "original_policy_hash_mismatch")
     require(digest(patcher) == PATCHER_SHA256, "policy_patcher_hash_mismatch")
+    diagnostic_vfat = bool(getattr(args, "diagnostic_vfat_vendor_files", False))
+    risk_ack = getattr(args, "acknowledge_vfat_type_wide_risk", None)
+    rules = selected_rules(diagnostic_vfat, risk_ack)
     output = outside_repository(args.output_dir)
     require(not output.exists(), "policy_output_already_exists")
     identity = run([args.adb, "-s", args.serial, "shell", "getprop", "ro.build.fingerprint"]).stdout.strip()
@@ -105,14 +128,14 @@ def patch(args):
         run([args.adb, "-s", args.serial, "push", str(patcher), remote + "/inject"])
         run([args.adb, "-s", args.serial, "push", str(original), remote + "/policy-0"])
         run([args.adb, "-s", args.serial, "shell", "chmod", "700", remote + "/inject"])
-        for index, (source, target, cls, perms) in enumerate(RULES, 1):
+        for index, (source, target, cls, perms) in enumerate(rules, 1):
             result = run([args.adb, "-s", args.serial, "shell", remote + "/inject",
                 "-s", source, "-t", target, "-c", cls, "-p", perms,
                 "-P", f"{remote}/policy-{index - 1}", "-o", f"{remote}/policy-{index}"])
             require("Success" in result.stdout, f"policy_rule_failed_{index}")
             logs.append({"index": index, "source": source, "target": target,
                          "class": cls, "permissions": perms})
-        run([args.adb, "-s", args.serial, "pull", f"{remote}/policy-{len(RULES)}",
+        run([args.adb, "-s", args.serial, "pull", f"{remote}/policy-{len(rules)}",
              str(output / "sepolicy")])
         require((output / "sepolicy").stat().st_size >= original.stat().st_size,
                 "patched_policy_size_invalid")
@@ -122,6 +145,23 @@ def patch(args):
             "patched_policy_sha256": digest(output / "sepolicy"),
             "patcher": {"sha256": digest(patcher), "source_commit": SOURCE_COMMIT},
             "selinux_mode": "enforcing", "permissive_domains": [], "rules": logs}
+        if diagnostic_vfat:
+            manifest["diagnostic_profile"] = {
+                "name": "vendor_debug_files_vfat_type_wide",
+                "temporary": True,
+                "requested_path": "/sdcard/unidata",
+                "requested_filenames": [
+                    f"{phase}_file_{kind}.wav"
+                    for phase in ("waking", "waked")
+                    for kind in ("4mic", "2aec", "out")
+                ],
+                "selinux_target_type": "vfat",
+                "filename_transition_confinement": False,
+                "limitation": "vfat_has_no_per_file_selinux_xattrs",
+                "risk_scope": "mediaserver_write_applies_to_visible_vfat_type_objects",
+                "restore_production_boot_after_probe": True,
+                "risk_acknowledgement": risk_ack,
+            }
         (output / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         os.chmod(output / "sepolicy", 0o600)
         os.chmod(output / "manifest.json", 0o600)
@@ -138,6 +178,8 @@ def main(argv=None):
     parser.add_argument("--original-policy", required=True)
     parser.add_argument("--original-sha256", required=True)
     parser.add_argument("--patcher", required=True)
+    parser.add_argument("--diagnostic-vfat-vendor-files", action="store_true")
+    parser.add_argument("--acknowledge-vfat-type-wide-risk")
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
     try:

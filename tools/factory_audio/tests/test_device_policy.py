@@ -32,6 +32,29 @@ class DevicePolicyTemplateTest(unittest.TestCase):
         self.assertNotIn("tcp_socket", flattened)
         self.assertNotIn("udp_socket", flattened)
 
+    def test_vfat_debug_rules_require_explicit_type_wide_risk_acknowledgement(self):
+        with self.assertRaisesRegex(
+                policy_patcher.PolicyError,
+                "diagnostic_vfat_type_wide_risk_not_acknowledged"):
+            policy_patcher.selected_rules(True, None)
+        rules = policy_patcher.selected_rules(
+            True, policy_patcher.DIAGNOSTIC_VFAT_RISK_ACK)
+        self.assertEqual(
+            policy_patcher.DIAGNOSTIC_VFAT_VENDOR_FILE_RULES,
+            rules[-len(policy_patcher.DIAGNOSTIC_VFAT_VENDOR_FILE_RULES):])
+        self.assertFalse(any(source == "mediaserver" and target == "shell_exec"
+                             for source, target, _, _ in rules))
+        self.assertFalse(any("execute" in permissions
+                             for source, _, _, permissions in rules
+                             if source == "mediaserver"))
+
+    def test_vfat_risk_acknowledgement_is_refused_without_debug_profile(self):
+        with self.assertRaisesRegex(
+                policy_patcher.PolicyError,
+                "diagnostic_vfat_profile_required_for_risk_acknowledgement"):
+            policy_patcher.selected_rules(
+                False, policy_patcher.DIAGNOSTIC_VFAT_RISK_ACK)
+
     def test_init_drops_root_and_keeps_unproven_shape_as_token(self):
         init = (DEVICE / "init.r1_factory_audio.rc").read_text()
         self.assertIn("--expected-uid 10010", init)
