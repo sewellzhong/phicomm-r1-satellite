@@ -228,6 +228,65 @@ class BootAgentUpdateTest(unittest.TestCase):
             self.assertTrue(result["allow_micarray_diagnostic_tap"])
             self.assertFalse(result["allow_vendor_debug_files"])
 
+    def test_update_appends_micarray_tap_after_existing_vendor_debug_flag(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            root = Path(directory)
+            args, original_entries, new_agent = self.fixture(root)
+            current_init = original_entries[3].data.replace(
+                b"--vendor-output-channel 0",
+                b"--vendor-output-channel 0 --allow-vendor-debug-files")
+            original_entries[3].data = current_init
+            current_overlay = json.loads((root / "overlay.json").read_text())
+            current_overlay.update({
+                "init_rc_sha256": boot.digest_bytes(current_init),
+                "allow_vendor_debug_files": True,
+            })
+            (root / "overlay.json").write_text(json.dumps(current_overlay))
+            manifest = json.loads((root / "manifest.json").read_text())
+            manifest["overlay_manifest_sha256"] = update.digest(root / "overlay.json")
+            (root / "manifest.json").write_text(json.dumps(manifest))
+            ramdisk = gzip.compress(boot.build_cpio(original_entries), compresslevel=9, mtime=0)
+            ramdisk += b"\0" * (boot.aligned(len(ramdisk), 4) - len(ramdisk))
+            current_image = (root / "current-a.img").read_bytes()
+            values, kernel, _, second = boot.boot_parts(current_image)
+            page = values[7]
+            header = bytearray(current_image[:page])
+            struct.pack_into("<I", header, 16, len(ramdisk))
+            header[576:608] = boot.rockchip_boot_id(header, kernel, ramdisk, second) + b"\0" * 12
+            image = bytes(header) + kernel + b"\0" * (boot.aligned(len(kernel), page) - len(kernel))
+            image += ramdisk + b"\0" * (boot.aligned(len(ramdisk), page) - len(ramdisk))
+            image += second + b"\0" * (boot.aligned(len(second), page) - len(second))
+            image += b"\0" * (boot.PARTITION_BYTES - len(image))
+            for name in ("current-a.img", "current-b.img"):
+                (root / name).write_bytes(image)
+            manifest = json.loads((root / "manifest.json").read_text())
+            manifest["candidate_boot_sha256"] = update.digest(root / "current-a.img")
+            (root / "manifest.json").write_text(json.dumps(manifest))
+
+            candidate_init = current_init.replace(
+                b"--allow-vendor-debug-files",
+                b"--allow-vendor-debug-files --allow-micarray-diagnostic-tap")
+            candidate_overlay = dict(current_overlay)
+            candidate_overlay.update({
+                "agent_sha256": update.digest(new_agent),
+                "init_rc_sha256": boot.digest_bytes(candidate_init),
+                "allow_micarray_diagnostic_tap": True,
+            })
+            (root / "candidate-init.rc").write_bytes(candidate_init)
+            (root / "candidate-overlay.json").write_text(json.dumps(candidate_overlay))
+            args.candidate_init_rc = root / "candidate-init.rc"
+            args.candidate_overlay_manifest = root / "candidate-overlay.json"
+            previous_reference = update.REFERENCE
+            update.REFERENCE = root / "reference.json"
+            try:
+                with mock.patch.object(update, "assert_agent_elf32_arm"):
+                    result = update.build(args)
+            finally:
+                update.REFERENCE = previous_reference
+            self.assertEqual("micarray_tap", result["diagnostic_profile"])
+            self.assertTrue(result["allow_vendor_debug_files"])
+            self.assertTrue(result["allow_micarray_diagnostic_tap"])
+
     def test_update_accepts_legacy_incremental_manifest_for_chaining(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as directory:
             root = Path(directory)

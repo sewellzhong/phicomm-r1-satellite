@@ -104,6 +104,9 @@ def validate_debug_overlay_update(current_overlay, candidate_overlay, current_in
     require(selected_argument not in current_init,
             f"current_init_{selected}_argument_present")
     marker = b"--vendor-output-channel " + str(current_overlay.get("output_channel")).encode()
+    for name, (key, argument) in profiles.items():
+        if name != selected and current_overlay.get(key, False):
+            marker += argument
     require(current_init.count(marker) == 1, "current_init_debug_insertion_point_invalid")
     expected_init = current_init.replace(marker, marker + selected_argument, 1)
     require(candidate_init == expected_init,
