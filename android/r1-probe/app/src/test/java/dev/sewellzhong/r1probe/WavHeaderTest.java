@@ -30,6 +30,20 @@ public final class WavHeaderTest {
         assertEquals(640000, littleEndianInt(header, 40));
     }
 
+    @Test
+    public void createsFourChannelPcmHeader() {
+        byte[] header = WavHeader.create(1280000, 4);
+        assertEquals(4, littleEndianShort(header, 22));
+        assertEquals(128000, littleEndianInt(header, 28));
+        assertEquals(8, littleEndianShort(header, 32));
+        assertEquals(1280000, littleEndianInt(header, 40));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void rejectsUnsupportedChannelCount() {
+        WavHeader.create(320000, 3);
+    }
+
     private static byte[] slice(byte[] source, int start, int end) {
         byte[] result = new byte[end - start];
         System.arraycopy(source, start, result, 0, result.length);

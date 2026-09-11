@@ -26,7 +26,7 @@ final class WavHeader {
     }
 
     static byte[] create(int pcmBytes, int channels) {
-        if (channels != 1 && channels != 2) {
+        if (channels != 1 && channels != 2 && channels != 4) {
             throw new IllegalArgumentException("unsupported_channel_count_" + channels);
         }
         int byteRate = SAMPLE_RATE * channels * BYTES_PER_SAMPLE;

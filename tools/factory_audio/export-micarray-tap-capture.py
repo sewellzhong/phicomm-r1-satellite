@@ -18,7 +18,7 @@ AUDITOR = ROOT / "tools/factory_audio/audit-validation-capture.py"
 PACKAGE = "dev.sewellzhong.r1probe"
 COMPONENT = PACKAGE + "/.ProbeCommandReceiver"
 DIAGNOSTIC_ROOT = "/mnt/internal_sd/Android/data/dev.sewellzhong.r1probe/files/diagnostics"
-EXPECTED_VERSION_CODE = 86
+EXPECTED_VERSION_CODE = 87
 OUTPUT_KEYS = (
     "wav_path", "diagnostic_wav_path", "metadata_path",
     "micarray_raw_wav_path", "micarray_echo_wav_path",
@@ -85,6 +85,18 @@ def run_manager(action, serial, *extra):
     if result.returncode != 0:
         raise ExportError("native_" + action + "_failed")
     return json.loads(result.stdout) if result.stdout.strip() else {}
+
+
+def restore_native_listening(serial, attempts=40):
+    status = run_manager("start", serial, "--listen")
+    for attempt in range(attempts):
+        if (status.get("status") == "listening"
+                and status.get("audio_opened") is True):
+            return status
+        if attempt + 1 < attempts:
+            time.sleep(0.25)
+            status = run_manager("status", serial)
+    raise ExportError("native_listening_not_restored")
 
 
 class Device:
@@ -275,12 +287,8 @@ def main(argv=None):
             result["remote_cleanup_failures"] = cleanup_failures
         if native_was_listening:
             try:
-                restored = run_manager("start", args.serial, "--listen")
+                restored = restore_native_listening(args.serial)
                 result["restored"] = restored
-                if not (restored.get("status") == "listening"
-                        and restored.get("audio_opened") is True):
-                    result["status"] = "failed"
-                    result["restore_failure"] = "native_listening_not_restored"
             except (ExportError, OSError, subprocess.SubprocessError, ValueError) as error:
                 result["status"] = "failed"
                 result["restore_failure"] = str(error)
