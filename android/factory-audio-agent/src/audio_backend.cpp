@@ -107,6 +107,18 @@ bool VendorBackend::start() {
     handle_ = 0;
     return false;
   }
+  // The HAL start resets the proprietary wake state on firmware 3448. Enter
+  // post-wake after start but before enabling the tap or reading the first
+  // frame, so transition-internal calls cannot create sidecar sequence gaps.
+  if (tap_active_) {
+    if (set_wakeup_status_(1) != 0) {
+      pcm_stop_(handle_);
+      pcm_close_(handle_);
+      handle_ = 0;
+      return false;
+    }
+    micarray_diagnostic_tap_set_enabled(true);
+  }
   streaming_ = true;
   pending_output_.clear();
   return true;
@@ -116,8 +128,8 @@ bool VendorBackend::read_frame(BackendFrame* frame) {
   if (!streaming_ || frame == nullptr) return false;
   // Match firmware 3448's original manager lifecycle for its debug-file path.
   // The first second is the pre-wake (waking) window; subsequent frames are
-  // marked waked. The MicArray tap enters post-wake before streaming starts so
-  // calls made by the vendor transition itself cannot create sidecar gaps.
+  // marked waked. The MicArray tap enters post-wake after HAL start but before
+  // its first streamed read, with the tap disabled during the transition.
   // Production capture never enters either validation state.
   if (debug_files_active_ && validation_frames_ == 50
       && set_wakeup_status_(1) != 0) {
@@ -196,13 +208,17 @@ bool VendorBackend::set_vendor_debug_files(bool enabled) {
 
 bool VendorBackend::set_micarray_diagnostic_tap(bool enabled) {
   if (!initialized_ || streaming_) return false;
-  if (enabled && set_wakeup_status_(1) != 0) return false;
-  micarray_diagnostic_tap_set_enabled(enabled);
-  tap_active_ = enabled;
+  if (enabled) {
+    if (set_wakeup_status_(0) != 0) return false;
+    micarray_diagnostic_tap_set_enabled(false);
+    tap_active_ = true;
+    validation_frames_ = 0;
+    return !micarray_diagnostic_tap_enabled();
+  }
+  micarray_diagnostic_tap_set_enabled(false);
+  tap_active_ = false;
   validation_frames_ = 0;
-  const bool state_matches = micarray_diagnostic_tap_enabled() == enabled;
-  const bool wake_reset = enabled || set_wakeup_status_(0) == 0;
-  return state_matches && wake_reset;
+  return !micarray_diagnostic_tap_enabled() && set_wakeup_status_(0) == 0;
 }
 
 uint64_t VendorBackend::micarray_diagnostic_tap_dropped() const {

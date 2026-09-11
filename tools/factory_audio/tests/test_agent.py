@@ -407,7 +407,7 @@ class AgentTest(unittest.TestCase):
         self.assertTrue(health.micarray_diagnostic_tap_active)
         self.assertEqual(0, health.micarray_diagnostic_tap_dropped)
         self.assertEqual(0, health.micarray_diagnostic_tap_invalid)
-        self.assertTrue(wake_trace.read_text().startswith("01"))
+        self.assertTrue(wake_trace.read_text().startswith("001"))
         frame = self.receive().audio_frame
         self.assertGreaterEqual(len(frame.micarray_diagnostic_calls), 1)
         self.assertLessEqual(len(frame.micarray_diagnostic_calls), 4)
