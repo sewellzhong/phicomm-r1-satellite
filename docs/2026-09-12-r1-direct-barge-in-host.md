@@ -2,7 +2,8 @@
 
 ## 结论
 
-提交 `f6a7727ac90816ce519a7590b9f7209a862c10cd` 在 v89 回复中新唤醒基础上补齐 O2
+提交 `f6a7727ac90816ce519a7590b9f7209a862c10cd` 及原厂 PCM 保真修正
+`a8a615dac36f55d3977c74e3d261d9d9a9eb7756` 在 v89 回复中新唤醒基础上补齐 O2
 直接插话的主机端实现。回复处理或播放期间，连续原厂处理帧同时进入固定 Alexa 模型和直接插话
 检测；Alexa 命中仍优先走 `NEW_WAKE`。未命中 Alexa 时，直接插话必须同时满足现有 WebRTC VAD、
 环境能量和持续起音门槛，才以 `DIRECT_SPEECH` 取消旧运行。
@@ -37,13 +38,13 @@ ANDROID_SDK_ROOT=/home/sewellzhong/.local/share/android-sdk bash tools/dev/check
 
 结果：
 
-- 公开文件扫描 391 个文件、0 发现；密钥扫描无泄露；
+- 公开文件扫描 392 个文件、0 发现；密钥扫描无泄露；
 - Android 188 项单元测试、lint 和 hostcheck APK 构建通过；
 - 原生工具 32 项、恢复工具 73 项及合成 R0 演练通过；
 - 原厂音频 117 项通过；
 - HA 44 项及 HA 2026.8.2 容器加载检查通过；
 - hostcheck APK SHA-256：
-  `3d0491eeb48ef73f20a35091f57f6bcc25b353304646aaae79f1b0e435573a41`。
+  `cc6bd0ad8b8069be2a6e6b30bfc75aac52c4736b43d9e3e813b03ff51fcb3fe2`。
 
 补齐本记录及状态索引后再次运行 `python3 tools/dev/audit-public.py`，公开扫描 392 个文件、
 0 发现。
