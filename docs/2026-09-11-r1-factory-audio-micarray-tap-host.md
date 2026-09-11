@@ -63,8 +63,14 @@ ANDROID_SDK_ROOT=/home/sewellzhong/.local/share/android-sdk \
 
 ## 下一入口
 
-先完成统一主机检查和公开材料审计。若继续实机，按当前免拆分级授权制作只增加新代理与
-`--allow-micarray-diagnostic-tap`的单独boot候选；不得携带旧VFAT诊断策略。现场仍须执行
+统一主机检查和公开材料审计已经通过。随后以两个独立保存且哈希一致的历史v15输入完成
+离线候选演练；增量门禁确认只改变代理和init中的单个MicArray旁路参数，kernel、second、
+地址、页大小及其他ramdisk条目不变。候选SHA-256为
+`9aefde04d52968a0e4690a0812f09c7399f45f76e4afaeafef57cfcb929afcda`，只保存在私有目录，
+不等于已经满足现场写入门槛。当前v15本来就带默认不触发的旧vendor-debug允许参数，但不含
+临时VFAT策略；候选保留该现状，没有新增公共存储权限。
+
+若继续实机，现场仍须执行
 设备身份/3448 fingerprint核对、当前v15 boot双读、候选固定、单次写入、复位前完整读回及
 Enforcing/Android/ADB/Wi-Fi/音频恢复门禁。首次只验证符号绑定、旁路active、连续性、
 dropped/invalid为零和短时同窗口载荷，不直接宣称AEC或R3通过。
