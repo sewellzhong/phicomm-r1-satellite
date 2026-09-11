@@ -20,7 +20,11 @@ extern "C" int Unisound_MicArray_Process(
 static bool run_micarray_process() {
   int16_t raw[256 * 4];
   int16_t echo[256 * 2];
-  for (int index = 0; index < 256 * 4; ++index) raw[index] = static_cast<int16_t>(1000 + index);
+  const int raw_base = getenv("R1_VENDOR_MOCK_REQUIRE_SETTLE_AFTER_WAKE") != nullptr
+      ? 1000 + pcm_reads : 1000;
+  for (int index = 0; index < 256 * 4; ++index) {
+    raw[index] = static_cast<int16_t>(raw_base + index);
+  }
   for (int index = 0; index < 256 * 2; ++index) echo[index] = static_cast<int16_t>(200 + index);
   int16_t* asr = nullptr;
   int16_t* vad = nullptr;

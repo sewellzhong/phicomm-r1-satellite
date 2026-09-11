@@ -367,6 +367,7 @@ class AgentTest(unittest.TestCase):
         environment = dict(os.environ)
         environment["R1_VENDOR_MOCK_CONCURRENT_TAP"] = "1"
         environment["R1_VENDOR_MOCK_REQUIRE_PRIME_BEFORE_WAKE"] = "1"
+        environment["R1_VENDOR_MOCK_REQUIRE_SETTLE_AFTER_WAKE"] = "1"
         wake_trace = Path(self.temporary.name) / "tap-wake-status"
         environment["R1_VENDOR_MOCK_WAKE_STATUS_FILE"] = str(wake_trace)
         self.agent = subprocess.Popen([
@@ -421,12 +422,12 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(1024, len(call.echo_reference_pcm_s16le))
         self.assertEqual(512, len(call.asr_pcm_s16le))
         self.assertEqual(512, len(call.vad_pcm_s16le))
-        self.assertEqual((1000, 1001, 1002, 1003), struct.unpack_from(
+        self.assertEqual((1029, 1030, 1031, 1032), struct.unpack_from(
             "<hhhh", call.raw_mic_pcm_s16le))
         self.assertEqual((200, 201, 202, 203), struct.unpack_from(
             "<hhhh", call.echo_reference_pcm_s16le))
-        self.assertEqual((800, 802), struct.unpack_from("<hh", call.asr_pcm_s16le))
-        self.assertEqual((807, 809), struct.unpack_from("<hh", call.vad_pcm_s16le))
+        self.assertEqual((829, 831), struct.unpack_from("<hh", call.asr_pcm_s16le))
+        self.assertEqual((836, 838), struct.unpack_from("<hh", call.vad_pcm_s16le))
         self.assertEqual(73, call.result)
         self.assertTrue(call.is_waked)
 

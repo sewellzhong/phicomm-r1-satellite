@@ -133,6 +133,16 @@ bool VendorBackend::start() {
       handle_ = 0;
       return false;
     }
+    // The first vendor call after the wake transition can expose an empty
+    // output pointer set. Consume one unsaved HAL block before arming the tap
+    // so the captured sequence begins only after the proprietary chain settles.
+    if (pcm_read_(handle_, input_buffer_.data(),
+                  static_cast<int>(input_buffer_.size())) < 0) {
+      pcm_stop_(handle_);
+      pcm_close_(handle_);
+      handle_ = 0;
+      return false;
+    }
     micarray_diagnostic_tap_set_enabled(true);
   }
   streaming_ = true;
