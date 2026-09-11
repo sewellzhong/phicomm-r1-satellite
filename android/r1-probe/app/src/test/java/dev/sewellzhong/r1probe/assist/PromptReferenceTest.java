@@ -31,6 +31,28 @@ public class PromptReferenceTest {
             if(n>=2){for(int i=0;i<320;i++){double delta=f[i]-40*Math.sin(i*.12);error+=delta*delta;}assertTrue(error<wanted*.1);}
         }
     }
+    @Test public void echoCannotQualifyDirectBargeButIndependentSpeechCan() {
+        short[] ref=source(); PromptReference echoOnly=prepared(ref);
+        SpeechEvidence echoEvidence=new SpeechEvidence(); CommandWindow echoWindow=new CommandWindow(20,1.8f,30,6);
+        for(int n=0;n<12;n++) {
+            int end=1600+n*320,offset=end-320-333; short[] frame=new short[320];
+            for(int i=0;i<320;i++) frame[i]=(short)Math.round(ref[offset+i]*.25);
+            long now=1_000_000_000L+n*20_000_000L; echoOnly.position(end,now); echoOnly.process(frame,now);
+            assertNotEquals(CommandWindow.Decision.START,
+                    echoWindow.acceptQualified(echoEvidence.accept(frame,true,false),echoEvidence.strong()));
+        }
+
+        PromptReference mixed=prepared(ref); SpeechEvidence mixedEvidence=new SpeechEvidence();
+        CommandWindow mixedWindow=new CommandWindow(20,1.8f,30,6); CommandWindow.Decision decision=null;
+        for(int n=0;n<12;n++) {
+            int end=1600+n*320,offset=end-320-333; short[] frame=new short[320];
+            for(int i=0;i<320;i++) frame[i]=(short)Math.round(ref[offset+i]*.25+1000*Math.sin(i*.12));
+            long now=1_000_000_000L+n*20_000_000L; mixed.position(end,now); mixed.process(frame,now);
+            decision=mixedWindow.acceptQualified(mixedEvidence.accept(frame,true,false),mixedEvidence.strong());
+            if(decision==CommandWindow.Decision.START) break;
+        }
+        assertEquals(CommandWindow.Decision.START,decision);
+    }
     @Test public void referenceRingIsBoundedAndExpiredEchoCannotMatch() {
         short[] ref=source();PromptReference p=prepared(ref);byte[] b=pcm(ref);
         for(int i=0;i<5;i++)p.append(b,0,b.length,.5f);

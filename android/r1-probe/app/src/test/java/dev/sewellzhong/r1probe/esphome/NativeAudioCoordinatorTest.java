@@ -119,11 +119,11 @@ public class NativeAudioCoordinatorTest {
                 .setEventType(EsphomeApi.VoiceAssistantEvent.VOICE_ASSISTANT_RUN_END).build().toByteArray());
         assertEquals(NativeVoiceSession.Outcome.CANCELLED, owner.outcome());
         assertFalse(owner.ready());
-        assertFalse(owner.takeWakeRestart());
+        assertEquals(NativeAudioCoordinator.RestartReason.NONE, owner.takeRestart());
         player.released = true; owner.tick();
         assertTrue(owner.ready());
-        assertTrue(owner.takeWakeRestart());
-        assertFalse(owner.takeWakeRestart());
+        assertEquals(NativeAudioCoordinator.RestartReason.NEW_WAKE, owner.takeRestart());
+        assertEquals(NativeAudioCoordinator.RestartReason.NONE, owner.takeRestart());
     }
 
     @Test public void ordinaryCancellationNeverRequestsWakeRestart() throws Exception {
@@ -135,7 +135,19 @@ public class NativeAudioCoordinatorTest {
                 .build().toByteArray());
         coordinator.tick();
         assertTrue(coordinator.ready());
-        assertFalse(coordinator.takeWakeRestart());
+        assertEquals(NativeAudioCoordinator.RestartReason.NONE, coordinator.takeRestart());
+    }
+    @Test public void directSpeechRestartsOnlyAfterCancelledPlayerReleases() throws Exception {
+        subscribe(); coordinator.begin(new byte[640]); coordinator.tick();
+        assertTrue(coordinator.requestCancel(NativeAudioCoordinator.CancelReason.DIRECT_SPEECH));
+        assertEquals(NativeAudioCoordinator.RestartReason.NONE, coordinator.takeRestart());
+        coordinator.tick();
+        coordinator.message(MessageIds.VoiceAssistantEventResponse, EsphomeApi.VoiceAssistantEventResponse
+                .newBuilder().setEventType(EsphomeApi.VoiceAssistantEvent.VOICE_ASSISTANT_RUN_END)
+                .build().toByteArray());
+        coordinator.tick();
+        assertEquals(NativeAudioCoordinator.RestartReason.DIRECT_SPEECH, coordinator.takeRestart());
+        assertEquals(NativeAudioCoordinator.RestartReason.NONE, coordinator.takeRestart());
     }
     @Test public void concurrentCancellationHasOneWinnerAndOneOwnerDispatch() throws Exception {
         AtomicInteger localStops = new AtomicInteger();

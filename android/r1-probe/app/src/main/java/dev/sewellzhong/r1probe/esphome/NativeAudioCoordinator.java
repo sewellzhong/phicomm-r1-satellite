@@ -6,7 +6,8 @@ import java.util.Arrays;
 
 /** Audio producer -> bounded mailbox -> single network owner. No concurrent Noise calls. */
 public final class NativeAudioCoordinator implements NativeApiConnection.Handler {
-    public enum CancelReason { USER_STOP, NEW_WAKE, CONNECTION_CLOSED, PLAYBACK_FAILURE, SERVICE_STOP }
+    public enum CancelReason { USER_STOP, NEW_WAKE, DIRECT_SPEECH, CONNECTION_CLOSED, PLAYBACK_FAILURE, SERVICE_STOP }
+    public enum RestartReason { NONE, NEW_WAKE, DIRECT_SPEECH }
     private enum CancelPhase { NONE, REQUESTED, DISPATCHED, COMPLETE }
     public interface Observer { void event(String detail); }
     private static final Observer NO_EVENTS = detail -> { };
@@ -19,7 +20,7 @@ public final class NativeAudioCoordinator implements NativeApiConnection.Handler
     private boolean startPending, eof, accepting;
     private CancelPhase cancelPhase = CancelPhase.NONE;
     private CancelReason cancelReason;
-    private boolean wakeRestartPending;
+    private RestartReason restartPending = RestartReason.NONE;
     private long runSequence, activeRun;
     private NativeVoiceSession.State reportedState;
     private volatile boolean ready;
@@ -52,7 +53,7 @@ public final class NativeAudioCoordinator implements NativeApiConnection.Handler
             throw new IOException("invalid_command_prebuffer");
         ready = false; startPending = true; accepting = true; eof = false;
         cancelPhase = CancelPhase.NONE; cancelReason = null;
-        wakeRestartPending = false;
+        restartPending = RestartReason.NONE;
         activeRun = ++runSequence;
         event("voice_run=" + activeRun + ",event=input_accepted");
         for (int i = 0; i < prebuffer.length; i += 640) enqueue(Arrays.copyOfRange(prebuffer, i, i + 640));
@@ -79,7 +80,9 @@ public final class NativeAudioCoordinator implements NativeApiConnection.Handler
         synchronized (this) {
             if (closed || session == null || cancelPhase != CancelPhase.NONE || !active()) return false;
             cancelPhase = CancelPhase.REQUESTED; cancelReason = reason;
-            wakeRestartPending = reason == CancelReason.NEW_WAKE;
+            restartPending = reason == CancelReason.NEW_WAKE ? RestartReason.NEW_WAKE
+                    : reason == CancelReason.DIRECT_SPEECH ? RestartReason.DIRECT_SPEECH
+                    : RestartReason.NONE;
             startPending = false; accepting = false; eof = true; clear(); ready = false;
             run = activeRun;
         }
@@ -89,11 +92,11 @@ public final class NativeAudioCoordinator implements NativeApiConnection.Handler
         return true;
     }
 
-    /** Consumes a new-wake intent only after the cancelled run and old player are fully idle. */
-    public synchronized boolean takeWakeRestart() {
-        if (!ready) return false;
-        boolean restart = wakeRestartPending && outcome == NativeVoiceSession.Outcome.CANCELLED;
-        wakeRestartPending = false;
+    /** Consumes an interruption intent only after the cancelled run and old player are fully idle. */
+    public synchronized RestartReason takeRestart() {
+        if (!ready || outcome != NativeVoiceSession.Outcome.CANCELLED) return RestartReason.NONE;
+        RestartReason restart = restartPending;
+        restartPending = RestartReason.NONE;
         return restart;
     }
 
@@ -178,7 +181,7 @@ public final class NativeAudioCoordinator implements NativeApiConnection.Handler
     }
     @Override public synchronized void closed() {
         closed = true; ready = false; accepting = false; startPending = false;
-        wakeRestartPending = false; clear();
+        restartPending = RestartReason.NONE; clear();
         event("voice_run=" + activeRun + ",event=connection_closed");
         if (session != null) { session.close(); outcome = session.outcome(); }
         playback.stop();

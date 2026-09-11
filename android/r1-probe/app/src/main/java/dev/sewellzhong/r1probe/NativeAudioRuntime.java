@@ -4,6 +4,7 @@ import android.content.Context;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import dev.sewellzhong.r1probe.assist.AcknowledgementSelector;
+import dev.sewellzhong.r1probe.assist.BargeInCapture;
 import dev.sewellzhong.r1probe.assist.CommandWindow;
 import dev.sewellzhong.r1probe.assist.DiagnosticWindowRequest;
 import dev.sewellzhong.r1probe.assist.PcmPrebuffer;
@@ -160,7 +161,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private volatile boolean authenticated;
     public boolean authenticated() { return authenticated; }
     public String failureCode() { return failure; }
-    private volatile long frames, wakes, replyWakeInterruptions, commands, transcripts, replies, completed, noInputs;
+    private volatile long frames, wakes, replyWakeInterruptions, directBargeInterruptions, commands, transcripts, replies, completed, noInputs;
     private final dev.sewellzhong.r1probe.assist.SpeechEvidence evidence = new dev.sewellzhong.r1probe.assist.SpeechEvidence();
     private DiagnosticWindowRequest diagnosticWindow;
     private volatile String windowSource = "none";
@@ -205,6 +206,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("rms", Math.round(rms)).put("noise_floor", Math.round(noiseFloor))
                 .put("commands", commands).put("stt_results", transcripts).put("tts_streams", replies)
                 .put("reply_wake_interruptions", replyWakeInterruptions)
+                .put("direct_barge_interruptions", directBargeInterruptions)
                 .put("prompt_index", lastPromptIndex).put("reference_correlation", promptReference.correlation)
                 .put("reference_delay_samples", promptReference.delaySamples).put("reference_before_rms", promptReference.beforeRms)
                 .put("reference_after_rms", promptReference.afterRms).put("reference_matched_frames", promptReference.matchedFrames)
@@ -235,11 +237,19 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         settings = new NativeSettings(context);
         controls = new NativeControls(context, settings);
         wakeEnabled = settings.wakeEnabled();
-        playback = new NativePcmPlayback(() -> { requireAudioPermission(); return new NativeAudioTrackSink(new NativeVolume(context, settings)); }, new NativePcmPlayback.Gate() {
+        playback = new NativePcmPlayback(() -> {
+            requireAudioPermission();
+            lastPromptKind = "tts"; lastPromptIndex = -1; promptReference.start();
+            return referenceSink();
+        }, new NativePcmPlayback.Gate() {
             @Override public void request() { playbackInput.start(); playbackRequested = true; }
             @Override public boolean microphoneReleased() { return true; }
-            @Override public void drained() { playbackInput.drained(); }
-            @Override public void release() { playbackRequested = false; }
+            @Override public void drained() {
+                promptReference.finish(System.nanoTime()); playbackInput.drained();
+            }
+            @Override public void release() {
+                promptReference.finish(System.nanoTime()); playbackRequested = false;
+            }
         }, this::diagnosticEvent);
         coordinator = new NativeAudioCoordinator(playback, () -> System.nanoTime() / 1_000_000L,
                 this::diagnosticEvent);
@@ -306,14 +316,18 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     }
     private void captureLoop() {
         short[] frame = new short[320];
+        short[] bargeAnalysis = new short[320];
         byte[] pcm = new byte[640];
         PcmPrebuffer history = new PcmPrebuffer();
+        BargeInCapture bargeCapture = new BargeInCapture();
         AcknowledgementSelector selector = new AcknowledgementSelector(new Random());
         try (AlexaKwsEngine engine = new AlexaKwsEngine(context.getAssets()); CommandVad vad = new CommandVad()) {
             long index = 0;
             int fill = 0;
             boolean waiting = false, busy = false, commandActive = false, following = false;
+            boolean bargePending = false, bargeEnded = false;
             CommandWindow window = settings.window(following);
+            CommandWindow bargeWindow = null;
             while (!stopping.get()) {
                 DiagnosticWindowRequest requestedWindow = (!busy && !waiting && coordinator.ready()) ? takeDiagnosticWindow() : null;
                 if (requestedWindow != null) {
@@ -329,11 +343,28 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 if (coordinator.failure() != null) throw new IOException("native_transport_failed");
                 if (busy && coordinator.ready()) {
                     NativeVoiceSession.Outcome outcome = coordinator.outcome();
-                    boolean restartAfterWake = coordinator.takeWakeRestart();
+                    NativeAudioCoordinator.RestartReason restart = coordinator.takeRestart();
                     if (outcome == NativeVoiceSession.Outcome.COMPLETE) completed++;
                     busy = false; commandActive = false;
-                    history.clear(); engine.reset(); vad.reset(); index = 0; fill = 0;
-                    if (restartAfterWake && outcome == NativeVoiceSession.Outcome.CANCELLED) {
+                    if (restart == NativeAudioCoordinator.RestartReason.DIRECT_SPEECH
+                            && outcome == NativeVoiceSession.Outcome.CANCELLED && bargePending
+                            && bargeWindow != null && bargeCapture.bytes() > 0) {
+                        playbackInput.clear();
+                        byte[] buffered = bargeCapture.snapshot();
+                        inputBytes = buffered.length;
+                        try { coordinator.begin(buffered); } finally { Arrays.fill(buffered, (byte) 0); }
+                        commands++; busy = true; commandActive = !bargeEnded;
+                        window = bargeWindow; following = false; waiting = false;
+                        if (bargeEnded) { coordinator.endInput(); status = "processing"; }
+                        else status = "uploading_barge_in";
+                        diagnosticEvent("direct_barge_restart,window=" + windowId + ",bytes=" + inputBytes
+                                + ",ended=" + bargeEnded);
+                        bargePending = false; bargeEnded = false; bargeWindow = null;
+                        bargeCapture.clear(); history.clear(); engine.reset(); index = 0; fill = 0;
+                    } else if (restart == NativeAudioCoordinator.RestartReason.NEW_WAKE
+                            && outcome == NativeVoiceSession.Outcome.CANCELLED) {
+                        history.clear(); engine.reset(); vad.reset(); index = 0; fill = 0;
+                        bargePending = bargeEnded = false; bargeWindow = null; bargeCapture.clear();
                         playbackInput.clear();
                         releaseRecorder(); status = "acknowledging_interrupt";
                         prompt("ack", selector.next());
@@ -342,6 +373,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                         waiting = true; status = "waiting_command";
                         diagnosticEvent("reply_wake_restart,window=" + windowId);
                     } else if (outcome == NativeVoiceSession.Outcome.NO_INPUT) {
+                        history.clear(); engine.reset(); vad.reset(); index = 0; fill = 0;
+                        bargePending = bargeEnded = false; bargeWindow = null; bargeCapture.clear();
                         emptyResumes++;
                         playbackInput.clear();
                         window.resumeAfterEmpty((System.nanoTime() - windowOpened) / 1_000_000L);
@@ -349,6 +382,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                         endReason = "resumed_after_empty";
                         status = following ? "waiting_followup" : "waiting_command";
                     } else {
+                        history.clear(); engine.reset(); vad.reset(); index = 0; fill = 0;
+                        bargePending = bargeEnded = false; bargeWindow = null; bargeCapture.clear();
                         waiting = coordinator.shouldContinue();
                         following = waiting;
                         if (waiting) {
@@ -400,21 +435,69 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 fill = 0; frames++; promptReference.expire(lastRead);
                 boolean interruptibleReply = busy && !commandActive && !coordinator.acceptingInput();
                 if (interruptibleReply) {
-                    KwsDetection replyDetection = engine.acceptFrame(frame, 0, frame.length, index);
-                    index += frame.length;
-                    if (replyDetection.detected
-                            && coordinator.requestCancel(NativeAudioCoordinator.CancelReason.NEW_WAKE)) {
-                        replyWakeInterruptions++; wakes++; controls.wake();
-                        playbackInput.clear(); history.clear();
-                        status = "interrupting_reply";
-                        diagnosticEvent("reply_wake_detected,score=" + replyDetection.score);
-                        continue;
+                    history.append(frame);
+                    if (!bargePending) {
+                        KwsDetection replyDetection = engine.acceptFrame(frame, 0, frame.length, index);
+                        index += frame.length;
+                        if (replyDetection.detected
+                                && coordinator.requestCancel(NativeAudioCoordinator.CancelReason.NEW_WAKE)) {
+                            replyWakeInterruptions++; wakes++; controls.wake();
+                            playbackInput.clear(); history.clear();
+                            bargeWindow = null; bargeCapture.clear();
+                            status = "interrupting_reply";
+                            diagnosticEvent("reply_wake_detected,score=" + replyDetection.score);
+                            continue;
+                        }
+                    }
+                    // The original vendor frame is retained for upload. Echo matching may only
+                    // alter this analysis copy, so it cannot manufacture a claimed AEC result.
+                    System.arraycopy(frame, 0, bargeAnalysis, 0, frame.length);
+                    promptReference.process(bargeAnalysis, lastRead);
+                    boolean rawBargeSpeech = vad.speechForQuietR1(bargeAnalysis);
+                    boolean qualifiedBargeSpeech = evidence.accept(bargeAnalysis, rawBargeSpeech, false);
+                    if (bargeWindow == null) {
+                        bargeWindow = settings.window(false);
+                        windowSource = "direct_barge_in";
+                        openedWindow(bargeWindow, false);
+                        diagnosticEvent("direct_barge_monitor_started,window=" + windowId);
+                    }
+                    CommandWindow.Decision bargeDecision = bargeWindow.acceptQualified(
+                            qualifiedBargeSpeech, rawBargeSpeech && evidence.strong());
+                    if (!bargePending && bargeDecision == CommandWindow.Decision.START) {
+                        byte[] onset = history.snapshot(15);
+                        try { bargeCapture.start(onset); } finally { Arrays.fill(onset, (byte) 0); }
+                        if (coordinator.requestCancel(NativeAudioCoordinator.CancelReason.DIRECT_SPEECH)) {
+                            bargePending = true; directBargeInterruptions++;
+                            onsetMillis = bargeWindow.waitingMillis(); onsetReason = bargeWindow.onsetReason();
+                            voicedMillis = bargeWindow.voicedMillis(); commandMillis = bargeWindow.commandMillis();
+                            inputBytes = bargeCapture.bytes(); endReason = "speech";
+                            playbackInput.clear(); history.clear(); status = "interrupting_reply_directly";
+                            diagnosticEvent("direct_barge_detected,window=" + windowId + ",onset_ms=" + onsetMillis);
+                            continue;
+                        }
+                        bargeCapture.clear();
+                    } else if (bargePending && !bargeEnded) {
+                        if (!bargeCapture.append(frame)) {
+                            bargeEnded = true; endReason = "barge_handoff_limit";
+                            diagnosticEvent("direct_barge_buffer_full,window=" + windowId);
+                        } else {
+                            inputBytes = bargeCapture.bytes();
+                            voicedMillis = bargeWindow.voicedMillis(); commandMillis = bargeWindow.commandMillis();
+                            if (bargeDecision == CommandWindow.Decision.END) {
+                                bargeEnded = true; endReason = bargeWindow.endReason();
+                                diagnosticEvent("direct_barge_input_end,window=" + windowId + ",reason=" + endReason);
+                            }
+                        }
+                    } else if (!bargePending && bargeDecision == CommandWindow.Decision.TIMEOUT) {
+                        history.clear(); bargeWindow = settings.window(false);
+                        openedWindow(bargeWindow, false);
+                        diagnosticEvent("direct_barge_monitor_restarted,window=" + windowId);
                     }
                 }
                 if (playbackRequested || interruptibleReply) {
                     playbackInput.accept(frame);
-                    if (playbackRequested) status = "playing";
-                    history.clear();
+                    if (playbackRequested && !bargePending) status = "playing";
+                    if (!interruptibleReply) history.clear();
                     continue;
                 }
                 promptReference.process(frame,lastRead);
@@ -477,8 +560,9 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         } catch (Exception | LinkageError e) {
             if (!stopping.get()) { failure = "native_audio_failed"; status = failure; }
         } finally {
-            releaseRecorder(); history.clear(); playbackInput.clear(); promptReference.clear();
-            Arrays.fill(frame, (short) 0); Arrays.fill(pcm, (byte) 0); Arrays.fill(promptHandoff,(short)0);
+            releaseRecorder(); history.clear(); bargeCapture.clear(); playbackInput.clear(); promptReference.clear();
+            Arrays.fill(frame, (short) 0); Arrays.fill(bargeAnalysis, (short) 0);
+            Arrays.fill(pcm, (byte) 0); Arrays.fill(promptHandoff,(short)0);
         }
     }
     private void startRecorder() throws IOException {
