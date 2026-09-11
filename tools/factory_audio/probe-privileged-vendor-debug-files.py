@@ -207,7 +207,7 @@ class Device:
             for name in DEBUG_NAMES:
                 path = root + "/" + name
                 size = self.shell(
-                    "if [ -f '" + path + "' ]; then wc -c < '" + path + "'; fi",
+                    "busybox stat -c %s '" + path + "'",
                     check=False,
                 )
                 if size.isdigit():

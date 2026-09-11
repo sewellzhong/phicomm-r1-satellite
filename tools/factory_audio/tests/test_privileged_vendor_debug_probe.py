@@ -41,6 +41,19 @@ class PrivilegedVendorDebugProbeTest(unittest.TestCase):
         self.assertIn("waking_file_4mic.wav", probe.DEBUG_NAMES)
         self.assertIn("waked_file_2aec.wav", probe.DEBUG_NAMES)
 
+    def test_snapshot_preserves_zero_byte_debug_files_for_cleanup(self):
+        class ZeroFileDevice(probe.Device):
+            def shell(self, command, timeout=40, check=True):
+                if command.startswith("ls -ldn "):
+                    return "diagnostic-directory"
+                if command == "busybox stat -c %s '/sdcard/unidata/waking_file_4mic.wav'":
+                    return "0"
+                return "stat: No such file or directory"
+
+        snapshot = ZeroFileDevice("synthetic").snapshot()
+        self.assertEqual(
+            0, snapshot["/sdcard/unidata"]["files"]["waking_file_4mic.wav"])
+
     def test_broadcast_and_native_restore_require_complete_state(self):
         self.assertTrue(probe.broadcast_succeeded("Broadcast completed: result=0"))
         self.assertFalse(probe.broadcast_succeeded("Broadcast completed: result=-1"))
