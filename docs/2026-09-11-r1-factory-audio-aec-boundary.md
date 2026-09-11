@@ -53,3 +53,32 @@ APK SHA-256 为 `b7b0a2537ed3da33cfe5b59df6552ddaa4f9d1f6f58fefda89d946d4f320e05
 `4mic/2aec/out` 诊断窗口；必须先证明诊断文件的权限、生命周期和关闭后落盘行为，再生成
 新的 boot/APK 候选。取得同一受控播放窗口的非空三路证据后，才校准参考时延并计算消除量。
 在此之前，配置为双参考不等于参考覆盖或 AEC 通过。
+
+## v82 无刷写调试文件探测入口
+
+提交 `5c37a4324b1150c8053c9ae93f35bf92bd9cef4b` 新增
+`tools/factory_audio/probe-vendor-debug-files.py`，先复用当前设备已安装且 SHA-256 精确匹配的
+v82 APK，不安装新 APK、不改 boot，也不解除原厂包隔离。工具严格绑定 `r1-sample01`、API 22、
+3448 fingerprint 和 v82 APK 哈希；开始前若 `/sdcard/unidata` 或 `/data/unidata` 下任一固定
+`waking/waked_file_{4mic,2aec,out}.wav` 已存在就拒绝运行，避免覆盖历史录音。
+
+得到明确录音确认后，工具才暂时停止卫星监听，通过 v82 既有的 `set4MicDebugMode(1)` 路径运行
+5 秒有界采集，观察完整关闭或预期 watchdog 关闭标记，并在关闭后间隔采样确认文件大小稳定。
+每个新文件必须成功拉到仓库外的新建 `0700` 目录、匹配设备端 SHA-256、满足 16 kHz/16-bit
+以及 `4/2/2` 通道形状，之后才逐个删除对应固定设备文件；至少 `waking` 或 `waked` 一组三文件
+均含非零帧才通过。最后确认固定路径已清空并恢复原先的 `listening/audio_opened` 状态。
+
+主机定向测试 5 项及更新后的原厂音频检查 68 项通过，包含 API 22 ARMv7 代理构建。统一检查
+也通过 Android 175 项、lint/hostcheck、native 32 项、R0 73 项与演练、原厂音频 68 项、HA
+44 项及 HA 2026.8.2 配置加载；公开扫描 367 个文件为 0 发现，凭据扫描无泄漏。本步没有运行
+ADB、没有采集录音，也没有生成 boot/APK 候选；因此权限、生命周期和关闭落盘仍是实机待验证。
+实机入口为：
+
+```bash
+python3 tools/factory_audio/probe-vendor-debug-files.py <adb-serial> \
+  --output-dir /仓库外/新目录 \
+  --confirm-device r1-sample01 --confirm-recording
+```
+
+只有该探测结果为 `pass`，才继续设计新的特权代理诊断窗口；探测失败时保留精确失败项，不把
+空 WAV、配置声明或仅能创建文件解释为 AEC 证据。
