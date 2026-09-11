@@ -58,7 +58,7 @@ RULES = (
 # These rules are therefore intentionally separate from RULES and may only be
 # added to a short-lived diagnostic policy with an explicit risk acknowledgement.
 DIAGNOSTIC_VFAT_VENDOR_FILE_RULES = (
-    ("r1_factory_audio", "vfat", "dir", "search,write,add_name"),
+    ("r1_factory_audio", "vfat", "dir", "search,getattr,write,add_name"),
     ("r1_factory_audio", "vfat", "file", "create,open,write,getattr,setattr"),
 )
 DIAGNOSTIC_VFAT_RISK_ACK = "accept-r1-factory-audio-vfat-type-wide-write"

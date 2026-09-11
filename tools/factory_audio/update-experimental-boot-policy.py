@@ -28,7 +28,7 @@ PATCHER_SHA256 = "9e301f027fb30244ef143d367d49d266c944e90345099a60e3414e7ad09d5c
 PATCHER_SOURCE_COMMIT = "e38bff264913e5bc2c8f18f67ec9f1017ace3982"
 BASE_RULE_COUNT = 33
 EXPECTED_DIAGNOSTIC_RULES = (
-    ("r1_factory_audio", "vfat", "dir", "search,write,add_name"),
+    ("r1_factory_audio", "vfat", "dir", "search,getattr,write,add_name"),
     ("r1_factory_audio", "vfat", "file", "create,open,write,getattr,setattr"),
 )
 
