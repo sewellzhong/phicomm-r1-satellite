@@ -348,7 +348,8 @@ class AgentTest(unittest.TestCase):
         self.assertTrue(health.vendor_debug_files_active)
         for _ in range(51):
             self.receive()
-        self.assertTrue(wake_trace.read_text().startswith("01"))
+        wake_lifecycle = wake_trace.read_text()
+        self.assertTrue(wake_lifecycle.startswith("001"), wake_lifecycle)
 
         stop = self.pb.Envelope(protocol_version=1, request_id=4)
         stop.stop_capture.SetInParent()
@@ -423,7 +424,14 @@ class AgentTest(unittest.TestCase):
         self.assertEqual((800, 802), struct.unpack_from("<hh", call.asr_pcm_s16le))
         self.assertEqual((807, 809), struct.unpack_from("<hh", call.vad_pcm_s16le))
         self.assertEqual(73, call.result)
-        self.assertTrue(call.is_waked)
+        self.assertFalse(call.is_waked)
+
+        observed_waked_call = False
+        for _ in range(60):
+            later = self.receive().audio_frame
+            observed_waked_call = observed_waked_call or any(
+                item.is_waked for item in later.micarray_diagnostic_calls)
+        self.assertTrue(observed_waked_call)
 
         stop = self.pb.Envelope(protocol_version=1, request_id=4)
         stop.stop_capture.SetInParent()

@@ -10,6 +10,7 @@ namespace {
 bool initialized = false;
 bool streaming = false;
 intptr_t expected_handle = 0x1234;
+int wake_status = 0;
 }
 
 extern "C" int Unisound_MicArray_Process(
@@ -24,7 +25,7 @@ static bool run_micarray_process() {
   int16_t* vad = nullptr;
   int output_length = 0;
   return Unisound_MicArray_Process(reinterpret_cast<void*>(expected_handle), raw, 256,
-                                   echo, 1, &asr, &vad, &output_length) == 73
+                                   echo, wake_status, &asr, &vad, &output_length) == 73
       && asr != nullptr && vad != nullptr && output_length == 256;
 }
 
@@ -70,6 +71,7 @@ extern "C" int get4MicDoaResult() { return 145; }
 extern "C" const char* get4MicBoardVersion() { return "MOCK_UNI_4MIC_V1.1"; }
 extern "C" int set4MicWakeUpStatus(int status) {
   if (status != 0 && status != 1) return -1;
+  wake_status = status;
   const char* trace = getenv("R1_VENDOR_MOCK_WAKE_STATUS_FILE");
   if (trace != nullptr) {
     FILE* output = fopen(trace, "a");

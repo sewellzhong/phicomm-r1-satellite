@@ -107,7 +107,7 @@ class VendorBackend final : public AudioBackend {
   bool streaming_ = false;
   bool debug_files_active_ = false;
   bool tap_active_ = false;
-  uint32_t debug_frames_ = 0;
+  uint32_t validation_frames_ = 0;
   std::string board_version_;
   std::vector<uint8_t> input_buffer_;
   std::vector<uint8_t> pending_output_;

@@ -87,7 +87,8 @@ bool VendorBackend::initialize() {
   }
   initialized_ = true;
   // Never let the proprietary backend write diagnostic household audio in production.
-  if (set_debug_mode_(0) != 0 || close_algorithm_(0) != 0) {
+  if (set_debug_mode_(0) != 0 || close_algorithm_(0) != 0
+      || set_wakeup_status_(0) != 0) {
     release();
     return false;
   }
@@ -114,9 +115,12 @@ bool VendorBackend::start() {
 bool VendorBackend::read_frame(BackendFrame* frame) {
   if (!streaming_ || frame == nullptr) return false;
   // Match firmware 3448's original manager lifecycle only inside an explicit
-  // debug-file request.  The first second is the pre-wake (waking) window;
-  // subsequent frames are marked waked.  Production capture never enters it.
-  if (debug_files_active_ && debug_frames_ == 50 && set_wakeup_status_(1) != 0) {
+  // diagnostic validation request.  The first second is the pre-wake (waking)
+  // window; subsequent frames are marked waked.  Production capture never
+  // enters it.
+  const bool validation_active = debug_files_active_ || tap_active_;
+  if (validation_active && validation_frames_ == 50
+      && set_wakeup_status_(1) != 0) {
     return false;
   }
   const size_t output_frame_bytes =
@@ -160,7 +164,7 @@ bool VendorBackend::read_frame(BackendFrame* frame) {
   int doa = get_doa_();
   frame->doa_valid = doa >= 0 && doa < 360;
   frame->doa_degrees = frame->doa_valid ? doa : 0;
-  if (debug_files_active_) ++debug_frames_;
+  if (validation_active) ++validation_frames_;
   return true;
 }
 
@@ -179,22 +183,26 @@ bool VendorBackend::set_vendor_debug_files(bool enabled) {
       set_debug_mode_(0);
       return false;
     }
-    debug_frames_ = 0;
+    validation_frames_ = 0;
     debug_files_active_ = true;
     return true;
   }
   const bool wake_reset = set_wakeup_status_(0) == 0;
   const bool debug_reset = set_debug_mode_(0) == 0;
-  debug_frames_ = 0;
+  validation_frames_ = 0;
   debug_files_active_ = false;
   return wake_reset && debug_reset;
 }
 
 bool VendorBackend::set_micarray_diagnostic_tap(bool enabled) {
   if (!initialized_ || streaming_) return false;
+  if (enabled && set_wakeup_status_(0) != 0) return false;
   micarray_diagnostic_tap_set_enabled(enabled);
   tap_active_ = enabled;
-  return micarray_diagnostic_tap_enabled() == enabled;
+  validation_frames_ = 0;
+  const bool state_matches = micarray_diagnostic_tap_enabled() == enabled;
+  const bool wake_reset = enabled || set_wakeup_status_(0) == 0;
+  return state_matches && wake_reset;
 }
 
 uint64_t VendorBackend::micarray_diagnostic_tap_dropped() const {
@@ -219,7 +227,7 @@ void VendorBackend::release() {
   handle_ = 0;
   if (initialized_ && set_wakeup_status_ != nullptr) set_wakeup_status_(0);
   if (initialized_ && set_debug_mode_ != nullptr) set_debug_mode_(0);
-  debug_frames_ = 0;
+  validation_frames_ = 0;
   debug_files_active_ = false;
   if (initialized_ && hal_release_ != nullptr) hal_release_();
   initialized_ = false;
