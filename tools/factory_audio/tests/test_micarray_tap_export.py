@@ -37,21 +37,36 @@ class MicArrayTapExportTest(unittest.TestCase):
             with self.assertRaisesRegex(export.ExportError, "already_exists"):
                 export.validate_output(existing)
 
-    def test_parses_v87_package_identity(self):
-        dump = "  codePath=/data/app/dev.sewellzhong.r1probe-1\n  versionCode=87 targetSdk=22\n"
+    @mock.patch.object(export.Device, "shell")
+    @mock.patch.object(export.Device, "verify", side_effect=export.ExportError("identity"))
+    def test_identity_failure_does_not_force_stop_package(self, verify, shell):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "new"
+            result = export.main([
+                "serial", "--output-dir", str(output),
+                "--expected-apk-sha256", "a" * 64,
+                "--confirm-device", "r1-sample01", "--confirm-recording",
+            ])
+        self.assertEqual(1, result)
+        verify.assert_called_once()
+        shell.assert_not_called()
+
+    def test_parses_v88_package_identity(self):
+        dump = "  codePath=/data/app/dev.sewellzhong.r1probe-1\n  versionCode=88 targetSdk=22\n"
         self.assertEqual(
-            (87, "/data/app/dev.sewellzhong.r1probe-1/base.apk"),
+            (88, "/data/app/dev.sewellzhong.r1probe-1/base.apk"),
             export.parse_package_identity(dump),
         )
 
     @mock.patch.object(export.time, "sleep")
     @mock.patch.object(export, "run_manager")
-    def test_restore_waits_for_listening_audio(self, run_manager, sleep):
+    def test_restore_waits_for_ready_runtime(self, run_manager, sleep):
         run_manager.side_effect = [
             {"status": "disabled", "audio_opened": False},
-            {"status": "listening", "audio_opened": True},
+            {"configured": True, "enabled": True, "listen": True,
+             "audio_blocked": False, "status": "listening", "audio_opened": True},
         ]
-        restored = export.restore_native_listening("serial", attempts=2)
+        restored = export.restore_native_runtime("serial", attempts=2)
         self.assertEqual("listening", restored["status"])
         self.assertEqual(
             [mock.call("start", "serial", "--listen"), mock.call("status", "serial")],
@@ -61,10 +76,21 @@ class MicArrayTapExportTest(unittest.TestCase):
 
     @mock.patch.object(export.time, "sleep")
     @mock.patch.object(export, "run_manager")
+    def test_restore_accepts_waiting_ha_without_opening_audio(self, run_manager, sleep):
+        run_manager.return_value = {
+            "configured": True, "enabled": True, "listen": True,
+            "audio_blocked": False, "status": "waiting_ha", "audio_opened": False,
+        }
+        restored = export.restore_native_runtime("serial", attempts=1)
+        self.assertEqual("waiting_ha", restored["status"])
+        sleep.assert_not_called()
+
+    @mock.patch.object(export.time, "sleep")
+    @mock.patch.object(export, "run_manager")
     def test_restore_rejects_exhausted_transient_state(self, run_manager, sleep):
         run_manager.return_value = {"status": "disabled", "audio_opened": False}
-        with self.assertRaisesRegex(export.ExportError, "native_listening_not_restored"):
-            export.restore_native_listening("serial", attempts=2)
+        with self.assertRaisesRegex(export.ExportError, "native_runtime_not_restored"):
+            export.restore_native_runtime("serial", attempts=2)
 
 
 if __name__ == "__main__":

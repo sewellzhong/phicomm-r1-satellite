@@ -273,6 +273,7 @@ std::vector<uint8_t> health_message(bool streaming, int reference_state,
   append_uint(&result, 21, backend.micarray_diagnostic_tap_invalid_output_pointer());
   append_uint(&result, 22, backend.micarray_diagnostic_tap_unexpected_producer());
   append_uint(&result, 23, backend.micarray_diagnostic_tap_queue_full());
+  append_uint(&result, 24, backend.micarray_diagnostic_schema());
   return result;
 }
 

@@ -158,7 +158,8 @@ public class FactoryAudioClientTest {
                 .setBackendName(FactoryAudioAttestation.PROVEN_BACKEND)
                 .setVendorBoardVersion("UNI_4MIC_HAL_ANDROID_V1.1")
                 .setRawMicChannels(4).setArrayProcessingActive(true)
-                .setMicarrayDiagnosticTapActive(true).build();
+                .setMicarrayDiagnosticTapActive(true)
+                .setMicarrayDiagnosticSchema(2).build();
         FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
                 .setProtocolVersion(1).setRequestId(2).setHealth(health).build());
         ByteArrayOutputStream requests = new ByteArrayOutputStream();
@@ -193,6 +194,29 @@ public class FactoryAudioClientTest {
             return;
         }
         throw new AssertionError("inactive MicArray tap entered validation capture");
+    }
+
+    @Test public void micArrayValidationRejectsOldAgentWithoutIntegritySchema()
+            throws Exception {
+        ByteArrayOutputStream replies = new ByteArrayOutputStream();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(1)
+                .setHelloReply(FactoryAudio.HelloReply.newBuilder().setSelectedVersion(1)).build());
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(2)
+                .setHealth(provenStreamingHealth()
+                        .setMicarrayDiagnosticTapActive(true)).build());
+        FactoryAudioClient client = new FactoryAudioClient(null,
+                new ByteArrayInputStream(replies.toByteArray()), new ByteArrayOutputStream());
+        client.negotiate();
+        try {
+            client.startMicArrayDiagnosticValidationCapture();
+        } catch (IOException expected) {
+            assertEquals("factory_audio_micarray_diagnostic_schema_mismatch_0",
+                    expected.getMessage());
+            return;
+        }
+        throw new AssertionError("old MicArray agent entered schema 2 validation capture");
     }
 
     @Test public void malformedMicArrayTapPayloadIsRejected() throws Exception {

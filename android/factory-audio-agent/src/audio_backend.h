@@ -51,6 +51,7 @@ class AudioBackend {
   virtual uint64_t micarray_diagnostic_tap_invalid_output_pointer() const { return 0; }
   virtual uint64_t micarray_diagnostic_tap_unexpected_producer() const { return 0; }
   virtual uint64_t micarray_diagnostic_tap_queue_full() const { return 0; }
+  virtual uint32_t micarray_diagnostic_schema() const { return 0; }
 };
 
 class SyntheticBackend final : public AudioBackend {
@@ -109,6 +110,7 @@ class VendorBackend final : public AudioBackend {
   uint64_t micarray_diagnostic_tap_invalid_output_pointer() const override;
   uint64_t micarray_diagnostic_tap_unexpected_producer() const override;
   uint64_t micarray_diagnostic_tap_queue_full() const override;
+  uint32_t micarray_diagnostic_schema() const override { return tap_active_ ? 2 : 0; }
 
  private:
   bool resolve_symbols();

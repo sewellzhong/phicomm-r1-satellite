@@ -18,7 +18,7 @@ AUDITOR = ROOT / "tools/factory_audio/audit-validation-capture.py"
 PACKAGE = "dev.sewellzhong.r1probe"
 COMPONENT = PACKAGE + "/.ProbeCommandReceiver"
 DIAGNOSTIC_ROOT = "/mnt/internal_sd/Android/data/dev.sewellzhong.r1probe/files/diagnostics"
-EXPECTED_VERSION_CODE = 87
+EXPECTED_VERSION_CODE = 88
 OUTPUT_KEYS = (
     "wav_path", "diagnostic_wav_path", "metadata_path",
     "micarray_raw_wav_path", "micarray_echo_wav_path",
@@ -87,16 +87,27 @@ def run_manager(action, serial, *extra):
     return json.loads(result.stdout) if result.stdout.strip() else {}
 
 
-def restore_native_listening(serial, attempts=40):
+def native_runtime_ready(status):
+    if (status.get("configured") is not True
+            or status.get("enabled") is not True
+            or status.get("listen") is not True
+            or status.get("audio_blocked") is not False):
+        return False
+    return ((status.get("status") == "listening"
+             and status.get("audio_opened") is True)
+            or (status.get("status") == "waiting_ha"
+                and status.get("audio_opened") is False))
+
+
+def restore_native_runtime(serial, attempts=40):
     status = run_manager("start", serial, "--listen")
     for attempt in range(attempts):
-        if (status.get("status") == "listening"
-                and status.get("audio_opened") is True):
+        if native_runtime_ready(status):
             return status
         if attempt + 1 < attempts:
             time.sleep(0.25)
             status = run_manager("status", serial)
-    raise ExportError("native_listening_not_restored")
+    raise ExportError("native_runtime_not_restored")
 
 
 class Device:
@@ -131,10 +142,10 @@ class Device:
             raise ExportError("selinux_not_enforcing")
         version, apk_path = parse_package_identity(self.shell("dumpsys package " + PACKAGE))
         if version != EXPECTED_VERSION_CODE:
-            raise ExportError("installed_apk_is_not_v86")
+            raise ExportError("installed_apk_version_mismatch")
         remote_digest = self.remote_sha256(apk_path)
         if remote_digest != expected_apk_sha256:
-            raise ExportError("installed_v86_apk_hash_mismatch")
+            raise ExportError("installed_apk_hash_mismatch")
         return {"properties": actual, "version_code": version,
                 "apk_path": apk_path, "apk_sha256": remote_digest,
                 "selinux": "Enforcing"}
@@ -221,15 +232,16 @@ def main(argv=None):
         "status": "failed",
     }
     native_was_listening = False
+    capture_started = False
     remote_paths = {}
     try:
         result["identity"] = device.verify(args.expected_apk_sha256)
         status = run_manager("status", args.serial)
-        if not (status.get("status") == "listening"
-                and status.get("audio_opened") is True):
-            raise ExportError("native_listening_baseline_required")
+        if not native_runtime_ready(status):
+            raise ExportError("native_runtime_baseline_required")
         native_was_listening = True
         run_manager("stop", args.serial)
+        capture_started = True
         device.shell("am force-stop " + PACKAGE)
         device.adb("logcat", "-c")
         nonce = "micarray-sidecar-export-" + str(time.time_ns())
@@ -271,10 +283,11 @@ def main(argv=None):
     except (ExportError, OSError, subprocess.SubprocessError, ValueError) as error:
         result["failure"] = str(error)
     finally:
-        try:
-            device.shell("am force-stop " + PACKAGE, check=False)
-        except (OSError, subprocess.SubprocessError):
-            pass
+        if capture_started:
+            try:
+                device.shell("am force-stop " + PACKAGE, check=False)
+            except (OSError, subprocess.SubprocessError):
+                pass
         cleanup_failures = []
         for remote in remote_paths.values():
             try:
@@ -287,7 +300,7 @@ def main(argv=None):
             result["remote_cleanup_failures"] = cleanup_failures
         if native_was_listening:
             try:
-                restored = restore_native_listening(args.serial)
+                restored = restore_native_runtime(args.serial)
                 result["restored"] = restored
             except (ExportError, OSError, subprocess.SubprocessError, ValueError) as error:
                 result["status"] = "failed"

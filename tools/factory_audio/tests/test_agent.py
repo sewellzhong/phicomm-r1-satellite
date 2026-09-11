@@ -411,6 +411,7 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(0, health.micarray_diagnostic_tap_invalid)
         self.assertEqual(0, health.micarray_diagnostic_tap_unexpected_producer)
         self.assertEqual(0, health.micarray_diagnostic_tap_queue_full)
+        self.assertEqual(2, health.micarray_diagnostic_schema)
         self.assertTrue(wake_trace.read_text().startswith("001"))
         frame = self.receive().audio_frame
         self.assertGreaterEqual(len(frame.micarray_diagnostic_calls), 1)
@@ -446,6 +447,7 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(1, health_reply.health.micarray_diagnostic_tap_outside_window)
         self.assertEqual(0, health_reply.health.micarray_diagnostic_tap_unexpected_producer)
         self.assertEqual(0, health_reply.health.micarray_diagnostic_tap_queue_full)
+        self.assertEqual(2, health_reply.health.micarray_diagnostic_schema)
 
         stop = self.pb.Envelope(protocol_version=1, request_id=4)
         stop.stop_capture.SetInParent()

@@ -120,6 +120,10 @@ public final class FactoryAudioClient implements Closeable {
             if (micArrayDiagnosticTap && !health.getMicarrayDiagnosticTapActive()) {
                 throw new IOException("factory_audio_micarray_tap_not_active");
             }
+            if (micArrayDiagnosticTap && health.getMicarrayDiagnosticSchema() != 2) {
+                throw new IOException("factory_audio_micarray_diagnostic_schema_mismatch_"
+                        + health.getMicarrayDiagnosticSchema());
+            }
             if (requireProductionAttestation) {
                 FactoryAudioAttestation.requireProductionChain(health);
             } else {

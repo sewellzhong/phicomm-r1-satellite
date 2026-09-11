@@ -91,6 +91,9 @@ message Health {
   uint64 micarray_diagnostic_tap_invalid_output_pointer = 21;
   uint64 micarray_diagnostic_tap_unexpected_producer = 22;
   uint64 micarray_diagnostic_tap_queue_full = 23;
+  // Explicit agent-side integrity contract. A new APK must not infer support
+  // for fields 18-23 from their proto3 zero defaults on an older agent.
+  uint32 micarray_diagnostic_schema = 24;
 }
 
 message MicArrayDiagnosticCall {

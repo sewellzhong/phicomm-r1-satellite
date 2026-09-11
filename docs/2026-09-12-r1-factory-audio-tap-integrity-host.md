@@ -20,15 +20,35 @@ tap状态判断，导致关闭时进入、开启后才返回的异步调用被�
 - 主机测试模拟跨启用边界返回，结果为窗口外计数1、`invalid=0`；四个并发生产线程只接受
   首个线程并明确报告其余三个，证明并发模型不符时失败关闭。
 
-## 验证与下一步
+## 主机验证
 
-已运行`python3 tools/dev/prepare.py`与`bash tools/dev/check.sh`：公开扫描387个文件、0发现，
-密钥扫描无泄露；Android 181项及lint/hostcheck构建、native 32项、R0恢复73项与演练、
-原厂音频111项、HA 44项及HA 2026.8.2配置加载全部通过。API 22 ARMv7代理SHA-256为
-`f3e398db807210d9aff19028c4525a37f135b72bf005c0a6cfae93c06c1e4004`，hostcheck APK为
-`289f858f4a1ddb8bcb6d5a940e707a787eb183e1cd8152236b1bde85e4c4ae12`，不能部署到设备。
+首次实现及追加代理显式schema、导出器生命周期修复后，均运行统一门槛。最终
+`bash tools/dev/check.sh`通过：公开扫描387个文件、0发现，密钥扫描无泄露；Android
+182项及lint/hostcheck、native 32项、R0恢复73项与演练、原厂音频113项、HA 44项及
+HA 2026.8.2配置加载全部通过。API 22 ARMv7代理SHA-256为
+`eca703507295aec81ec3e7e89e7f8de06527ff825ba4db0f9bd4d7ee53781f6f`；最终hostcheck APK为
+`890bbc11156ba68eabce93b8ca42b77e2876922b9d3b48905fbec5bab1bdb809`，不能部署到设备。
 
-实机仍运行
-v27 boot与v87 APK；下一步必须先核对`r1-sample01`和3448 fingerprint，从实时Loader双读
-当前boot并匹配`973e00ed…30df`，再生成只替换自有代理的v28候选。静默和右侧10秒窗口
-完整性全部通过后，才重复四方向矩阵。AEC消除、DSP质量、R3和R0均未因此通过。
+## v28/v88实机结果
+
+- ADB序列、3448 fingerprint、API 22和SELinux Enforcing与既有首台基线一致。
+- 从实时Loader读取两份12,582,912字节v27 boot，均为`973e00ed…30df`且逐字节一致；
+  v27当前清单、v26父清单和既有MicArray overlay哈希链全部通过构建器检查。
+- v28仅替换自有代理，候选为`2499afb2…5ac6f`；只执行一次boot写入，复位前完整读回
+  与候选逐字节一致。Android、ADB、Wi-Fi、Enforcing、代理init及原厂音频预检恢复。
+- v88 APK候选和设备回读均为`b5120e9f…6710`，versionCode 88、API 22、v1/v2签名及
+  证书`0be7a364…d2639`匹配既有安装链；v87回退APK已先读回并匹配`7ee18773…2279f`。
+- 首次10秒静默取得500个连续卫星帧和624次连续MicArray调用，0序列缺口、0代理丢帧、
+  0 invalid、0意外生产线程、0队列满；schema 2由代理健康响应明确上报，四类sidecar
+  均非空并通过严格离线审计。设备诊断文件已精确清理，监听恢复。
+- 私有审计SHA-256为`97515ac99008ee8dc82d0ea0808b0b4618983d204ddaaba0cede5d2207d18673`，
+  结果清单为`f5dbf52ecb12bc464dfe2a3ad911e20b95eb75b8c257910a9bed30a3a841cd28`。
+
+导出器起初因版本仍锁定v87而在录音前拒绝；修正后第二次因前一次身份失败清理错误停止
+应用而在运行态预检拒绝，两次均未生成录音。工具现仅在真正进入采集后force-stop，并可
+保留已配置的`listening`或HA暂不可达时的`waiting_ha`状态，相关回归通过。
+
+## 下一步
+
+先由用户在设备右侧以固定距离和音量重复“一二三四五”，完成10秒真人完整性检查；通过后
+按相同材料依次采集前、右、后、左并运行正式矩阵。AEC消除、DSP质量、R3和R0均未因此通过。

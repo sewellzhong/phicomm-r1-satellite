@@ -308,7 +308,8 @@ final class FactoryAudioValidationCapture {
             metadata.println("vendor_debug_files_active="
                     + health.getVendorDebugFilesActive());
             metadata.println("micarray_diagnostic_tap_requested=" + micArrayDiagnosticTap);
-            metadata.println("micarray_diagnostic_schema=2");
+            metadata.println("micarray_diagnostic_schema="
+                    + health.getMicarrayDiagnosticSchema());
             metadata.println("micarray_diagnostic_tap_active="
                     + health.getMicarrayDiagnosticTapActive());
             metadata.println("micarray_diagnostic_tap_calls=" + micArrayCalls);
