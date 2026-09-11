@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("88")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.88-micarray-tap-integrity")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("89")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.89-reply-wake-interruption")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

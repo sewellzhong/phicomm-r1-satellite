@@ -19,6 +19,7 @@ public final class NativeAudioCoordinator implements NativeApiConnection.Handler
     private boolean startPending, eof, accepting;
     private CancelPhase cancelPhase = CancelPhase.NONE;
     private CancelReason cancelReason;
+    private boolean wakeRestartPending;
     private long runSequence, activeRun;
     private NativeVoiceSession.State reportedState;
     private volatile boolean ready;
@@ -51,6 +52,7 @@ public final class NativeAudioCoordinator implements NativeApiConnection.Handler
             throw new IOException("invalid_command_prebuffer");
         ready = false; startPending = true; accepting = true; eof = false;
         cancelPhase = CancelPhase.NONE; cancelReason = null;
+        wakeRestartPending = false;
         activeRun = ++runSequence;
         event("voice_run=" + activeRun + ",event=input_accepted");
         for (int i = 0; i < prebuffer.length; i += 640) enqueue(Arrays.copyOfRange(prebuffer, i, i + 640));
@@ -77,6 +79,7 @@ public final class NativeAudioCoordinator implements NativeApiConnection.Handler
         synchronized (this) {
             if (closed || session == null || cancelPhase != CancelPhase.NONE || !active()) return false;
             cancelPhase = CancelPhase.REQUESTED; cancelReason = reason;
+            wakeRestartPending = reason == CancelReason.NEW_WAKE;
             startPending = false; accepting = false; eof = true; clear(); ready = false;
             run = activeRun;
         }
@@ -84,6 +87,14 @@ public final class NativeAudioCoordinator implements NativeApiConnection.Handler
         playback.stop();
         event("voice_run=" + run + ",event=local_playback_stop_requested");
         return true;
+    }
+
+    /** Consumes a new-wake intent only after the cancelled run and old player are fully idle. */
+    public synchronized boolean takeWakeRestart() {
+        if (!ready) return false;
+        boolean restart = wakeRestartPending && outcome == NativeVoiceSession.Outcome.CANCELLED;
+        wakeRestartPending = false;
+        return restart;
     }
 
     private boolean active() {
@@ -166,7 +177,8 @@ public final class NativeAudioCoordinator implements NativeApiConnection.Handler
         pending.clear(); pendingBytes = 0;
     }
     @Override public synchronized void closed() {
-        closed = true; ready = false; accepting = false; startPending = false; clear();
+        closed = true; ready = false; accepting = false; startPending = false;
+        wakeRestartPending = false; clear();
         event("voice_run=" + activeRun + ",event=connection_closed");
         if (session != null) { session.close(); outcome = session.outcome(); }
         playback.stop();

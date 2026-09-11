@@ -160,7 +160,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private volatile boolean authenticated;
     public boolean authenticated() { return authenticated; }
     public String failureCode() { return failure; }
-    private volatile long frames, wakes, commands, transcripts, replies, completed, noInputs;
+    private volatile long frames, wakes, replyWakeInterruptions, commands, transcripts, replies, completed, noInputs;
     private final dev.sewellzhong.r1probe.assist.SpeechEvidence evidence = new dev.sewellzhong.r1probe.assist.SpeechEvidence();
     private DiagnosticWindowRequest diagnosticWindow;
     private volatile String windowSource = "none";
@@ -204,6 +204,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("command_ms", commandMillis).put("input_bytes", inputBytes).put("end_reason", endReason)
                 .put("rms", Math.round(rms)).put("noise_floor", Math.round(noiseFloor))
                 .put("commands", commands).put("stt_results", transcripts).put("tts_streams", replies)
+                .put("reply_wake_interruptions", replyWakeInterruptions)
                 .put("prompt_index", lastPromptIndex).put("reference_correlation", promptReference.correlation)
                 .put("reference_delay_samples", promptReference.delaySamples).put("reference_before_rms", promptReference.beforeRms)
                 .put("reference_after_rms", promptReference.afterRms).put("reference_matched_frames", promptReference.matchedFrames)
@@ -328,10 +329,19 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 if (coordinator.failure() != null) throw new IOException("native_transport_failed");
                 if (busy && coordinator.ready()) {
                     NativeVoiceSession.Outcome outcome = coordinator.outcome();
+                    boolean restartAfterWake = coordinator.takeWakeRestart();
                     if (outcome == NativeVoiceSession.Outcome.COMPLETE) completed++;
                     busy = false; commandActive = false;
                     history.clear(); engine.reset(); vad.reset(); index = 0; fill = 0;
-                    if (outcome == NativeVoiceSession.Outcome.NO_INPUT) {
+                    if (restartAfterWake && outcome == NativeVoiceSession.Outcome.CANCELLED) {
+                        playbackInput.clear();
+                        releaseRecorder(); status = "acknowledging_interrupt";
+                        prompt("ack", selector.next());
+                        following = false;
+                        window = settings.window(false); openedWindow(window, false);
+                        waiting = true; status = "waiting_command";
+                        diagnosticEvent("reply_wake_restart,window=" + windowId);
+                    } else if (outcome == NativeVoiceSession.Outcome.NO_INPUT) {
                         emptyResumes++;
                         playbackInput.clear();
                         window.resumeAfterEmpty((System.nanoTime() - windowOpened) / 1_000_000L);
@@ -388,7 +398,20 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 lastRead = System.nanoTime(); fill += count;
                 if (fill < frame.length) continue;
                 fill = 0; frames++; promptReference.expire(lastRead);
-                if (playbackRequested || (busy && (!commandActive || !coordinator.acceptingInput()))) {
+                boolean interruptibleReply = busy && !commandActive && !coordinator.acceptingInput();
+                if (interruptibleReply) {
+                    KwsDetection replyDetection = engine.acceptFrame(frame, 0, frame.length, index);
+                    index += frame.length;
+                    if (replyDetection.detected
+                            && coordinator.requestCancel(NativeAudioCoordinator.CancelReason.NEW_WAKE)) {
+                        replyWakeInterruptions++; wakes++; controls.wake();
+                        playbackInput.clear(); history.clear();
+                        status = "interrupting_reply";
+                        diagnosticEvent("reply_wake_detected,score=" + replyDetection.score);
+                        continue;
+                    }
+                }
+                if (playbackRequested || interruptibleReply) {
                     playbackInput.accept(frame);
                     if (playbackRequested) status = "playing";
                     history.clear();

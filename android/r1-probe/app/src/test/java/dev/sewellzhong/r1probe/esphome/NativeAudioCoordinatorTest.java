@@ -119,8 +119,23 @@ public class NativeAudioCoordinatorTest {
                 .setEventType(EsphomeApi.VoiceAssistantEvent.VOICE_ASSISTANT_RUN_END).build().toByteArray());
         assertEquals(NativeVoiceSession.Outcome.CANCELLED, owner.outcome());
         assertFalse(owner.ready());
+        assertFalse(owner.takeWakeRestart());
         player.released = true; owner.tick();
         assertTrue(owner.ready());
+        assertTrue(owner.takeWakeRestart());
+        assertFalse(owner.takeWakeRestart());
+    }
+
+    @Test public void ordinaryCancellationNeverRequestsWakeRestart() throws Exception {
+        subscribe(); coordinator.begin(new byte[640]); coordinator.tick();
+        assertTrue(coordinator.requestCancel(NativeAudioCoordinator.CancelReason.USER_STOP));
+        coordinator.tick();
+        coordinator.message(MessageIds.VoiceAssistantEventResponse, EsphomeApi.VoiceAssistantEventResponse
+                .newBuilder().setEventType(EsphomeApi.VoiceAssistantEvent.VOICE_ASSISTANT_RUN_END)
+                .build().toByteArray());
+        coordinator.tick();
+        assertTrue(coordinator.ready());
+        assertFalse(coordinator.takeWakeRestart());
     }
     @Test public void concurrentCancellationHasOneWinnerAndOneOwnerDispatch() throws Exception {
         AtomicInteger localStops = new AtomicInteger();
