@@ -196,6 +196,38 @@ class BootAgentUpdateTest(unittest.TestCase):
                       for entry in boot.parse_cpio(gzip.decompress(ramdisk))}
             self.assertEqual(candidate_init, parsed[update.INIT_ENTRY])
 
+    def test_update_changes_agent_and_exact_micarray_tap_init_flag(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            root = Path(directory)
+            args, original_entries, new_agent = self.fixture(root)
+            current_overlay = json.loads((root / "overlay.json").read_text())
+            candidate_init = original_entries[3].data.replace(
+                b"--vendor-output-channel 0",
+                b"--vendor-output-channel 0 --allow-micarray-diagnostic-tap")
+            candidate_overlay = dict(current_overlay)
+            candidate_overlay.update({
+                "agent_sha256": update.digest(new_agent),
+                "init_rc_sha256": boot.digest_bytes(candidate_init),
+                "allow_micarray_diagnostic_tap": True,
+            })
+            (root / "candidate-init.rc").write_bytes(candidate_init)
+            (root / "candidate-overlay.json").write_text(json.dumps(candidate_overlay))
+            args.candidate_init_rc = root / "candidate-init.rc"
+            args.candidate_overlay_manifest = root / "candidate-overlay.json"
+            previous_reference = update.REFERENCE
+            update.REFERENCE = root / "reference.json"
+            try:
+                with mock.patch.object(update, "assert_agent_elf32_arm"):
+                    result = update.build(args)
+            finally:
+                update.REFERENCE = previous_reference
+            self.assertEqual(
+                ["ramdisk_agent", "ramdisk_init_micarray_tap_flag"],
+                result["declared_changes"])
+            self.assertEqual("micarray_tap", result["diagnostic_profile"])
+            self.assertTrue(result["allow_micarray_diagnostic_tap"])
+            self.assertFalse(result["allow_vendor_debug_files"])
+
     def test_update_accepts_legacy_incremental_manifest_for_chaining(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as directory:
             root = Path(directory)

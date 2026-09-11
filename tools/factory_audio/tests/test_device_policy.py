@@ -226,8 +226,49 @@ class DevicePolicyTemplateTest(unittest.TestCase):
             self.assertEqual(renderer.digest(root / "output/sepolicy/r1_factory_audio.te"),
                              result["policy_source_sha256"])
             self.assertTrue(result["allow_vendor_debug_files"])
+            self.assertFalse(result["allow_micarray_diagnostic_tap"])
             self.assertIn("--allow-vendor-debug-files",
                           (root / "output/init.r1_factory_audio.rc").read_text())
+
+    def test_overlay_can_enable_micarray_tap_without_vendor_file_access(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fingerprint = "Android/rk322x_echo/rk322x_echo:5.1.1/LMY49F/3448:user/release-keys"
+            reference = json.loads(renderer.BOOT_REFERENCE.read_text())
+            values = {
+                "gate.json": {"status": "pass", "device": {
+                    "id": "r1-sample01", "fingerprint": fingerprint}},
+                "boot.json": {"status": "pass", "device": {
+                    "id": "r1-sample01", "fingerprint": fingerprint},
+                    "reference_sha256": renderer.digest(renderer.BOOT_REFERENCE),
+                    "baseline_manifest_sha256": reference["baseline_manifest_sha256"]},
+                "preflight.json": {"status": "pass", "device": "r1-sample01",
+                    "identity": {"ro.build.fingerprint": fingerprint},
+                    "satellite": {"uid": 10010}},
+                "abi.json": {"status": "pass", "library_name": "libuni4michal.so",
+                    "library_sha256": "a" * 64},
+            }
+            for name, value in values.items():
+                (root / name).write_text(json.dumps(value))
+            agent = root / "agent"
+            agent.write_bytes(b"synthetic-arm-agent")
+            args = SimpleNamespace(
+                gate_report=root / "gate.json", boot_baseline_report=root / "boot.json",
+                preflight=root / "preflight.json", abi_report=root / "abi.json", agent=agent,
+                vendor_library="/system/lib/libuni4michal.so", output_channels=2,
+                output_channel=1, output_dir=root / "output",
+                allow_vendor_debug_files=False, allow_micarray_diagnostic_tap=True,
+            )
+            header = SimpleNamespace(stdout=(
+                "Class:                             ELF32\n"
+                "Machine:                           ARM\n"))
+            with mock.patch.object(renderer.subprocess, "run", return_value=header):
+                result = renderer.render(args)
+            init = (root / "output/init.r1_factory_audio.rc").read_text()
+            self.assertTrue(result["allow_micarray_diagnostic_tap"])
+            self.assertFalse(result["allow_vendor_debug_files"])
+            self.assertIn("--allow-micarray-diagnostic-tap", init)
+            self.assertNotIn("--allow-vendor-debug-files", init)
 
 
 if __name__ == "__main__":

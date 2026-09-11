@@ -264,6 +264,9 @@ std::vector<uint8_t> health_message(bool streaming, int reference_state,
   append_uint(&result, 12, backend.configured_aec_reference_channels());
   append_bool(&result, 13, backend.aec_configured());
   append_bool(&result, 14, backend.vendor_debug_files_active());
+  append_bool(&result, 15, backend.micarray_diagnostic_tap_active());
+  append_uint(&result, 16, backend.micarray_diagnostic_tap_dropped());
+  append_uint(&result, 17, backend.micarray_diagnostic_tap_invalid());
   return result;
 }
 
@@ -286,6 +289,7 @@ struct ClientState {
   uint64_t last_reference_ns = 0;
   uint64_t frame_period_ns = kDefaultFramePeriodNs;
   bool include_diagnostic_output = false;
+  bool include_micarray_diagnostic_tap = false;
   std::vector<uint8_t> input;
 };
 
@@ -300,7 +304,7 @@ bool reply_error(int fd, uint64_t id, int code, const std::string& detail) {
 }
 
 bool handle_request(int fd, const Request& request, ClientState* state, AudioBackend* backend,
-                    bool allow_vendor_debug_files) {
+                    bool allow_vendor_debug_files, bool allow_micarray_diagnostic_tap) {
   if (request.version != kProtocolVersion) {
     return reply_error(fd, request.request_id, 5, "protocol_version_unsupported");
   }
@@ -343,14 +347,28 @@ bool handle_request(int fd, const Request& request, ClientState* state, AudioBac
     if (has_vendor_debug && !allow_vendor_debug_files) {
       return reply_error(fd, request.request_id, 2, "vendor_debug_files_not_allowed");
     }
+    uint64_t micarray_tap = 0;
+    const bool has_micarray_tap = read_uint_field(request.payload, 4, &micarray_tap);
+    if (has_micarray_tap && micarray_tap != 1) {
+      return reply_error(fd, request.request_id, 7, "micarray_diagnostic_tap_flag_invalid");
+    }
+    if (has_micarray_tap && !has_diagnostic) {
+      return reply_error(fd, request.request_id, 7,
+                         "micarray_diagnostic_tap_requires_diagnostic_capture");
+    }
+    if (has_micarray_tap && !allow_micarray_diagnostic_tap) {
+      return reply_error(fd, request.request_id, 2, "micarray_diagnostic_tap_not_allowed");
+    }
     if (!backend->initialize()
         || (has_vendor_debug && !backend->set_vendor_debug_files(true))
+        || (has_micarray_tap && !backend->set_micarray_diagnostic_tap(true))
         || !backend->start()) {
       backend->release();
       return reply_error(fd, request.request_id, 3, "backend_start_failed");
     }
     state->streaming = true;
     state->include_diagnostic_output = has_diagnostic;
+    state->include_micarray_diagnostic_tap = has_micarray_tap;
     state->sequence = 0;
     state->next_frame_ns = monotonic_ns() + state->frame_period_ns;
     return send_envelope(fd, envelope(request.request_id, 15,
@@ -361,6 +379,7 @@ bool handle_request(int fd, const Request& request, ClientState* state, AudioBac
     backend->release();
     state->streaming = false;
     state->include_diagnostic_output = false;
+    state->include_micarray_diagnostic_tap = false;
     return send_envelope(fd, envelope(request.request_id, 15,
         health_message(false, reference_state(*state), state->sequence, state->dropped, *backend)));
   }
@@ -412,11 +431,40 @@ bool emit_frame(int fd, ClientState* state, AudioBackend* backend) {
     append_uint(&audio, 9, frame.diagnostic_output_channels);
     append_uint(&audio, 10, frame.diagnostic_selected_output_channel);
   }
+  if (state->include_micarray_diagnostic_tap) {
+    for (const auto& call : frame.micarray_diagnostic_calls) {
+      const size_t raw_expected = call.samples_per_channel * 4U * 2U;
+      const size_t echo_expected = call.samples_per_channel * 2U * 2U;
+      if (call.samples_per_channel != 256
+          || call.raw_mic_pcm_s16le.size() != raw_expected
+          || call.echo_reference_pcm_s16le.size() != echo_expected
+          || call.asr_pcm_s16le.size() != call.vad_pcm_s16le.size()
+          || call.asr_pcm_s16le.size() > call.samples_per_channel * 2U) {
+        return reply_error(fd, 0, 3, "micarray_diagnostic_shape_invalid");
+      }
+      std::vector<uint8_t> diagnostic_call;
+      append_uint(&diagnostic_call, 1, call.sequence);
+      append_uint(&diagnostic_call, 2, call.samples_per_channel);
+      append_bytes(&diagnostic_call, 3, call.raw_mic_pcm_s16le.data(),
+                   call.raw_mic_pcm_s16le.size());
+      append_uint(&diagnostic_call, 4, 4);
+      append_bytes(&diagnostic_call, 5, call.echo_reference_pcm_s16le.data(),
+                   call.echo_reference_pcm_s16le.size());
+      append_uint(&diagnostic_call, 6, 2);
+      append_bytes(&diagnostic_call, 7, call.asr_pcm_s16le.data(),
+                   call.asr_pcm_s16le.size());
+      append_bytes(&diagnostic_call, 8, call.vad_pcm_s16le.data(),
+                   call.vad_pcm_s16le.size());
+      append_sint32(&diagnostic_call, 9, call.result);
+      append_bool(&diagnostic_call, 10, call.is_waked);
+      append_bytes(&audio, 11, diagnostic_call.data(), diagnostic_call.size());
+    }
+  }
   return send_envelope(fd, envelope(0, 16, audio));
 }
 
 bool consume_requests(int fd, ClientState* state, AudioBackend* backend,
-                      bool allow_vendor_debug_files) {
+                      bool allow_vendor_debug_files, bool allow_micarray_diagnostic_tap) {
   uint8_t chunk[8192];
   ssize_t count = recv(fd, chunk, sizeof(chunk), 0);
   if (count < 0 && errno == EINTR) return true;
@@ -435,13 +483,14 @@ bool consume_requests(int fd, ClientState* state, AudioBackend* backend,
       if (!reply_error(fd, 0, 7, "malformed_envelope")) return false;
       continue;
     }
-    if (!handle_request(fd, request, state, backend, allow_vendor_debug_files)) return false;
+    if (!handle_request(fd, request, state, backend, allow_vendor_debug_files,
+                        allow_micarray_diagnostic_tap)) return false;
   }
   return true;
 }
 
 void serve_client(int fd, AudioBackend* backend, uint64_t frame_period_ns,
-                  bool allow_vendor_debug_files) {
+                  bool allow_vendor_debug_files, bool allow_micarray_diagnostic_tap) {
   ClientState state;
   state.frame_period_ns = frame_period_ns;
   while (!g_stop) {
@@ -457,7 +506,8 @@ void serve_client(int fd, AudioBackend* backend, uint64_t frame_period_ns,
     if (result < 0 && errno == EINTR) continue;
     if (result < 0 || (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL))) break;
     if (result > 0 && (descriptor.revents & POLLIN)
-        && !consume_requests(fd, &state, backend, allow_vendor_debug_files)) break;
+        && !consume_requests(fd, &state, backend, allow_vendor_debug_files,
+                             allow_micarray_diagnostic_tap)) break;
     if (state.streaming && monotonic_ns() >= state.next_frame_ns) {
       bool first_frame = state.sequence == 0;
       if (!emit_frame(fd, &state, backend)) break;
@@ -519,12 +569,16 @@ int main(int argc, char** argv) {
   long drop_gid = -1;
   bool fake = false;
   bool allow_vendor_debug_files = false;
+  bool allow_micarray_diagnostic_tap = false;
   VendorBackendOptions vendor_options;
   uint64_t frame_period_ns = kDefaultFramePeriodNs;
   for (int index = 1; index < argc; ++index) {
     std::string argument = argv[index];
     if (argument == "--fake") fake = true;
     else if (argument == "--allow-vendor-debug-files") allow_vendor_debug_files = true;
+    else if (argument == "--allow-micarray-diagnostic-tap") {
+      allow_micarray_diagnostic_tap = true;
+    }
     else if (argument == "--vendor-library" && index + 1 < argc) {
       vendor_options.library_path = argv[++index];
     } else if (argument == "--vendor-open-channels" && index + 1 < argc) {
@@ -584,7 +638,7 @@ int main(int argc, char** argv) {
       fprintf(stderr, "usage: r1-factory-audio-agent --expected-uid UID [--fake | "
                       "--vendor-library PATH --vendor-open-channels 2 "
                       "--vendor-output-channels 1|2 --vendor-output-channel N] [--socket PATH] "
-                      "[--allow-vendor-debug-files]\n");
+                      "[--allow-vendor-debug-files] [--allow-micarray-diagnostic-tap]\n");
       return 2;
     }
   }
@@ -595,6 +649,10 @@ int main(int argc, char** argv) {
   }
   if (allow_vendor_debug_files && !vendor) {
     fprintf(stderr, "vendor_debug_files_require_vendor_backend\n");
+    return 2;
+  }
+  if (allow_micarray_diagnostic_tap && !vendor) {
+    fprintf(stderr, "micarray_diagnostic_tap_requires_vendor_backend\n");
     return 2;
   }
   if (vendor && (vendor_options.library_path[0] != '/'
@@ -693,7 +751,8 @@ int main(int argc, char** argv) {
     std::unique_ptr<AudioBackend> backend;
     if (fake) backend.reset(new SyntheticBackend());
     else backend.reset(new VendorBackend(vendor_options));
-    serve_client(client, backend.get(), frame_period_ns, allow_vendor_debug_files);
+    serve_client(client, backend.get(), frame_period_ns, allow_vendor_debug_files,
+                 allow_micarray_diagnostic_tap);
     close(client);
   }
   close(server);

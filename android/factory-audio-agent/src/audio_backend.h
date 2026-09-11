@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "micarray_diagnostic_tap.h"
+
 struct BackendFrame {
   std::vector<uint8_t> pcm;
   // Optional validation-only copy of every vendor output channel. This is never
@@ -12,6 +14,7 @@ struct BackendFrame {
   std::vector<uint8_t> diagnostic_interleaved_pcm;
   uint32_t diagnostic_output_channels = 0;
   uint32_t diagnostic_selected_output_channel = 0;
+  std::vector<MicArrayDiagnosticCall> micarray_diagnostic_calls;
   int32_t doa_degrees = 0;
   bool doa_valid = false;
 };
@@ -25,6 +28,7 @@ class AudioBackend {
   virtual bool read_frame(BackendFrame* frame) = 0;
   virtual bool submit_playback_reference(const std::vector<uint8_t>& pcm) = 0;
   virtual bool set_vendor_debug_files(bool enabled) = 0;
+  virtual bool set_micarray_diagnostic_tap(bool enabled) = 0;
   virtual void stop() = 0;
   virtual void release() = 0;
   virtual std::string board_version() const { return {}; }
@@ -38,6 +42,9 @@ class AudioBackend {
   virtual uint32_t configured_aec_reference_channels() const { return 0; }
   virtual bool aec_configured() const { return false; }
   virtual bool vendor_debug_files_active() const { return false; }
+  virtual bool micarray_diagnostic_tap_active() const { return false; }
+  virtual uint64_t micarray_diagnostic_tap_dropped() const { return 0; }
+  virtual uint64_t micarray_diagnostic_tap_invalid() const { return 0; }
 };
 
 class SyntheticBackend final : public AudioBackend {
@@ -48,6 +55,7 @@ class SyntheticBackend final : public AudioBackend {
   bool read_frame(BackendFrame* frame) override;
   bool submit_playback_reference(const std::vector<uint8_t>& pcm) override;
   bool set_vendor_debug_files(bool enabled) override { return !enabled; }
+  bool set_micarray_diagnostic_tap(bool enabled) override { return !enabled; }
   void stop() override;
   void release() override;
 
@@ -73,6 +81,7 @@ class VendorBackend final : public AudioBackend {
   bool read_frame(BackendFrame* frame) override;
   bool submit_playback_reference(const std::vector<uint8_t>& pcm) override;
   bool set_vendor_debug_files(bool enabled) override;
+  bool set_micarray_diagnostic_tap(bool enabled) override;
   void stop() override;
   void release() override;
   std::string board_version() const override { return board_version_; }
@@ -85,6 +94,9 @@ class VendorBackend final : public AudioBackend {
   }
   bool aec_configured() const override { return initialized_; }
   bool vendor_debug_files_active() const override { return debug_files_active_; }
+  bool micarray_diagnostic_tap_active() const override { return tap_active_; }
+  uint64_t micarray_diagnostic_tap_dropped() const override;
+  uint64_t micarray_diagnostic_tap_invalid() const override;
 
  private:
   bool resolve_symbols();
@@ -94,6 +106,7 @@ class VendorBackend final : public AudioBackend {
   bool initialized_ = false;
   bool streaming_ = false;
   bool debug_files_active_ = false;
+  bool tap_active_ = false;
   uint32_t debug_frames_ = 0;
   std::string board_version_;
   std::vector<uint8_t> input_buffer_;

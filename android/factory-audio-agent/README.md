@@ -22,6 +22,14 @@ identified client must set `StartCapture.vendor_debug_files` together with the
 diagnostic-output flag. The health reply reports the active state. Stop, disconnect,
 or release resets the vendor debug mode before the library is unloaded.
 
+Firmware 3448 MicArray boundary capture is a separate validation-only path. It
+requires `--allow-micarray-diagnostic-tap` on the agent and
+`StartCapture.micarray_diagnostic_tap` together with diagnostic output. The
+interposer forwards the pinned eight-argument ABI unchanged, copies only the
+fixed 256-sample 4-mic/2-reference call into the local IPC, and clears its
+bounded queue when stopped. It does not need public-storage access and remains
+off for production capture.
+
 The production socket is `/dev/socket/r1_factory_audio`. The agent requires an
 explicit `--expected-uid`, uses mode `0660`, and verifies each connection with
 `SO_PEERCRED`. The supplied init template binds the socket as root, changes its

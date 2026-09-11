@@ -32,6 +32,7 @@ bool SyntheticBackend::read_frame(BackendFrame* frame) {
   frame->diagnostic_interleaved_pcm.clear();
   frame->diagnostic_output_channels = 0;
   frame->diagnostic_selected_output_channel = 0;
+  frame->micarray_diagnostic_calls.clear();
   frame->doa_degrees = 0;
   frame->doa_valid = false;
   return true;
@@ -76,7 +77,8 @@ bool VendorBackend::initialize() {
     return false;
   }
   library_ = dlopen(options_.library_path.c_str(), RTLD_NOW | RTLD_LOCAL);
-  if (library_ == nullptr || !resolve_symbols() || hal_init_(1) != 0) {
+  if (library_ == nullptr || !resolve_symbols()
+      || !micarray_diagnostic_tap_bind_original(library_) || hal_init_(1) != 0) {
     release();
     return false;
   }
@@ -120,6 +122,15 @@ bool VendorBackend::read_frame(BackendFrame* frame) {
   frame->diagnostic_interleaved_pcm = input_buffer_;
   frame->diagnostic_output_channels = static_cast<uint32_t>(options_.output_channels);
   frame->diagnostic_selected_output_channel = static_cast<uint32_t>(options_.output_channel);
+  frame->micarray_diagnostic_calls.clear();
+  if (tap_active_) {
+    MicArrayDiagnosticCall call;
+    while (frame->micarray_diagnostic_calls.size() < 8
+           && micarray_diagnostic_tap_take(&call)) {
+      frame->micarray_diagnostic_calls.push_back(std::move(call));
+      call = MicArrayDiagnosticCall{};
+    }
+  }
   frame->pcm.resize(kMonoFrameBytes);
   if (options_.output_channels == 1) {
     memcpy(frame->pcm.data(), input_buffer_.data(), kMonoFrameBytes);
@@ -163,6 +174,21 @@ bool VendorBackend::set_vendor_debug_files(bool enabled) {
   return wake_reset && debug_reset;
 }
 
+bool VendorBackend::set_micarray_diagnostic_tap(bool enabled) {
+  if (!initialized_ || streaming_) return false;
+  micarray_diagnostic_tap_set_enabled(enabled);
+  tap_active_ = enabled;
+  return micarray_diagnostic_tap_enabled() == enabled;
+}
+
+uint64_t VendorBackend::micarray_diagnostic_tap_dropped() const {
+  return tap_active_ ? ::micarray_diagnostic_tap_dropped() : 0;
+}
+
+uint64_t VendorBackend::micarray_diagnostic_tap_invalid() const {
+  return tap_active_ ? ::micarray_diagnostic_tap_invalid() : 0;
+}
+
 void VendorBackend::stop() {
   if (streaming_ && handle_ != 0) pcm_stop_(handle_);
   streaming_ = false;
@@ -170,6 +196,8 @@ void VendorBackend::stop() {
 
 void VendorBackend::release() {
   stop();
+  micarray_diagnostic_tap_set_enabled(false);
+  tap_active_ = false;
   if (handle_ != 0 && pcm_close_ != nullptr) pcm_close_(handle_);
   handle_ = 0;
   if (initialized_ && set_wakeup_status_ != nullptr) set_wakeup_status_(0);
@@ -180,6 +208,7 @@ void VendorBackend::release() {
   initialized_ = false;
   board_version_.clear();
   input_buffer_.clear();
+  micarray_diagnostic_tap_unbind_original();
   if (library_ != nullptr) dlclose(library_);
   library_ = nullptr;
   hal_init_ = nullptr;

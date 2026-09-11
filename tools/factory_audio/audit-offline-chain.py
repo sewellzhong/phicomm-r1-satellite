@@ -310,7 +310,7 @@ def verify_static_analysis(reference, analysis_dir):
         with path.open("r", encoding="utf-8", errors="replace") as handle:
             for line in handle:
                 offset_token, fragment, _ = expected[found]
-                line_tokens = [token.rstrip(":").lower() for token in line.split()]
+                line_tokens = [token.strip("<>:").lower() for token in line.split()]
                 normalized_offset = offset_token.lstrip("0") or "0"
                 if any((token.lstrip("0") or "0") == normalized_offset
                        for token in line_tokens[:2]):
@@ -387,6 +387,9 @@ def audit_materials(extraction_manifest_path, reference_path, output_dir,
                         analysis / f"{name}.symbols.txt")
         run_to_new_file((tools["llvm_objdump"], "-d", "--triple=thumbv7a-linux-android", library),
                         analysis / f"{name}.disassembly.txt")
+        if name == "libUniMicArray.so":
+            run_to_new_file((tools["readelf"], "--debug-dump=info", library),
+                            analysis / f"{name}.debug-info.txt")
 
     static_analysis = verify_static_analysis(reference, analysis)
     analysis_files = []

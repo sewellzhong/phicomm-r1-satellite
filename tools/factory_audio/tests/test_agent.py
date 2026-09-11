@@ -181,6 +181,14 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(2, result.returncode)
         self.assertIn("vendor_debug_files_require_vendor_backend", result.stderr)
 
+    def test_micarray_tap_allow_flag_requires_vendor_backend(self):
+        result = subprocess.run([
+            str(AGENT), "--fake", "--allow-micarray-diagnostic-tap",
+            "--expected-uid", str(os.getuid()), "--socket", str(self.socket_path) + ".tap"
+        ], capture_output=True, text=True)
+        self.assertEqual(2, result.returncode)
+        self.assertIn("micarray_diagnostic_tap_requires_vendor_backend", result.stderr)
+
     def test_sdcard_group_is_retained_only_for_explicit_vendor_debug_boot(self):
         source = (ROOT / "android/factory-audio-agent/src/main.cpp").read_text()
         self.assertIn("constexpr gid_t kR1SdcardWriteGid = 1015", source)
@@ -244,8 +252,15 @@ class AgentTest(unittest.TestCase):
         denied = self.receive()
         self.assertEqual(self.pb.ERROR_CODE_PERMISSION_DENIED, denied.error.code)
         self.assertEqual("vendor_debug_files_not_allowed", denied.error.detail)
-        start.request_id = 3
+        start.request_id = 21
         start.start_capture.vendor_debug_files = False
+        start.start_capture.micarray_diagnostic_tap = True
+        self.send(start)
+        denied = self.receive()
+        self.assertEqual(self.pb.ERROR_CODE_PERMISSION_DENIED, denied.error.code)
+        self.assertEqual("micarray_diagnostic_tap_not_allowed", denied.error.detail)
+        start.request_id = 3
+        start.start_capture.micarray_diagnostic_tap = False
         self.send(start)
         health = self.receive().health
         self.assertEqual("unisound_uni4mic_3448", health.backend_name)
@@ -337,6 +352,91 @@ class AgentTest(unittest.TestCase):
                 break
         self.assertFalse(reply.health.vendor_debug_files_active)
         self.assertTrue(wake_trace.read_text().endswith("0"))
+
+    def test_micarray_tap_forwards_and_copies_only_with_both_opt_ins(self):
+        self.client.close()
+        self.stop_agent()
+        environment = dict(os.environ)
+        environment["R1_VENDOR_MOCK_CONCURRENT_TAP"] = "1"
+        self.agent = subprocess.Popen([
+            str(AGENT), "--expected-uid", str(os.getuid()),
+            "--socket", str(self.socket_path),
+            "--vendor-library", str(VENDOR_MOCK),
+            "--vendor-open-channels", "2",
+            "--vendor-output-channels", "2",
+            "--vendor-output-channel", "0",
+            "--allow-micarray-diagnostic-tap",
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=environment)
+        deadline = time.monotonic() + 5
+        while (self.agent.poll() is None and not self.socket_path.exists()
+               and time.monotonic() < deadline):
+            time.sleep(0.01)
+        self.assertTrue(self.socket_path.exists())
+        self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.client.settimeout(2)
+        self.client.connect(str(self.socket_path))
+        self.negotiate("unisound_uni4mic_3448")
+
+        invalid = self.pb.Envelope(protocol_version=1, request_id=2)
+        invalid.start_capture.format.sample_rate_hz = 16000
+        invalid.start_capture.format.channels = 1
+        invalid.start_capture.format.sample_width_bytes = 2
+        invalid.start_capture.format.frame_duration_ms = 20
+        invalid.start_capture.micarray_diagnostic_tap = True
+        self.send(invalid)
+        denied = self.receive()
+        self.assertEqual(self.pb.ERROR_CODE_INVALID_REQUEST, denied.error.code)
+        self.assertEqual("micarray_diagnostic_tap_requires_diagnostic_capture",
+                         denied.error.detail)
+
+        valid = self.pb.Envelope(protocol_version=1, request_id=3)
+        valid.start_capture.CopyFrom(invalid.start_capture)
+        valid.start_capture.include_diagnostic_output = True
+        self.send(valid)
+        health = self.receive().health
+        self.assertTrue(health.micarray_diagnostic_tap_active)
+        self.assertEqual(0, health.micarray_diagnostic_tap_dropped)
+        self.assertEqual(0, health.micarray_diagnostic_tap_invalid)
+        frame = self.receive().audio_frame
+        self.assertGreaterEqual(len(frame.micarray_diagnostic_calls), 1)
+        self.assertLessEqual(len(frame.micarray_diagnostic_calls), 4)
+        call = frame.micarray_diagnostic_calls[0]
+        self.assertGreaterEqual(call.sequence, 1)
+        self.assertEqual(256, call.samples_per_channel)
+        self.assertEqual(4, call.raw_mic_channels)
+        self.assertEqual(2, call.echo_reference_channels)
+        self.assertEqual(2048, len(call.raw_mic_pcm_s16le))
+        self.assertEqual(1024, len(call.echo_reference_pcm_s16le))
+        self.assertEqual(512, len(call.asr_pcm_s16le))
+        self.assertEqual(512, len(call.vad_pcm_s16le))
+        self.assertEqual((1000, 1001, 1002, 1003), struct.unpack_from(
+            "<hhhh", call.raw_mic_pcm_s16le))
+        self.assertEqual((200, 201, 202, 203), struct.unpack_from(
+            "<hhhh", call.echo_reference_pcm_s16le))
+        self.assertEqual((800, 802), struct.unpack_from("<hh", call.asr_pcm_s16le))
+        self.assertEqual((807, 809), struct.unpack_from("<hh", call.vad_pcm_s16le))
+        self.assertEqual(73, call.result)
+        self.assertTrue(call.is_waked)
+
+        stop = self.pb.Envelope(protocol_version=1, request_id=4)
+        stop.stop_capture.SetInParent()
+        self.send(stop)
+        while True:
+            reply = self.receive()
+            if reply.request_id == 4:
+                break
+        self.assertFalse(reply.health.micarray_diagnostic_tap_active)
+
+        production = self.pb.Envelope(protocol_version=1, request_id=5)
+        production.start_capture.format.sample_rate_hz = 16000
+        production.start_capture.format.channels = 1
+        production.start_capture.format.sample_width_bytes = 2
+        production.start_capture.format.frame_duration_ms = 20
+        self.send(production)
+        while self.receive().request_id != 5:
+            pass
+        production_frame = self.receive().audio_frame
+        self.assertEqual(0, len(production_frame.micarray_diagnostic_calls))
 
     def test_vendor_debug_files_refuse_non_allowlisted_shell_command(self):
         self.client.close()

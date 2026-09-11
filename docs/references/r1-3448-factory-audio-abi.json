@@ -73,6 +73,22 @@
     "uni_4mic_pcm_read": "returns the underlying pcm_read value when nonnegative and -1 on validation/read failure",
     "runtime_positive_length_source": "pending; static evidence conflicts with the usual tinyalsa zero-on-success contract"
   },
+  "micarray_process_abi": {
+    "symbol": "Unisound_MicArray_Process",
+    "return_type": "int32",
+    "parameters": [
+      {"name": "handle", "type": "void *"},
+      {"name": "in", "type": "const int16_t *", "layout": "4-channel interleaved PCM"},
+      {"name": "in_len", "type": "int32", "unit": "samples per channel", "firmware_3448_value": 256},
+      {"name": "echo_ref", "type": "int16_t *", "layout": "2-channel interleaved PCM"},
+      {"name": "is_waked", "type": "int32"},
+      {"name": "out_asr", "type": "int16_t **"},
+      {"name": "out_vad", "type": "int16_t **"},
+      {"name": "out_len", "type": "int32 *", "unit": "mono samples per output"}
+    ],
+    "source": "DWARF retained in pinned libUniMicArray.so plus firmware 3448 configuration and worker write sizes",
+    "runtime_validation": "pending"
+  },
   "static_analysis_contract": {
     "Unisound-classes.dexdump.txt": [
       {"contains": "const/4 v3, #int 1", "offset": "0x26a96e"},
@@ -107,6 +123,23 @@
       {"contains": "Java_com_unisound_jni_Uni4micHalJNI_openAudioIn", "offset": "0x00000e03"},
       {"contains": "Java_com_unisound_jni_Uni4micHalJNI_readData", "offset": "0x00000e15"},
       {"contains": "Java_com_unisound_jni_Uni4micHalJNI_startRecorder", "offset": "0x00000e4b"}
+    ],
+    "libUniMicArray.so.debug-info.txt": [
+      {"contains": "DW_AT_name        : (indirect string, offset: 0x609): short int", "offset": "0x5d"},
+      {"contains": "DW_AT_type        : <0x5a>", "offset": "0x5c7"},
+      {"contains": "DW_AT_type        : <0x33>", "offset": "0x657"},
+      {"contains": "DW_AT_external    : 1", "offset": "0x11b3"},
+      {"contains": "Unisound_MicArray_Process", "offset": "0x11b3"},
+      {"contains": "DW_AT_name        : (indirect string, offset: 0x83a): handle", "offset": "0x11cd"},
+      {"contains": "DW_AT_name        : in", "offset": "0x11dd"},
+      {"contains": "DW_AT_name        : (indirect string, offset: 0x8f): in_len", "offset": "0x11ec"},
+      {"contains": "DW_AT_name        : (indirect string, offset: 0x30a): echo_ref", "offset": "0x11fc"},
+      {"contains": "DW_AT_name        : (indirect string, offset: 0x7bf): is_waked", "offset": "0x120c"},
+      {"contains": "DW_AT_name        : (indirect string, offset: 0x613): out_asr", "offset": "0x121b"},
+      {"contains": "DW_AT_name        : (indirect string, offset: 0x745): out_vad", "offset": "0x122a"},
+      {"contains": "DW_AT_name        : (indirect string, offset: 0xcc): out_len", "offset": "0x1239"},
+      {"contains": "DW_AT_type        : <0x1665>", "offset": "0x1661"},
+      {"contains": "DW_AT_type        : <0x5c5>", "offset": "0x166c"}
     ],
     "libuni4michal.so.symbols.txt": [
       {"contains": "uni_hal_4mic_array_process", "offset": "0x00003975"},

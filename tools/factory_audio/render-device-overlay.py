@@ -117,10 +117,15 @@ def render(args):
     init = init.replace("@PROVEN_OUTPUT_CHANNEL@", str(args.output_channel))
     init = init.replace("/system/lib/libuni4michal.so", args.vendor_library)
     allow_vendor_debug_files = bool(getattr(args, "allow_vendor_debug_files", False))
-    if allow_vendor_debug_files:
+    allow_micarray_diagnostic_tap = bool(
+        getattr(args, "allow_micarray_diagnostic_tap", False))
+    if allow_vendor_debug_files or allow_micarray_diagnostic_tap:
         marker = "--vendor-output-channel " + str(args.output_channel)
-        require(marker in init, "vendor_debug_init_insertion_point_missing")
-        init = init.replace(marker, marker + " --allow-vendor-debug-files", 1)
+        require(marker in init, "diagnostic_init_insertion_point_missing")
+        flags = (" --allow-vendor-debug-files" if allow_vendor_debug_files else "")
+        flags += (" --allow-micarray-diagnostic-tap"
+                  if allow_micarray_diagnostic_tap else "")
+        init = init.replace(marker, marker + flags, 1)
     require("@PROVEN_" not in init, "unresolved_init_template_token")
     (output / "init.r1_factory_audio.rc").write_text(init, encoding="utf-8")
     for name in ("r1_factory_audio.te", "file_contexts"):
@@ -137,6 +142,7 @@ def render(args):
         "output_channel": args.output_channel,
         "output_channels": args.output_channels,
         "allow_vendor_debug_files": allow_vendor_debug_files,
+        "allow_micarray_diagnostic_tap": allow_micarray_diagnostic_tap,
         "satellite_uid": client_uid,
         "vendor_library": args.vendor_library,
         "vendor_library_sha256": abi["library_sha256"],
@@ -161,6 +167,7 @@ def main(argv=None):
     parser.add_argument("--output-channels", type=int, required=True)
     parser.add_argument("--output-channel", type=int, required=True)
     parser.add_argument("--allow-vendor-debug-files", action="store_true")
+    parser.add_argument("--allow-micarray-diagnostic-tap", action="store_true")
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
     try:

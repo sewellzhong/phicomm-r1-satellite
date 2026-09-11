@@ -55,6 +55,9 @@ message StartCapture {
   // Bounded validation only. The agent also requires an explicit boot-time
   // allow flag; production capture must leave this false.
   bool vendor_debug_files = 3;
+  // Validation-only read tap at the firmware 3448 MicArray processing ABI.
+  // The boot agent must independently opt in; production leaves this false.
+  bool micarray_diagnostic_tap = 4;
 }
 
 message StopCapture {}
@@ -77,6 +80,22 @@ message Health {
   uint32 configured_aec_reference_channels = 12;
   bool aec_configured = 13;
   bool vendor_debug_files_active = 14;
+  bool micarray_diagnostic_tap_active = 15;
+  uint64 micarray_diagnostic_tap_dropped = 16;
+  uint64 micarray_diagnostic_tap_invalid = 17;
+}
+
+message MicArrayDiagnosticCall {
+  uint64 sequence = 1;
+  uint32 samples_per_channel = 2;
+  bytes raw_mic_pcm_s16le = 3;
+  uint32 raw_mic_channels = 4;
+  bytes echo_reference_pcm_s16le = 5;
+  uint32 echo_reference_channels = 6;
+  bytes asr_pcm_s16le = 7;
+  bytes vad_pcm_s16le = 8;
+  sint32 result = 9;
+  bool is_waked = 10;
 }
 
 message AudioFrame {
@@ -92,6 +111,7 @@ message AudioFrame {
   bytes diagnostic_interleaved_pcm_s16le = 8;
   uint32 diagnostic_output_channels = 9;
   uint32 diagnostic_selected_output_channel = 10;
+  repeated MicArrayDiagnosticCall micarray_diagnostic_calls = 11;
 }
 
 message PlaybackReference {

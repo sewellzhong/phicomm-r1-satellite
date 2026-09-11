@@ -4,6 +4,7 @@ project(r1_factory_audio_agent LANGUAGES CXX)
 add_executable(r1-factory-audio-agent
   src/main.cpp
   src/audio_backend.cpp
+  src/micarray_diagnostic_tap.cpp
   src/safe_vendor_system.cpp
 )
 target_compile_features(r1-factory-audio-agent PRIVATE cxx_std_17)
@@ -17,6 +18,8 @@ target_link_libraries(r1-factory-audio-agent PRIVATE dl)
 if(NOT ANDROID)
   target_compile_definitions(r1-factory-audio-agent PRIVATE R1_FACTORY_AUDIO_HOST_TEST=1)
   add_library(r1-factory-audio-vendor-mock SHARED tests/vendor_mock.cpp)
+  add_library(r1-factory-audio-micarray-mock SHARED tests/micarray_mock.cpp)
+  target_link_libraries(r1-factory-audio-vendor-mock PRIVATE r1-factory-audio-micarray-mock)
 endif()
 
 if(ANDROID)

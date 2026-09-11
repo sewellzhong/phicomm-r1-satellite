@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build a device-locked R1 boot update for an existing factory-audio agent.
 
-The default mode changes only the agent binary.  A validation-only update may
-also enable the vendor debug flag in the existing init service when a complete
-candidate overlay manifest is supplied and proves that exact change.
+The default mode changes only the agent binary. A validation-only update may
+also enable exactly one audited diagnostic flag in the existing init service
+when a complete candidate overlay manifest proves that exact change.
 """
 
 import argparse
@@ -24,6 +24,7 @@ BASE_BUILDER = Path(__file__).with_name("build-experimental-boot.py")
 AGENT_ENTRY = "sbin/r1-factory-audio-agent"
 INIT_ENTRY = "init.r1_factory_audio.rc"
 VENDOR_DEBUG_ARGUMENT = b" --allow-vendor-debug-files"
+MICARRAY_TAP_ARGUMENT = b" --allow-micarray-diagnostic-tap"
 
 _SPEC = importlib.util.spec_from_file_location("r1_experimental_boot", BASE_BUILDER)
 boot = importlib.util.module_from_spec(_SPEC)
@@ -81,21 +82,33 @@ def validate_debug_overlay_update(current_overlay, candidate_overlay, current_in
             "candidate_overlay_agent_hash_mismatch")
     require(candidate_overlay.get("init_rc_sha256") == boot.digest_bytes(candidate_init),
             "candidate_overlay_init_hash_mismatch")
-    require(not current_overlay.get("allow_vendor_debug_files", False),
-            "current_overlay_vendor_debug_already_allowed")
-    require(candidate_overlay.get("allow_vendor_debug_files") is True,
-            "candidate_overlay_vendor_debug_not_allowed")
-    allowed_changes = {"agent_sha256", "init_rc_sha256", "allow_vendor_debug_files"}
+    profiles = {
+        "vendor_debug": ("allow_vendor_debug_files", VENDOR_DEBUG_ARGUMENT),
+        "micarray_tap": ("allow_micarray_diagnostic_tap", MICARRAY_TAP_ARGUMENT),
+    }
+    enabled = []
+    for name, (key, _) in profiles.items():
+        before = bool(current_overlay.get(key, False))
+        after = bool(candidate_overlay.get(key, False))
+        require(not before or after, f"candidate_overlay_disabled_existing_{name}")
+        if not before and after:
+            enabled.append(name)
+    require(len(enabled) == 1, "candidate_overlay_must_enable_exactly_one_diagnostic_profile")
+    selected = enabled[0]
+    selected_key, selected_argument = profiles[selected]
+    allowed_changes = {"agent_sha256", "init_rc_sha256", selected_key}
     keys = set(current_overlay) | set(candidate_overlay)
     for key in keys - allowed_changes:
         require(current_overlay.get(key) == candidate_overlay.get(key),
                 f"candidate_overlay_contract_changed:{key}")
-    require(VENDOR_DEBUG_ARGUMENT not in current_init,
-            "current_init_vendor_debug_argument_present")
+    require(selected_argument not in current_init,
+            f"current_init_{selected}_argument_present")
     marker = b"--vendor-output-channel " + str(current_overlay.get("output_channel")).encode()
     require(current_init.count(marker) == 1, "current_init_debug_insertion_point_invalid")
-    expected_init = current_init.replace(marker, marker + VENDOR_DEBUG_ARGUMENT, 1)
-    require(candidate_init == expected_init, "candidate_init_change_not_exact_vendor_debug_flag")
+    expected_init = current_init.replace(marker, marker + selected_argument, 1)
+    require(candidate_init == expected_init,
+            f"candidate_init_change_not_exact_{selected}_flag")
+    return selected
 
 
 def effective_overlay_manifest_hash(manifest):
@@ -195,10 +208,11 @@ def build(args):
     require(len(init_matches) == 1, "current_init_entry_not_unique")
     candidate_init = None
     candidate_overlay = None
+    diagnostic_profile = None
     if candidate_overlay_path is not None:
         candidate_overlay = load(candidate_overlay_path)
         candidate_init = candidate_init_path.read_bytes()
-        validate_debug_overlay_update(
+        diagnostic_profile = validate_debug_overlay_update(
             effective_overlay, candidate_overlay, init_matches[0].data,
             candidate_init, expected_hash)
 
@@ -277,14 +291,18 @@ def build(args):
         "overlay_manifest_sha256": (digest(candidate_overlay_path)
                                     if candidate_overlay_path is not None
                                     else digest(current_overlay_path)),
-        "declared_changes": (["ramdisk_agent", "ramdisk_init_vendor_debug_flag"]
+        "declared_changes": (["ramdisk_agent", "ramdisk_init_" + diagnostic_profile + "_flag"]
                              if candidate_init is not None else ["ramdisk_agent"]),
     }
     if candidate_overlay_path is not None:
         result["candidate_overlay_manifest_sha256"] = digest(candidate_overlay_path)
         result["current_init_rc_sha256"] = boot.digest_bytes(init_matches[0].data)
         result["candidate_init_rc_sha256"] = boot.digest_bytes(candidate_init)
-        result["allow_vendor_debug_files"] = True
+        result["diagnostic_profile"] = diagnostic_profile
+        result["allow_vendor_debug_files"] = bool(
+            candidate_overlay.get("allow_vendor_debug_files", False))
+        result["allow_micarray_diagnostic_tap"] = bool(
+            candidate_overlay.get("allow_micarray_diagnostic_tap", False))
     result_path = output / "manifest.json"
     result_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.chmod(result_path, 0o600)

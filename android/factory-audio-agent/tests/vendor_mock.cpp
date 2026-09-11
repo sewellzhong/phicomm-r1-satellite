@@ -3,10 +3,29 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <thread>
+#include <vector>
+
 namespace {
 bool initialized = false;
 bool streaming = false;
 intptr_t expected_handle = 0x1234;
+}
+
+extern "C" int Unisound_MicArray_Process(
+    void*, const int16_t*, int, int16_t*, int, int16_t**, int16_t**, int*);
+
+static bool run_micarray_process() {
+  int16_t raw[256 * 4];
+  int16_t echo[256 * 2];
+  for (int index = 0; index < 256 * 4; ++index) raw[index] = static_cast<int16_t>(1000 + index);
+  for (int index = 0; index < 256 * 2; ++index) echo[index] = static_cast<int16_t>(200 + index);
+  int16_t* asr = nullptr;
+  int16_t* vad = nullptr;
+  int output_length = 0;
+  return Unisound_MicArray_Process(reinterpret_cast<void*>(expected_handle), raw, 256,
+                                   echo, 1, &asr, &vad, &output_length) == 73
+      && asr != nullptr && vad != nullptr && output_length == 256;
 }
 
 extern "C" int uni_4mic_hal_init(int use_four_mic) {
@@ -27,6 +46,17 @@ extern "C" int uni_4mic_pcm_read(intptr_t handle, void* output, int size) {
   for (int index = 0; index < size / 2; ++index) {
     int16_t sample = static_cast<int16_t>(index);
     memcpy(bytes + index * 2, &sample, sizeof(sample));
+  }
+  if (getenv("R1_VENDOR_MOCK_CONCURRENT_TAP") != nullptr) {
+    std::vector<std::thread> workers;
+    int results[4] = {};
+    for (size_t index = 0; index < 4; ++index) {
+      workers.emplace_back([index, &results]() { results[index] = run_micarray_process() ? 1 : 0; });
+    }
+    for (auto& worker : workers) worker.join();
+    for (int result : results) if (result == 0) return -1;
+  } else if (!run_micarray_process()) {
+    return -1;
   }
   return 0;
 }
