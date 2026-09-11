@@ -10,6 +10,7 @@ constexpr size_t kMonoFrameBytes = 640;
 // Firmware 3448's FourMicAudioManager allocates 1200 S16 samples and passes
 // all 2400 bytes to readData on every proprietary HAL read.
 constexpr size_t kOriginalManagerReadBytes = 2400;
+constexpr size_t kPostWakePrimeFrames = 50;
 
 template <typename T>
 bool load_symbol(void* library, const char* name, T* destination) {
@@ -108,9 +109,24 @@ bool VendorBackend::start() {
     return false;
   }
   // The HAL start resets the proprietary wake state on firmware 3448. Enter
-  // post-wake after start but before enabling the tap or reading the first
-  // frame, so transition-internal calls cannot create sidecar sequence gaps.
+  // post-wake after the original chain has processed one second of unsaved
+  // warm-up audio, but before enabling the tap or emitting the first frame.
+  // Transition-internal calls therefore cannot create sidecar sequence gaps.
   if (tap_active_) {
+    const size_t output_frame_bytes =
+        kMonoFrameBytes * static_cast<size_t>(options_.output_channels);
+    const size_t prime_bytes = kPostWakePrimeFrames * output_frame_bytes;
+    size_t consumed = 0;
+    while (consumed < prime_bytes) {
+      if (pcm_read_(handle_, input_buffer_.data(),
+                    static_cast<int>(input_buffer_.size())) < 0) {
+        pcm_stop_(handle_);
+        pcm_close_(handle_);
+        handle_ = 0;
+        return false;
+      }
+      consumed += input_buffer_.size();
+    }
     if (set_wakeup_status_(1) != 0) {
       pcm_stop_(handle_);
       pcm_close_(handle_);
@@ -128,8 +144,8 @@ bool VendorBackend::read_frame(BackendFrame* frame) {
   if (!streaming_ || frame == nullptr) return false;
   // Match firmware 3448's original manager lifecycle for its debug-file path.
   // The first second is the pre-wake (waking) window; subsequent frames are
-  // marked waked. The MicArray tap enters post-wake after HAL start but before
-  // its first streamed read, with the tap disabled during the transition.
+  // marked waked. The MicArray tap performs the same unsaved warm-up before
+  // entering post-wake, with the tap disabled throughout that transition.
   // Production capture never enters either validation state.
   if (debug_files_active_ && validation_frames_ == 50
       && set_wakeup_status_(1) != 0) {

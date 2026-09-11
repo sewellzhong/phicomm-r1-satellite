@@ -11,6 +11,7 @@ bool initialized = false;
 bool streaming = false;
 intptr_t expected_handle = 0x1234;
 int wake_status = 0;
+int pcm_reads = 0;
 }
 
 extern "C" int Unisound_MicArray_Process(
@@ -31,6 +32,7 @@ static bool run_micarray_process() {
 
 extern "C" int uni_4mic_hal_init(int use_four_mic) {
   initialized = use_four_mic == 1;
+  pcm_reads = 0;
   return initialized ? 0 : -1;
 }
 extern "C" int uni_4mic_hal_release() { initialized = false; return 0; }
@@ -43,6 +45,7 @@ extern "C" int uni_4mic_pcm_start(intptr_t handle) {
 }
 extern "C" int uni_4mic_pcm_read(intptr_t handle, void* output, int size) {
   if (!streaming || handle != expected_handle || size != 2400) return -1;
+  ++pcm_reads;
   auto* bytes = static_cast<uint8_t*>(output);
   for (int index = 0; index < size / 2; ++index) {
     int16_t sample = static_cast<int16_t>(index);
@@ -71,6 +74,8 @@ extern "C" int get4MicDoaResult() { return 145; }
 extern "C" const char* get4MicBoardVersion() { return "MOCK_UNI_4MIC_V1.1"; }
 extern "C" int set4MicWakeUpStatus(int status) {
   if (status != 0 && status != 1) return -1;
+  if (status == 1 && getenv("R1_VENDOR_MOCK_REQUIRE_PRIME_BEFORE_WAKE") != nullptr
+      && pcm_reads < 27) return -1;
   wake_status = status;
   const char* trace = getenv("R1_VENDOR_MOCK_WAKE_STATUS_FILE");
   if (trace != nullptr) {

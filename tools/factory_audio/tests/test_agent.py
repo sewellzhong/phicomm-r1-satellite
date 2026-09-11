@@ -366,6 +366,7 @@ class AgentTest(unittest.TestCase):
         self.stop_agent()
         environment = dict(os.environ)
         environment["R1_VENDOR_MOCK_CONCURRENT_TAP"] = "1"
+        environment["R1_VENDOR_MOCK_REQUIRE_PRIME_BEFORE_WAKE"] = "1"
         wake_trace = Path(self.temporary.name) / "tap-wake-status"
         environment["R1_VENDOR_MOCK_WAKE_STATUS_FILE"] = str(wake_trace)
         self.agent = subprocess.Popen([
