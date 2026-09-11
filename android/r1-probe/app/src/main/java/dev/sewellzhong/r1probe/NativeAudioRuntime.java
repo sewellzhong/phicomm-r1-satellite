@@ -500,11 +500,14 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     if (!interruptibleReply) history.clear();
                     continue;
                 }
-                promptReference.process(frame,lastRead);
+                // Playback-reference suppression is detection-only. Preserve the vendor frame
+                // byte-for-byte in history and Assist uploads under the vendor-native policy.
+                System.arraycopy(frame, 0, bargeAnalysis, 0, frame.length);
+                promptReference.process(bargeAnalysis,lastRead);
                 history.append(frame);
                 if (!waiting && !busy) status = "listening";
-                boolean rawSpeech = vad.speechForQuietR1(frame);
-                boolean speech = evidence.accept(frame, rawSpeech, !waiting && !busy);
+                boolean rawSpeech = vad.speechForQuietR1(bargeAnalysis);
+                boolean speech = evidence.accept(bargeAnalysis, rawSpeech, !waiting && !busy);
                 rms = evidence.rms(); noiseFloor = evidence.floor();
                 if(diagnostic!=null && diagnostic.active()) diagnosticPcm("processed",frame,frame.length,lastRead,
                         "vad="+rawSpeech+",speech="+speech+",strong="+evidence.strong()+",replayed="+replayed
