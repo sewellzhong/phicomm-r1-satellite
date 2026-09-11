@@ -114,12 +114,12 @@ bool VendorBackend::start() {
 
 bool VendorBackend::read_frame(BackendFrame* frame) {
   if (!streaming_ || frame == nullptr) return false;
-  // Match firmware 3448's original manager lifecycle only inside an explicit
-  // diagnostic validation request.  The first second is the pre-wake (waking)
-  // window; subsequent frames are marked waked.  Production capture never
-  // enters it.
-  const bool validation_active = debug_files_active_ || tap_active_;
-  if (validation_active && validation_frames_ == 50
+  // Match firmware 3448's original manager lifecycle for its debug-file path.
+  // The first second is the pre-wake (waking) window; subsequent frames are
+  // marked waked. The MicArray tap enters post-wake before streaming starts so
+  // calls made by the vendor transition itself cannot create sidecar gaps.
+  // Production capture never enters either validation state.
+  if (debug_files_active_ && validation_frames_ == 50
       && set_wakeup_status_(1) != 0) {
     return false;
   }
@@ -164,7 +164,7 @@ bool VendorBackend::read_frame(BackendFrame* frame) {
   int doa = get_doa_();
   frame->doa_valid = doa >= 0 && doa < 360;
   frame->doa_degrees = frame->doa_valid ? doa : 0;
-  if (validation_active) ++validation_frames_;
+  if (debug_files_active_) ++validation_frames_;
   return true;
 }
 
@@ -196,7 +196,7 @@ bool VendorBackend::set_vendor_debug_files(bool enabled) {
 
 bool VendorBackend::set_micarray_diagnostic_tap(bool enabled) {
   if (!initialized_ || streaming_) return false;
-  if (enabled && set_wakeup_status_(0) != 0) return false;
+  if (enabled && set_wakeup_status_(1) != 0) return false;
   micarray_diagnostic_tap_set_enabled(enabled);
   tap_active_ = enabled;
   validation_frames_ = 0;

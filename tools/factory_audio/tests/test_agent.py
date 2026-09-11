@@ -366,6 +366,8 @@ class AgentTest(unittest.TestCase):
         self.stop_agent()
         environment = dict(os.environ)
         environment["R1_VENDOR_MOCK_CONCURRENT_TAP"] = "1"
+        wake_trace = Path(self.temporary.name) / "tap-wake-status"
+        environment["R1_VENDOR_MOCK_WAKE_STATUS_FILE"] = str(wake_trace)
         self.agent = subprocess.Popen([
             str(AGENT), "--expected-uid", str(os.getuid()),
             "--socket", str(self.socket_path),
@@ -405,6 +407,7 @@ class AgentTest(unittest.TestCase):
         self.assertTrue(health.micarray_diagnostic_tap_active)
         self.assertEqual(0, health.micarray_diagnostic_tap_dropped)
         self.assertEqual(0, health.micarray_diagnostic_tap_invalid)
+        self.assertTrue(wake_trace.read_text().startswith("01"))
         frame = self.receive().audio_frame
         self.assertGreaterEqual(len(frame.micarray_diagnostic_calls), 1)
         self.assertLessEqual(len(frame.micarray_diagnostic_calls), 4)
@@ -424,14 +427,7 @@ class AgentTest(unittest.TestCase):
         self.assertEqual((800, 802), struct.unpack_from("<hh", call.asr_pcm_s16le))
         self.assertEqual((807, 809), struct.unpack_from("<hh", call.vad_pcm_s16le))
         self.assertEqual(73, call.result)
-        self.assertFalse(call.is_waked)
-
-        observed_waked_call = False
-        for _ in range(60):
-            later = self.receive().audio_frame
-            observed_waked_call = observed_waked_call or any(
-                item.is_waked for item in later.micarray_diagnostic_calls)
-        self.assertTrue(observed_waked_call)
+        self.assertTrue(call.is_waked)
 
         stop = self.pb.Envelope(protocol_version=1, request_id=4)
         stop.stop_capture.SetInParent()
@@ -441,6 +437,7 @@ class AgentTest(unittest.TestCase):
             if reply.request_id == 4:
                 break
         self.assertFalse(reply.health.micarray_diagnostic_tap_active)
+        self.assertTrue(wake_trace.read_text().endswith("0"))
 
         production = self.pb.Envelope(protocol_version=1, request_id=5)
         production.start_capture.format.sample_rate_hz = 16000
