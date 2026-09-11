@@ -162,6 +162,55 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
             "validation_vendor_debug_state_invalid")
     require(vendor_debug_requested == vendor_debug_active,
             "validation_vendor_debug_not_active")
+    micarray_tap_requested = values.get("micarray_diagnostic_tap_requested", "false")
+    micarray_tap_active = values.get("micarray_diagnostic_tap_active", "false")
+    require(micarray_tap_requested in {"true", "false"}
+            and micarray_tap_active in {"true", "false"},
+            "validation_micarray_tap_state_invalid")
+    require(micarray_tap_requested == micarray_tap_active,
+            "validation_micarray_tap_not_active")
+    micarray_tap = None
+    if micarray_tap_requested == "true":
+        calls = integer(values, "micarray_diagnostic_tap_calls")
+        first = integer(values, "micarray_diagnostic_tap_first_sequence")
+        last = integer(values, "micarray_diagnostic_tap_last_sequence")
+        gaps = integer(values, "micarray_diagnostic_tap_sequence_gaps")
+        raw_bytes = integer(values, "micarray_diagnostic_tap_raw_bytes")
+        echo_bytes = integer(values, "micarray_diagnostic_tap_echo_bytes")
+        asr_bytes = integer(values, "micarray_diagnostic_tap_asr_bytes")
+        vad_bytes = integer(values, "micarray_diagnostic_tap_vad_bytes")
+        require(calls > 0 and first > 0 and last - first + 1 == calls,
+                "validation_micarray_tap_sequence_range_mismatch")
+        require(gaps == 0, "validation_micarray_tap_sequence_gaps_present")
+        require(raw_bytes == calls * 256 * 4 * 2,
+                "validation_micarray_tap_raw_shape_mismatch")
+        require(echo_bytes == calls * 256 * 2 * 2,
+                "validation_micarray_tap_echo_shape_mismatch")
+        require(0 < asr_bytes == vad_bytes <= calls * 256 * 2,
+                "validation_micarray_tap_output_shape_mismatch")
+        payloads = {}
+        for name, byte_count in (("raw", raw_bytes), ("echo", echo_bytes),
+                                 ("asr", asr_bytes), ("vad", vad_bytes)):
+            nonzero = integer(values, "micarray_diagnostic_tap_" + name
+                              + "_nonzero_bytes")
+            require(0 < nonzero <= byte_count,
+                    "validation_micarray_tap_" + name + "_payload_empty")
+            payloads[name] = {"bytes": byte_count, "nonzero_bytes": nonzero}
+        require(values.get("micarray_diagnostic_tap_final_active") == "true",
+                "validation_micarray_tap_not_active_at_final_health")
+        require(integer(values, "micarray_diagnostic_tap_dropped") == 0,
+                "validation_micarray_tap_drops_present")
+        require(integer(values, "micarray_diagnostic_tap_invalid") == 0,
+                "validation_micarray_tap_invalid_present")
+        micarray_tap = {
+            "calls": calls,
+            "first_sequence": first,
+            "last_sequence": last,
+            "sequence_gaps": 0,
+            "dropped": 0,
+            "invalid": 0,
+            "payloads": payloads,
+        }
     frames = integer(values, "frames")
     pcm_bytes = integer(values, "pcm_bytes")
     require(frames > 0 and pcm_bytes == frames * 640, "validation_frame_count_mismatch")
@@ -274,7 +323,9 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
             "music_volume_max_index": volume_max_index,
             "music_volume_percent": volume_percent,
         }
-    if diagnostic is not None and playback_reference is not None:
+    if micarray_tap is not None:
+        claim_boundary = "micarray_symbol_binding_continuity_and_nonempty_payloads"
+    elif diagnostic is not None and playback_reference is not None:
         claim_boundary = "transport_reported_doa_runtime_shape_and_controlled_playback_capture"
     elif diagnostic is not None:
         claim_boundary = "transport_reported_doa_and_runtime_output_shape"
@@ -301,6 +352,9 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
         "aec_configured": values.get("aec_configured") == "true",
         "vendor_debug_files_requested": vendor_debug_requested == "true",
         "vendor_debug_files_active": vendor_debug_active == "true",
+        "micarray_diagnostic_tap_requested": micarray_tap_requested == "true",
+        "micarray_diagnostic_tap_active": micarray_tap_active == "true",
+        "micarray_diagnostic_tap": micarray_tap,
         "claim_boundary": claim_boundary,
         "diagnostic_output": diagnostic,
         "controlled_playback_reference": playback_reference,

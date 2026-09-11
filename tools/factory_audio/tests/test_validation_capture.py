@@ -196,6 +196,62 @@ class ValidationCaptureAuditTest(unittest.TestCase):
             result = audit_module.audit(wav, metadata, "r1-sample01")
             self.assertTrue(result["vendor_debug_files_active"])
 
+    def test_audits_contiguous_nonempty_micarray_tap_without_promoting_aec(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wav, metadata = self.fixture(root)
+            with metadata.open("a", encoding="utf-8") as handle:
+                handle.write("micarray_diagnostic_tap_requested=true\n")
+                handle.write("micarray_diagnostic_tap_active=true\n")
+                handle.write("micarray_diagnostic_tap_calls=3\n")
+                handle.write("micarray_diagnostic_tap_first_sequence=7\n")
+                handle.write("micarray_diagnostic_tap_last_sequence=9\n")
+                handle.write("micarray_diagnostic_tap_sequence_gaps=0\n")
+                handle.write("micarray_diagnostic_tap_raw_bytes=6144\n")
+                handle.write("micarray_diagnostic_tap_echo_bytes=3072\n")
+                handle.write("micarray_diagnostic_tap_asr_bytes=1536\n")
+                handle.write("micarray_diagnostic_tap_vad_bytes=1536\n")
+                handle.write("micarray_diagnostic_tap_raw_nonzero_bytes=10\n")
+                handle.write("micarray_diagnostic_tap_echo_nonzero_bytes=9\n")
+                handle.write("micarray_diagnostic_tap_asr_nonzero_bytes=8\n")
+                handle.write("micarray_diagnostic_tap_vad_nonzero_bytes=7\n")
+                handle.write("micarray_diagnostic_tap_final_active=true\n")
+                handle.write("micarray_diagnostic_tap_dropped=0\n")
+                handle.write("micarray_diagnostic_tap_invalid=0\n")
+            result = audit_module.audit(wav, metadata, "r1-sample01")
+        self.assertEqual(
+            "micarray_symbol_binding_continuity_and_nonempty_payloads",
+            result["claim_boundary"])
+        self.assertEqual(3, result["micarray_diagnostic_tap"]["calls"])
+        self.assertEqual(3072,
+                         result["micarray_diagnostic_tap"]["payloads"]["echo"]["bytes"])
+        self.assertIn("aec_cancellation_effect", result["unverified"])
+
+    def test_micarray_tap_rejects_drops_and_empty_reference_payload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wav, metadata = self.fixture(root)
+            with metadata.open("a", encoding="utf-8") as handle:
+                handle.write("micarray_diagnostic_tap_requested=true\n")
+                handle.write("micarray_diagnostic_tap_active=true\n")
+                handle.write("micarray_diagnostic_tap_calls=1\n")
+                handle.write("micarray_diagnostic_tap_first_sequence=1\n")
+                handle.write("micarray_diagnostic_tap_last_sequence=1\n")
+                handle.write("micarray_diagnostic_tap_sequence_gaps=0\n")
+                handle.write("micarray_diagnostic_tap_raw_bytes=2048\n")
+                handle.write("micarray_diagnostic_tap_echo_bytes=1024\n")
+                handle.write("micarray_diagnostic_tap_asr_bytes=512\n")
+                handle.write("micarray_diagnostic_tap_vad_bytes=512\n")
+                handle.write("micarray_diagnostic_tap_raw_nonzero_bytes=1\n")
+                handle.write("micarray_diagnostic_tap_echo_nonzero_bytes=0\n")
+                handle.write("micarray_diagnostic_tap_asr_nonzero_bytes=1\n")
+                handle.write("micarray_diagnostic_tap_vad_nonzero_bytes=1\n")
+                handle.write("micarray_diagnostic_tap_final_active=true\n")
+                handle.write("micarray_diagnostic_tap_dropped=1\n")
+                handle.write("micarray_diagnostic_tap_invalid=0\n")
+            with self.assertRaisesRegex(RuntimeError, "echo_payload_empty"):
+                audit_module.audit(wav, metadata, "r1-sample01")
+
     def test_playback_elapsed_clock_tolerance_is_bounded(self):
         self.assertTrue(audit_module.playback_elapsed_consistent(5396, 5394.49))
         self.assertFalse(audit_module.playback_elapsed_consistent(5405, 5394.49))
