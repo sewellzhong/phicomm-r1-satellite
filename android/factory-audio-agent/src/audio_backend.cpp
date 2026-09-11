@@ -255,6 +255,30 @@ uint64_t VendorBackend::micarray_diagnostic_tap_invalid() const {
   return tap_active_ ? ::micarray_diagnostic_tap_invalid() : 0;
 }
 
+uint64_t VendorBackend::micarray_diagnostic_tap_outside_window() const {
+  return tap_active_ ? ::micarray_diagnostic_tap_outside_window() : 0;
+}
+
+uint64_t VendorBackend::micarray_diagnostic_tap_invalid_input_shape() const {
+  return tap_active_ ? ::micarray_diagnostic_tap_invalid_input_shape() : 0;
+}
+
+uint64_t VendorBackend::micarray_diagnostic_tap_invalid_output_length() const {
+  return tap_active_ ? ::micarray_diagnostic_tap_invalid_output_length() : 0;
+}
+
+uint64_t VendorBackend::micarray_diagnostic_tap_invalid_output_pointer() const {
+  return tap_active_ ? ::micarray_diagnostic_tap_invalid_output_pointer() : 0;
+}
+
+uint64_t VendorBackend::micarray_diagnostic_tap_unexpected_producer() const {
+  return tap_active_ ? ::micarray_diagnostic_tap_unexpected_producer() : 0;
+}
+
+uint64_t VendorBackend::micarray_diagnostic_tap_queue_full() const {
+  return tap_active_ ? ::micarray_diagnostic_tap_queue_full() : 0;
+}
+
 void VendorBackend::stop() {
   if (streaming_ && handle_ != 0) pcm_stop_(handle_);
   streaming_ = false;

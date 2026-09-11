@@ -249,17 +249,64 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
             sidecars[name] = analyzed
         require(values.get("micarray_diagnostic_tap_final_active") == "true",
                 "validation_micarray_tap_not_active_at_final_health")
-        require(integer(values, "micarray_diagnostic_tap_dropped") == 0,
+        dropped = integer(values, "micarray_diagnostic_tap_dropped")
+        invalid = integer(values, "micarray_diagnostic_tap_invalid")
+        require(dropped == 0,
                 "validation_micarray_tap_drops_present")
-        require(integer(values, "micarray_diagnostic_tap_invalid") == 0,
+        require(invalid == 0,
                 "validation_micarray_tap_invalid_present")
+        diagnostic_schema = (integer(values, "micarray_diagnostic_schema")
+                             if "micarray_diagnostic_schema" in values else 1)
+        require(diagnostic_schema in (1, 2),
+                "validation_micarray_diagnostic_schema_invalid")
+        outside_window = 0
+        invalid_input_shape = 0
+        invalid_output_length = 0
+        invalid_output_pointer = 0
+        unexpected_producer = 0
+        queue_full = 0
+        if diagnostic_schema == 2:
+            outside_window = integer(values, "micarray_diagnostic_tap_outside_window")
+            invalid_input_shape = integer(
+                values, "micarray_diagnostic_tap_invalid_input_shape")
+            invalid_output_length = integer(
+                values, "micarray_diagnostic_tap_invalid_output_length")
+            invalid_output_pointer = integer(
+                values, "micarray_diagnostic_tap_invalid_output_pointer")
+            unexpected_producer = integer(
+                values, "micarray_diagnostic_tap_unexpected_producer")
+            queue_full = integer(values, "micarray_diagnostic_tap_queue_full")
+        require(outside_window >= 0,
+                "validation_micarray_tap_outside_window_invalid")
+        require(invalid_input_shape == 0,
+                "validation_micarray_tap_invalid_input_shape_present")
+        require(invalid_output_length == 0,
+                "validation_micarray_tap_invalid_output_length_present")
+        require(invalid_output_pointer == 0,
+                "validation_micarray_tap_invalid_output_pointer_present")
+        require(unexpected_producer == 0,
+                "validation_micarray_tap_unexpected_producer_present")
+        require(queue_full == 0,
+                "validation_micarray_tap_queue_full_present")
+        require(invalid == invalid_input_shape + invalid_output_length
+                + invalid_output_pointer,
+                "validation_micarray_tap_invalid_breakdown_mismatch")
+        require(dropped == unexpected_producer + queue_full,
+                "validation_micarray_tap_dropped_breakdown_mismatch")
         micarray_tap = {
             "calls": calls,
+            "diagnostic_schema": diagnostic_schema,
             "first_sequence": first,
             "last_sequence": last,
             "sequence_gaps": 0,
             "dropped": 0,
             "invalid": 0,
+            "outside_window": outside_window,
+            "invalid_input_shape": 0,
+            "invalid_output_length": 0,
+            "invalid_output_pointer": 0,
+            "unexpected_producer": 0,
+            "queue_full": 0,
             "payloads": payloads,
             "sidecar_wavs": sidecars,
         }

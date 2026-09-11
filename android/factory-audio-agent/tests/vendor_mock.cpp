@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <atomic>
 #include <thread>
 #include <vector>
 
@@ -11,20 +12,24 @@ bool initialized = false;
 bool streaming = false;
 intptr_t expected_handle = 0x1234;
 int wake_status = 0;
-int pcm_reads = 0;
+std::atomic<int> pcm_reads{0};
+std::thread pending_pre_enable_call;
 }
 
 extern "C" int Unisound_MicArray_Process(
     void*, const int16_t*, int, int16_t*, int, int16_t**, int16_t**, int*);
+extern "C" void r1_micarray_mock_reset_delayed();
+extern "C" void r1_micarray_mock_wait_delayed_entered();
 
-static bool run_micarray_process() {
+static bool run_micarray_process(bool delayed_pre_enable = false) {
   int16_t raw[256 * 4];
   int16_t echo[256 * 2];
   const int raw_base = getenv("R1_VENDOR_MOCK_REQUIRE_SETTLE_AFTER_WAKE") != nullptr
-      ? 1000 + pcm_reads : 1000;
+      ? 1000 + pcm_reads.load() : 1000;
   for (int index = 0; index < 256 * 4; ++index) {
     raw[index] = static_cast<int16_t>(raw_base + index);
   }
+  if (delayed_pre_enable) raw[0] = -29998;
   for (int index = 0; index < 256 * 2; ++index) echo[index] = static_cast<int16_t>(200 + index);
   int16_t* asr = nullptr;
   int16_t* vad = nullptr;
@@ -39,7 +44,11 @@ extern "C" int uni_4mic_hal_init(int use_four_mic) {
   pcm_reads = 0;
   return initialized ? 0 : -1;
 }
-extern "C" int uni_4mic_hal_release() { initialized = false; return 0; }
+extern "C" int uni_4mic_hal_release() {
+  if (pending_pre_enable_call.joinable()) pending_pre_enable_call.join();
+  initialized = false;
+  return 0;
+}
 extern "C" intptr_t uni_4mic_pcm_open(int channels) {
   return initialized && channels == 2 ? expected_handle : 0;
 }
@@ -49,13 +58,18 @@ extern "C" int uni_4mic_pcm_start(intptr_t handle) {
 }
 extern "C" int uni_4mic_pcm_read(intptr_t handle, void* output, int size) {
   if (!streaming || handle != expected_handle || size != 2400) return -1;
-  ++pcm_reads;
+  const int current_read = ++pcm_reads;
   auto* bytes = static_cast<uint8_t*>(output);
   for (int index = 0; index < size / 2; ++index) {
     int16_t sample = static_cast<int16_t>(index);
     memcpy(bytes + index * 2, &sample, sizeof(sample));
   }
-  if (getenv("R1_VENDOR_MOCK_CONCURRENT_TAP") != nullptr) {
+  if (getenv("R1_VENDOR_MOCK_ASYNC_PRE_ENABLE_CALL") != nullptr
+      && current_read == 28) {
+    r1_micarray_mock_reset_delayed();
+    pending_pre_enable_call = std::thread([]() { run_micarray_process(true); });
+    r1_micarray_mock_wait_delayed_entered();
+  } else if (getenv("R1_VENDOR_MOCK_CONCURRENT_TAP") != nullptr) {
     std::vector<std::thread> workers;
     int results[4] = {};
     for (size_t index = 0; index < 4; ++index) {

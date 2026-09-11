@@ -27,13 +27,19 @@ requires `--allow-micarray-diagnostic-tap` on the agent and
 `StartCapture.micarray_diagnostic_tap` together with diagnostic output. The
 interposer forwards the pinned eight-argument ABI unchanged, copies only the
 fixed 256-sample 4-mic/2-reference call into the local IPC, and clears its
-bounded queue when stopped. It does not need public-storage access and remains
-off for production capture.
+bounded queue when stopped. Calls are assigned to the diagnostic window from
+their entry state, so an asynchronous pre-window call that returns after arming
+is reported separately instead of becoming a false ABI error. Captured calls use
+a bounded single-producer/single-consumer ring; a second producer thread or full
+queue fails the strict audit explicitly. It does not need public-storage access
+and remains off for production capture.
 
-The v86 Android validation client persists those bounded copies as four WAV
+The v88 Android validation client persists those bounded copies as four WAV
 sidecars (4-mic, 2-reference, ASR, and VAD) only when the MicArray tap is
 explicitly requested. Metadata binds every sidecar's basename, channel count,
-PCM length, and SHA-256. `export-micarray-tap-capture.py` additionally requires
+PCM length, SHA-256, window-boundary count, ABI error breakdown, producer
+identity failures, and queue exhaustion. Schema 1 metadata remains auditable;
+schema 2 requires every new integrity field. `export-micarray-tap-capture.py` additionally requires
 an explicit recording confirmation and exact installed APK hash, exports only
 to a new directory outside the repository, runs the offline audit, removes the
 exact device files, and restores the prior listening state. This remains a

@@ -230,6 +230,7 @@ class ValidationCaptureAuditTest(unittest.TestCase):
             wav, metadata = self.fixture(root)
             with metadata.open("a", encoding="utf-8") as handle:
                 handle.write("micarray_diagnostic_tap_requested=true\n")
+                handle.write("micarray_diagnostic_schema=2\n")
                 handle.write("micarray_diagnostic_tap_active=true\n")
                 handle.write("micarray_diagnostic_tap_calls=3\n")
                 handle.write("micarray_diagnostic_tap_first_sequence=7\n")
@@ -246,6 +247,12 @@ class ValidationCaptureAuditTest(unittest.TestCase):
                 handle.write("micarray_diagnostic_tap_final_active=true\n")
                 handle.write("micarray_diagnostic_tap_dropped=0\n")
                 handle.write("micarray_diagnostic_tap_invalid=0\n")
+                handle.write("micarray_diagnostic_tap_outside_window=1\n")
+                handle.write("micarray_diagnostic_tap_invalid_input_shape=0\n")
+                handle.write("micarray_diagnostic_tap_invalid_output_length=0\n")
+                handle.write("micarray_diagnostic_tap_invalid_output_pointer=0\n")
+                handle.write("micarray_diagnostic_tap_unexpected_producer=0\n")
+                handle.write("micarray_diagnostic_tap_queue_full=0\n")
             sidecars = self.add_micarray_sidecars(root, metadata)
             result = audit_module.audit(
                 wav, metadata, "r1-sample01", micarray_wav_paths=sidecars)
@@ -257,6 +264,7 @@ class ValidationCaptureAuditTest(unittest.TestCase):
                          result["micarray_diagnostic_tap"]["payloads"]["echo"]["bytes"])
         self.assertEqual(4,
                          result["micarray_diagnostic_tap"]["sidecar_wavs"]["raw"]["channels"])
+        self.assertEqual(1, result["micarray_diagnostic_tap"]["outside_window"])
         self.assertIn("aec_cancellation_effect", result["unverified"])
 
     def test_micarray_tap_requires_all_hash_bound_sidecars(self):
@@ -265,6 +273,7 @@ class ValidationCaptureAuditTest(unittest.TestCase):
             wav, metadata = self.fixture(root)
             with metadata.open("a", encoding="utf-8") as handle:
                 handle.write("micarray_diagnostic_tap_requested=true\n")
+                handle.write("micarray_diagnostic_schema=2\n")
                 handle.write("micarray_diagnostic_tap_active=true\n")
                 handle.write("micarray_diagnostic_tap_calls=3\n")
                 handle.write("micarray_diagnostic_tap_first_sequence=1\n")
@@ -279,6 +288,12 @@ class ValidationCaptureAuditTest(unittest.TestCase):
                 handle.write("micarray_diagnostic_tap_final_active=true\n")
                 handle.write("micarray_diagnostic_tap_dropped=0\n")
                 handle.write("micarray_diagnostic_tap_invalid=0\n")
+                handle.write("micarray_diagnostic_tap_outside_window=0\n")
+                handle.write("micarray_diagnostic_tap_invalid_input_shape=0\n")
+                handle.write("micarray_diagnostic_tap_invalid_output_length=0\n")
+                handle.write("micarray_diagnostic_tap_invalid_output_pointer=0\n")
+                handle.write("micarray_diagnostic_tap_unexpected_producer=0\n")
+                handle.write("micarray_diagnostic_tap_queue_full=0\n")
             with self.assertRaisesRegex(RuntimeError, "micarray_sidecars_missing"):
                 audit_module.audit(wav, metadata, "r1-sample01")
 
@@ -288,6 +303,7 @@ class ValidationCaptureAuditTest(unittest.TestCase):
             wav, metadata = self.fixture(root)
             with metadata.open("a", encoding="utf-8") as handle:
                 handle.write("micarray_diagnostic_tap_requested=true\n")
+                handle.write("micarray_diagnostic_schema=2\n")
                 handle.write("micarray_diagnostic_tap_active=true\n")
                 handle.write("micarray_diagnostic_tap_calls=1\n")
                 handle.write("micarray_diagnostic_tap_first_sequence=1\n")
@@ -304,6 +320,12 @@ class ValidationCaptureAuditTest(unittest.TestCase):
                 handle.write("micarray_diagnostic_tap_final_active=true\n")
                 handle.write("micarray_diagnostic_tap_dropped=1\n")
                 handle.write("micarray_diagnostic_tap_invalid=0\n")
+                handle.write("micarray_diagnostic_tap_outside_window=0\n")
+                handle.write("micarray_diagnostic_tap_invalid_input_shape=0\n")
+                handle.write("micarray_diagnostic_tap_invalid_output_length=0\n")
+                handle.write("micarray_diagnostic_tap_invalid_output_pointer=0\n")
+                handle.write("micarray_diagnostic_tap_unexpected_producer=0\n")
+                handle.write("micarray_diagnostic_tap_queue_full=1\n")
             with self.assertRaisesRegex(RuntimeError, "echo_payload_empty"):
                 audit_module.audit(wav, metadata, "r1-sample01")
 

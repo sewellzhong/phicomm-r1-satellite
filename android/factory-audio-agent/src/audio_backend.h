@@ -45,6 +45,12 @@ class AudioBackend {
   virtual bool micarray_diagnostic_tap_active() const { return false; }
   virtual uint64_t micarray_diagnostic_tap_dropped() const { return 0; }
   virtual uint64_t micarray_diagnostic_tap_invalid() const { return 0; }
+  virtual uint64_t micarray_diagnostic_tap_outside_window() const { return 0; }
+  virtual uint64_t micarray_diagnostic_tap_invalid_input_shape() const { return 0; }
+  virtual uint64_t micarray_diagnostic_tap_invalid_output_length() const { return 0; }
+  virtual uint64_t micarray_diagnostic_tap_invalid_output_pointer() const { return 0; }
+  virtual uint64_t micarray_diagnostic_tap_unexpected_producer() const { return 0; }
+  virtual uint64_t micarray_diagnostic_tap_queue_full() const { return 0; }
 };
 
 class SyntheticBackend final : public AudioBackend {
@@ -97,6 +103,12 @@ class VendorBackend final : public AudioBackend {
   bool micarray_diagnostic_tap_active() const override { return tap_active_; }
   uint64_t micarray_diagnostic_tap_dropped() const override;
   uint64_t micarray_diagnostic_tap_invalid() const override;
+  uint64_t micarray_diagnostic_tap_outside_window() const override;
+  uint64_t micarray_diagnostic_tap_invalid_input_shape() const override;
+  uint64_t micarray_diagnostic_tap_invalid_output_length() const override;
+  uint64_t micarray_diagnostic_tap_invalid_output_pointer() const override;
+  uint64_t micarray_diagnostic_tap_unexpected_producer() const override;
+  uint64_t micarray_diagnostic_tap_queue_full() const override;
 
  private:
   bool resolve_symbols();

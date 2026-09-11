@@ -83,6 +83,14 @@ message Health {
   bool micarray_diagnostic_tap_active = 15;
   uint64 micarray_diagnostic_tap_dropped = 16;
   uint64 micarray_diagnostic_tap_invalid = 17;
+  // Calls that entered before the bounded tap window and completed after it
+  // opened. They are observable but are not part of the captured sequence.
+  uint64 micarray_diagnostic_tap_outside_window = 18;
+  uint64 micarray_diagnostic_tap_invalid_input_shape = 19;
+  uint64 micarray_diagnostic_tap_invalid_output_length = 20;
+  uint64 micarray_diagnostic_tap_invalid_output_pointer = 21;
+  uint64 micarray_diagnostic_tap_unexpected_producer = 22;
+  uint64 micarray_diagnostic_tap_queue_full = 23;
 }
 
 message MicArrayDiagnosticCall {

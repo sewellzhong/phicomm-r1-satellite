@@ -365,9 +365,9 @@ class AgentTest(unittest.TestCase):
         self.client.close()
         self.stop_agent()
         environment = dict(os.environ)
-        environment["R1_VENDOR_MOCK_CONCURRENT_TAP"] = "1"
         environment["R1_VENDOR_MOCK_REQUIRE_PRIME_BEFORE_WAKE"] = "1"
         environment["R1_VENDOR_MOCK_REQUIRE_SETTLE_AFTER_WAKE"] = "1"
+        environment["R1_VENDOR_MOCK_ASYNC_PRE_ENABLE_CALL"] = "1"
         wake_trace = Path(self.temporary.name) / "tap-wake-status"
         environment["R1_VENDOR_MOCK_WAKE_STATUS_FILE"] = str(wake_trace)
         self.agent = subprocess.Popen([
@@ -409,6 +409,8 @@ class AgentTest(unittest.TestCase):
         self.assertTrue(health.micarray_diagnostic_tap_active)
         self.assertEqual(0, health.micarray_diagnostic_tap_dropped)
         self.assertEqual(0, health.micarray_diagnostic_tap_invalid)
+        self.assertEqual(0, health.micarray_diagnostic_tap_unexpected_producer)
+        self.assertEqual(0, health.micarray_diagnostic_tap_queue_full)
         self.assertTrue(wake_trace.read_text().startswith("001"))
         frame = self.receive().audio_frame
         self.assertGreaterEqual(len(frame.micarray_diagnostic_calls), 1)
@@ -430,6 +432,20 @@ class AgentTest(unittest.TestCase):
         self.assertEqual((836, 838), struct.unpack_from("<hh", call.vad_pcm_s16le))
         self.assertEqual(73, call.result)
         self.assertTrue(call.is_waked)
+
+        time.sleep(0.05)
+        health_request = self.pb.Envelope(protocol_version=1, request_id=31)
+        health_request.get_health.SetInParent()
+        self.send(health_request)
+        while True:
+            health_reply = self.receive()
+            if health_reply.request_id == 31:
+                break
+        self.assertEqual(0, health_reply.health.micarray_diagnostic_tap_dropped)
+        self.assertEqual(0, health_reply.health.micarray_diagnostic_tap_invalid)
+        self.assertEqual(1, health_reply.health.micarray_diagnostic_tap_outside_window)
+        self.assertEqual(0, health_reply.health.micarray_diagnostic_tap_unexpected_producer)
+        self.assertEqual(0, health_reply.health.micarray_diagnostic_tap_queue_full)
 
         stop = self.pb.Envelope(protocol_version=1, request_id=4)
         stop.stop_capture.SetInParent()
@@ -498,6 +514,54 @@ class AgentTest(unittest.TestCase):
         ], capture_output=True, text=True)
         self.assertEqual(2, result.returncode)
         self.assertIn("invalid_vendor_backend_shape", result.stderr)
+
+    def test_micarray_tap_rejects_multiple_producer_threads(self):
+        self.client.close()
+        self.stop_agent()
+        environment = dict(os.environ)
+        environment["R1_VENDOR_MOCK_CONCURRENT_TAP"] = "1"
+        self.agent = subprocess.Popen([
+            str(AGENT), "--expected-uid", str(os.getuid()),
+            "--socket", str(self.socket_path),
+            "--vendor-library", str(VENDOR_MOCK),
+            "--vendor-open-channels", "2",
+            "--vendor-output-channels", "2",
+            "--vendor-output-channel", "0",
+            "--allow-micarray-diagnostic-tap",
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=environment)
+        deadline = time.monotonic() + 5
+        while (self.agent.poll() is None and not self.socket_path.exists()
+               and time.monotonic() < deadline):
+            time.sleep(0.01)
+        self.assertTrue(self.socket_path.exists())
+        self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.client.settimeout(2)
+        self.client.connect(str(self.socket_path))
+        self.negotiate("unisound_uni4mic_3448")
+
+        start = self.pb.Envelope(protocol_version=1, request_id=2)
+        start.start_capture.format.sample_rate_hz = 16000
+        start.start_capture.format.channels = 1
+        start.start_capture.format.sample_width_bytes = 2
+        start.start_capture.format.frame_duration_ms = 20
+        start.start_capture.include_diagnostic_output = True
+        start.start_capture.micarray_diagnostic_tap = True
+        self.send(start)
+        self.assertTrue(self.receive().health.micarray_diagnostic_tap_active)
+        frame = self.receive().audio_frame
+        self.assertEqual(1, len(frame.micarray_diagnostic_calls))
+
+        health_request = self.pb.Envelope(protocol_version=1, request_id=3)
+        health_request.get_health.SetInParent()
+        self.send(health_request)
+        while True:
+            reply = self.receive()
+            if reply.request_id == 3:
+                break
+        self.assertEqual(3, reply.health.micarray_diagnostic_tap_dropped)
+        self.assertEqual(3, reply.health.micarray_diagnostic_tap_unexpected_producer)
+        self.assertEqual(0, reply.health.micarray_diagnostic_tap_queue_full)
+        self.assertEqual(0, reply.health.micarray_diagnostic_tap_invalid)
 
     def test_disconnect_releases_capture_and_next_client_can_start(self):
         self.negotiate()

@@ -308,6 +308,7 @@ final class FactoryAudioValidationCapture {
             metadata.println("vendor_debug_files_active="
                     + health.getVendorDebugFilesActive());
             metadata.println("micarray_diagnostic_tap_requested=" + micArrayDiagnosticTap);
+            metadata.println("micarray_diagnostic_schema=2");
             metadata.println("micarray_diagnostic_tap_active="
                     + health.getMicarrayDiagnosticTapActive());
             metadata.println("micarray_diagnostic_tap_calls=" + micArrayCalls);
@@ -338,6 +339,24 @@ final class FactoryAudioValidationCapture {
             metadata.println("micarray_diagnostic_tap_invalid="
                     + (finalHealth == null ? -1
                             : finalHealth.getMicarrayDiagnosticTapInvalid()));
+            metadata.println("micarray_diagnostic_tap_outside_window="
+                    + (finalHealth == null ? -1
+                            : finalHealth.getMicarrayDiagnosticTapOutsideWindow()));
+            metadata.println("micarray_diagnostic_tap_invalid_input_shape="
+                    + (finalHealth == null ? -1
+                            : finalHealth.getMicarrayDiagnosticTapInvalidInputShape()));
+            metadata.println("micarray_diagnostic_tap_invalid_output_length="
+                    + (finalHealth == null ? -1
+                            : finalHealth.getMicarrayDiagnosticTapInvalidOutputLength()));
+            metadata.println("micarray_diagnostic_tap_invalid_output_pointer="
+                    + (finalHealth == null ? -1
+                            : finalHealth.getMicarrayDiagnosticTapInvalidOutputPointer()));
+            metadata.println("micarray_diagnostic_tap_unexpected_producer="
+                    + (finalHealth == null ? -1
+                            : finalHealth.getMicarrayDiagnosticTapUnexpectedProducer()));
+            metadata.println("micarray_diagnostic_tap_queue_full="
+                    + (finalHealth == null ? -1
+                            : finalHealth.getMicarrayDiagnosticTapQueueFull()));
             metadata.println("frames=" + frames);
             metadata.println("pcm_bytes=" + pcmBytes);
             metadata.println("first_sequence=" + firstSequence);
