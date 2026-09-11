@@ -277,6 +277,10 @@ class AgentTest(unittest.TestCase):
     def test_vendor_debug_files_require_agent_allow_and_diagnostic_request(self):
         self.client.close()
         self.stop_agent()
+        environment = dict(os.environ)
+        environment["R1_FACTORY_AUDIO_TEST_DEBUG_DIR"] = self.temporary.name
+        environment["R1_VENDOR_MOCK_SYSTEM_COMMAND"] = (
+            "mkdir -p " + self.temporary.name + "/")
         self.agent = subprocess.Popen([
             str(AGENT), "--expected-uid", str(os.getuid()),
             "--socket", str(self.socket_path),
@@ -285,7 +289,7 @@ class AgentTest(unittest.TestCase):
             "--vendor-output-channels", "2",
             "--vendor-output-channel", "0",
             "--allow-vendor-debug-files",
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=environment)
         deadline = time.monotonic() + 5
         while (self.agent.poll() is None and not self.socket_path.exists()
                and time.monotonic() < deadline):
@@ -322,6 +326,42 @@ class AgentTest(unittest.TestCase):
             if reply.request_id == 4:
                 break
         self.assertFalse(reply.health.vendor_debug_files_active)
+
+    def test_vendor_debug_files_refuse_non_allowlisted_shell_command(self):
+        self.client.close()
+        self.stop_agent()
+        environment = dict(os.environ)
+        environment["R1_FACTORY_AUDIO_TEST_DEBUG_DIR"] = self.temporary.name
+        environment["R1_VENDOR_MOCK_SYSTEM_COMMAND"] = "touch " + self.temporary.name + "/bad"
+        self.agent = subprocess.Popen([
+            str(AGENT), "--expected-uid", str(os.getuid()),
+            "--socket", str(self.socket_path),
+            "--vendor-library", str(VENDOR_MOCK),
+            "--vendor-open-channels", "2",
+            "--vendor-output-channels", "2",
+            "--vendor-output-channel", "0",
+            "--allow-vendor-debug-files",
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=environment)
+        deadline = time.monotonic() + 5
+        while (self.agent.poll() is None and not self.socket_path.exists()
+               and time.monotonic() < deadline):
+            time.sleep(0.01)
+        self.assertTrue(self.socket_path.exists())
+        self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.client.settimeout(2)
+        self.client.connect(str(self.socket_path))
+        self.negotiate("unisound_uni4mic_3448")
+        request = self.pb.Envelope(protocol_version=1, request_id=2)
+        request.start_capture.format.sample_rate_hz = 16000
+        request.start_capture.format.channels = 1
+        request.start_capture.format.sample_width_bytes = 2
+        request.start_capture.format.frame_duration_ms = 20
+        request.start_capture.include_diagnostic_output = True
+        request.start_capture.vendor_debug_files = True
+        self.send(request)
+        reply = self.receive()
+        self.assertEqual(self.pb.ERROR_CODE_BACKEND_FAILURE, reply.error.code)
+        self.assertFalse((Path(self.temporary.name) / "bad").exists())
 
     def test_vendor_backend_rejects_unproven_defaults(self):
         self.client.close()

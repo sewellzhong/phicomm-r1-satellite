@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 namespace {
@@ -36,5 +37,10 @@ extern "C" int uni_4mic_pcm_stop(intptr_t handle) {
 extern "C" int uni_4mic_pcm_close(intptr_t handle) { return handle == expected_handle ? 0 : -1; }
 extern "C" int get4MicDoaResult() { return 145; }
 extern "C" const char* get4MicBoardVersion() { return "MOCK_UNI_4MIC_V1.1"; }
-extern "C" int set4MicDebugMode(int mode) { return (mode == 0 || mode == 1) ? 0 : -1; }
+extern "C" int set4MicDebugMode(int mode) {
+  if (mode != 0 && mode != 1) return -1;
+  const char* command = getenv("R1_VENDOR_MOCK_SYSTEM_COMMAND");
+  if (mode == 1 && command != nullptr && system(command) != 0) return -1;
+  return 0;
+}
 extern "C" int close4MicAlgorithm(int closed) { return closed == 0 ? 0 : -1; }
