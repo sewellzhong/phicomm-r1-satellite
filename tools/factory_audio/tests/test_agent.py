@@ -281,6 +281,13 @@ class AgentTest(unittest.TestCase):
         self.assertEqual((0, 1, 2, 3), struct.unpack_from(
             "<hhhh", frame.diagnostic_interleaved_pcm_s16le))
 
+        # The next 20 ms frame comes from the remainder of the same original
+        # 2400-byte HAL read instead of forcing an old 1280-byte call boundary.
+        next_frame = self.receive().audio_frame
+        self.assertEqual(1280, len(next_frame.diagnostic_interleaved_pcm_s16le))
+        self.assertEqual((640, 641, 642, 643), struct.unpack_from(
+            "<hhhh", next_frame.diagnostic_interleaved_pcm_s16le))
+
         stop = self.pb.Envelope(protocol_version=1, request_id=4)
         stop.stop_capture.SetInParent()
         self.send(stop)

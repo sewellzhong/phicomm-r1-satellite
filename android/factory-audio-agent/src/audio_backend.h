@@ -110,6 +110,7 @@ class VendorBackend final : public AudioBackend {
   uint32_t debug_frames_ = 0;
   std::string board_version_;
   std::vector<uint8_t> input_buffer_;
+  std::vector<uint8_t> pending_output_;
 
   int (*hal_init_)(int) = nullptr;
   int (*hal_release_)() = nullptr;

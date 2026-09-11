@@ -7,6 +7,9 @@
 
 namespace {
 constexpr size_t kMonoFrameBytes = 640;
+// Firmware 3448's FourMicAudioManager allocates 1200 S16 samples and passes
+// all 2400 bytes to readData on every proprietary HAL read.
+constexpr size_t kOriginalManagerReadBytes = 2400;
 
 template <typename T>
 bool load_symbol(void* library, const char* name, T* destination) {
@@ -90,7 +93,8 @@ bool VendorBackend::initialize() {
   }
   const char* version = get_board_version_();
   if (version != nullptr) board_version_ = version;
-  input_buffer_.resize(kMonoFrameBytes * static_cast<size_t>(options_.output_channels));
+  input_buffer_.resize(kOriginalManagerReadBytes);
+  pending_output_.clear();
   return true;
 }
 
@@ -103,6 +107,7 @@ bool VendorBackend::start() {
     return false;
   }
   streaming_ = true;
+  pending_output_.clear();
   return true;
 }
 
@@ -114,31 +119,42 @@ bool VendorBackend::read_frame(BackendFrame* frame) {
   if (debug_files_active_ && debug_frames_ == 50 && set_wakeup_status_(1) != 0) {
     return false;
   }
-  // Firmware 3448's wrapper returns tinyalsa pcm_read's status: 0 on success,
-  // a negative value on failure. It does not return the byte count.
-  int read_status = pcm_read_(
-      handle_, input_buffer_.data(), static_cast<int>(input_buffer_.size()));
-  if (read_status < 0) return false;
-  frame->diagnostic_interleaved_pcm = input_buffer_;
-  frame->diagnostic_output_channels = static_cast<uint32_t>(options_.output_channels);
-  frame->diagnostic_selected_output_channel = static_cast<uint32_t>(options_.output_channel);
+  const size_t output_frame_bytes =
+      kMonoFrameBytes * static_cast<size_t>(options_.output_channels);
   frame->micarray_diagnostic_calls.clear();
-  if (tap_active_) {
-    MicArrayDiagnosticCall call;
-    while (frame->micarray_diagnostic_calls.size() < 8
-           && micarray_diagnostic_tap_take(&call)) {
-      frame->micarray_diagnostic_calls.push_back(std::move(call));
-      call = MicArrayDiagnosticCall{};
+  if (pending_output_.size() < output_frame_bytes) {
+    // Match the original Java manager's 2400-byte request exactly. Preserve
+    // every returned byte locally and packetize it into the satellite's fixed
+    // 20 ms frames without changing the proprietary call boundary.
+    int read_status = pcm_read_(
+        handle_, input_buffer_.data(), static_cast<int>(input_buffer_.size()));
+    if (read_status < 0) return false;
+    pending_output_.insert(
+        pending_output_.end(), input_buffer_.begin(), input_buffer_.end());
+    if (tap_active_) {
+      MicArrayDiagnosticCall call;
+      while (frame->micarray_diagnostic_calls.size() < 8
+             && micarray_diagnostic_tap_take(&call)) {
+        frame->micarray_diagnostic_calls.push_back(std::move(call));
+        call = MicArrayDiagnosticCall{};
+      }
     }
   }
+  if (pending_output_.size() < output_frame_bytes) return false;
+  frame->diagnostic_interleaved_pcm.assign(
+      pending_output_.begin(), pending_output_.begin() + output_frame_bytes);
+  pending_output_.erase(
+      pending_output_.begin(), pending_output_.begin() + output_frame_bytes);
+  frame->diagnostic_output_channels = static_cast<uint32_t>(options_.output_channels);
+  frame->diagnostic_selected_output_channel = static_cast<uint32_t>(options_.output_channel);
   frame->pcm.resize(kMonoFrameBytes);
   if (options_.output_channels == 1) {
-    memcpy(frame->pcm.data(), input_buffer_.data(), kMonoFrameBytes);
+    memcpy(frame->pcm.data(), frame->diagnostic_interleaved_pcm.data(), kMonoFrameBytes);
   } else {
     for (size_t sample = 0; sample < kMonoFrameBytes / 2; ++sample) {
       size_t source = (sample * 2 + static_cast<size_t>(options_.output_channel)) * 2;
-      frame->pcm[sample * 2] = input_buffer_[source];
-      frame->pcm[sample * 2 + 1] = input_buffer_[source + 1];
+      frame->pcm[sample * 2] = frame->diagnostic_interleaved_pcm[source];
+      frame->pcm[sample * 2 + 1] = frame->diagnostic_interleaved_pcm[source + 1];
     }
   }
   int doa = get_doa_();
@@ -192,6 +208,7 @@ uint64_t VendorBackend::micarray_diagnostic_tap_invalid() const {
 void VendorBackend::stop() {
   if (streaming_ && handle_ != 0) pcm_stop_(handle_);
   streaming_ = false;
+  pending_output_.clear();
 }
 
 void VendorBackend::release() {
@@ -208,6 +225,7 @@ void VendorBackend::release() {
   initialized_ = false;
   board_version_.clear();
   input_buffer_.clear();
+  pending_output_.clear();
   micarray_diagnostic_tap_unbind_original();
   if (library_ != nullptr) dlclose(library_);
   library_ = nullptr;

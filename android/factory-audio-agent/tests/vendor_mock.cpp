@@ -41,7 +41,7 @@ extern "C" int uni_4mic_pcm_start(intptr_t handle) {
   return streaming ? 0 : -1;
 }
 extern "C" int uni_4mic_pcm_read(intptr_t handle, void* output, int size) {
-  if (!streaming || handle != expected_handle || size <= 0) return -1;
+  if (!streaming || handle != expected_handle || size != 2400) return -1;
   auto* bytes = static_cast<uint8_t*>(output);
   for (int index = 0; index < size / 2; ++index) {
     int16_t sample = static_cast<int16_t>(index);
