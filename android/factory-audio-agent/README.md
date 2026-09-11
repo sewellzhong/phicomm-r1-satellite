@@ -16,6 +16,12 @@ and enables AEC; those configuration fields are never accepted as attestation.
 This prevents an initialized library from being mistaken for a proven factory AEC
 chain and makes the previous conservative zero/false values unambiguous.
 
+Vendor debug WAV output remains disabled by default. A validation-only candidate
+must opt in twice: the agent process needs `--allow-vendor-debug-files`, and an
+identified client must set `StartCapture.vendor_debug_files` together with the
+diagnostic-output flag. The health reply reports the active state. Stop, disconnect,
+or release resets the vendor debug mode before the library is unloaded.
+
 The production socket is `/dev/socket/r1_factory_audio`. The agent requires an
 explicit `--expected-uid`, uses mode `0660`, and verifies each connection with
 `SO_PEERCRED`. The supplied init template binds the socket as root, changes its

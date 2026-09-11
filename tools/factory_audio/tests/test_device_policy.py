@@ -182,6 +182,7 @@ class DevicePolicyTemplateTest(unittest.TestCase):
                 preflight=root / "preflight.json", abi_report=root / "abi.json", agent=agent,
                 vendor_library="/system/lib/libuni4michal.so", output_channels=2,
                 output_channel=1, output_dir=root / "output",
+                allow_vendor_debug_files=True,
             )
             header = SimpleNamespace(stdout=(
                 "Class:                             ELF32\n"
@@ -201,6 +202,9 @@ class DevicePolicyTemplateTest(unittest.TestCase):
                              result["file_contexts_sha256"])
             self.assertEqual(renderer.digest(root / "output/sepolicy/r1_factory_audio.te"),
                              result["policy_source_sha256"])
+            self.assertTrue(result["allow_vendor_debug_files"])
+            self.assertIn("--allow-vendor-debug-files",
+                          (root / "output/init.r1_factory_audio.rc").read_text())
 
 
 if __name__ == "__main__":

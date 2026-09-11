@@ -120,6 +120,33 @@ public class FactoryAudioClientTest {
         throw new AssertionError("validation-only health granted production capture");
     }
 
+    @Test public void vendorDebugValidationRequiresActiveHealthAndSetsBothFlags()
+            throws Exception {
+        ByteArrayOutputStream replies = new ByteArrayOutputStream();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(1)
+                .setHelloReply(FactoryAudio.HelloReply.newBuilder().setSelectedVersion(1)).build());
+        FactoryAudio.Health health = FactoryAudio.Health.newBuilder()
+                .setCaptureState(FactoryAudio.CaptureState.CAPTURE_STATE_STREAMING)
+                .setBackendName(FactoryAudioAttestation.PROVEN_BACKEND)
+                .setVendorBoardVersion("UNI_4MIC_HAL_ANDROID_V1.1")
+                .setRawMicChannels(4).setArrayProcessingActive(true)
+                .setVendorDebugFilesActive(true).build();
+        FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()
+                .setProtocolVersion(1).setRequestId(2).setHealth(health).build());
+        ByteArrayOutputStream requests = new ByteArrayOutputStream();
+        FactoryAudioClient client = new FactoryAudioClient(null,
+                new ByteArrayInputStream(replies.toByteArray()), requests);
+        client.negotiate();
+        assertEquals(health, client.startVendorDebugValidationCapture());
+
+        ByteArrayInputStream encoded = new ByteArrayInputStream(requests.toByteArray());
+        FactoryAudioFraming.read(encoded);
+        FactoryAudio.StartCapture start = FactoryAudioFraming.read(encoded).getStartCapture();
+        assertTrue(start.getIncludeDiagnosticOutput());
+        assertTrue(start.getVendorDebugFiles());
+    }
+
     @Test public void validationCaptureRejectsSyntheticBackend() throws Exception {
         ByteArrayOutputStream replies = new ByteArrayOutputStream();
         FactoryAudioFraming.write(replies, FactoryAudio.Envelope.newBuilder()

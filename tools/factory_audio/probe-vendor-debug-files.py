@@ -108,6 +108,19 @@ def evaluate_artifacts(artifacts):
     }
 
 
+def activity_start_succeeded(output):
+    return "Status: ok" in output and ("Activity: " + COMPONENT) in output
+
+
+def native_listening(status):
+    return (
+        status.get("status") == "listening"
+        and status.get("audio_opened") is True
+        and status.get("listen") is True
+        and status.get("enabled") is True
+    )
+
+
 class Device:
     def __init__(self, serial):
         self.serial = serial
@@ -252,17 +265,27 @@ def main(argv=None):
             raise ProbeError("native_listening_baseline_required")
         native_was_listening = True
         run_manager("stop", args.serial)
+        # The native stop command updates the requested state before the API 22
+        # process has necessarily released its audio backend.  The diagnostic
+        # Activity lives in the same package, so force-stop the package before
+        # launching it; this also prevents an old root Activity from merely being
+        # brought to the foreground without receiving the new probe extras.
+        device.shell("am force-stop " + PACKAGE)
         device.adb("logcat", "-c")
         nonce = "vendor-debug-probe-" + str(time.time_ns())
-        device.shell(
-            "am start -W -n " + COMPONENT
+        activity_start = device.shell(
+            "am start -W -f 0x20000000 -n " + COMPONENT
             + " --es probe_action four_mic_record"
             + " --ei duration_seconds 5"
             + " --es sample_id vendor-debug-lifecycle"
             + " --es probe_nonce " + nonce
         )
+        result["activity_start"] = activity_start
+        if not activity_start_succeeded(activity_start):
+            raise ProbeError("vendor_debug_activity_start_failed")
         capture_started = True
         timeline = []
+        result["timeline"] = timeline
         terminal = wait_for_capture(device, nonce, timeline)
         result["terminal_marker"] = terminal
         if ("R1_FOUR_MIC_RECORD_COMPLETE" not in terminal
@@ -325,10 +348,19 @@ def main(argv=None):
             device.shell("am force-stop " + PACKAGE, check=False)
         if native_was_listening:
             try:
-                restored = run_manager("start", args.serial, "--listen")
-                result["native_restore"] = restored
-                if (restored.get("status") != "listening"
-                        or restored.get("audio_opened") is not True):
+                restore_timeline = [run_manager("start", args.serial, "--listen")]
+                restored = restore_timeline[-1]
+                deadline = time.monotonic() + 12
+                while not native_listening(restored) and time.monotonic() < deadline:
+                    time.sleep(0.5)
+                    restored = run_manager("status", args.serial)
+                    restore_timeline.append(restored)
+                result["native_restore"] = {
+                    "final": restored,
+                    "samples": restore_timeline,
+                    "status": "pass" if native_listening(restored) else "failed",
+                }
+                if not native_listening(restored):
                     raise ProbeError("native_listening_restore_not_confirmed")
             except (ProbeError, ValueError) as error:
                 result["native_restore"] = {"status": "failed", "failure": str(error)}

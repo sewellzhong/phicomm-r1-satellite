@@ -24,6 +24,7 @@ class AudioBackend {
   virtual bool start() = 0;
   virtual bool read_frame(BackendFrame* frame) = 0;
   virtual bool submit_playback_reference(const std::vector<uint8_t>& pcm) = 0;
+  virtual bool set_vendor_debug_files(bool enabled) = 0;
   virtual void stop() = 0;
   virtual void release() = 0;
   virtual std::string board_version() const { return {}; }
@@ -36,6 +37,7 @@ class AudioBackend {
   // them or that cancellation occurred in the emitted stream.
   virtual uint32_t configured_aec_reference_channels() const { return 0; }
   virtual bool aec_configured() const { return false; }
+  virtual bool vendor_debug_files_active() const { return false; }
 };
 
 class SyntheticBackend final : public AudioBackend {
@@ -45,6 +47,7 @@ class SyntheticBackend final : public AudioBackend {
   bool start() override;
   bool read_frame(BackendFrame* frame) override;
   bool submit_playback_reference(const std::vector<uint8_t>& pcm) override;
+  bool set_vendor_debug_files(bool enabled) override { return !enabled; }
   void stop() override;
   void release() override;
 
@@ -69,6 +72,7 @@ class VendorBackend final : public AudioBackend {
   bool start() override;
   bool read_frame(BackendFrame* frame) override;
   bool submit_playback_reference(const std::vector<uint8_t>& pcm) override;
+  bool set_vendor_debug_files(bool enabled) override;
   void stop() override;
   void release() override;
   std::string board_version() const override { return board_version_; }
@@ -80,6 +84,7 @@ class VendorBackend final : public AudioBackend {
     return initialized_ ? 2 : 0;
   }
   bool aec_configured() const override { return initialized_; }
+  bool vendor_debug_files_active() const override { return debug_files_active_; }
 
  private:
   bool resolve_symbols();
@@ -88,6 +93,7 @@ class VendorBackend final : public AudioBackend {
   intptr_t handle_ = 0;
   bool initialized_ = false;
   bool streaming_ = false;
+  bool debug_files_active_ = false;
   std::string board_version_;
   std::vector<uint8_t> input_buffer_;
 

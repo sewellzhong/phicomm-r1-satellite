@@ -262,6 +262,7 @@ std::vector<uint8_t> health_message(bool streaming, int reference_state,
   append_bool(&result, 11, backend.aec_active());
   append_uint(&result, 12, backend.configured_aec_reference_channels());
   append_bool(&result, 13, backend.aec_configured());
+  append_bool(&result, 14, backend.vendor_debug_files_active());
   return result;
 }
 
@@ -297,7 +298,8 @@ bool reply_error(int fd, uint64_t id, int code, const std::string& detail) {
   return send_envelope(fd, envelope(id, 19, error_message(code, detail)));
 }
 
-bool handle_request(int fd, const Request& request, ClientState* state, AudioBackend* backend) {
+bool handle_request(int fd, const Request& request, ClientState* state, AudioBackend* backend,
+                    bool allow_vendor_debug_files) {
   if (request.version != kProtocolVersion) {
     return reply_error(fd, request.request_id, 5, "protocol_version_unsupported");
   }
@@ -328,7 +330,21 @@ bool handle_request(int fd, const Request& request, ClientState* state, AudioBac
     if (has_diagnostic && diagnostic != 1) {
       return reply_error(fd, request.request_id, 7, "diagnostic_output_flag_invalid");
     }
-    if (!backend->initialize() || !backend->start()) {
+    uint64_t vendor_debug = 0;
+    const bool has_vendor_debug = read_uint_field(request.payload, 3, &vendor_debug);
+    if (has_vendor_debug && vendor_debug != 1) {
+      return reply_error(fd, request.request_id, 7, "vendor_debug_files_flag_invalid");
+    }
+    if (has_vendor_debug && !has_diagnostic) {
+      return reply_error(fd, request.request_id, 7,
+                         "vendor_debug_files_require_diagnostic_capture");
+    }
+    if (has_vendor_debug && !allow_vendor_debug_files) {
+      return reply_error(fd, request.request_id, 2, "vendor_debug_files_not_allowed");
+    }
+    if (!backend->initialize()
+        || (has_vendor_debug && !backend->set_vendor_debug_files(true))
+        || !backend->start()) {
       backend->release();
       return reply_error(fd, request.request_id, 3, "backend_start_failed");
     }
@@ -398,7 +414,8 @@ bool emit_frame(int fd, ClientState* state, AudioBackend* backend) {
   return send_envelope(fd, envelope(0, 16, audio));
 }
 
-bool consume_requests(int fd, ClientState* state, AudioBackend* backend) {
+bool consume_requests(int fd, ClientState* state, AudioBackend* backend,
+                      bool allow_vendor_debug_files) {
   uint8_t chunk[8192];
   ssize_t count = recv(fd, chunk, sizeof(chunk), 0);
   if (count < 0 && errno == EINTR) return true;
@@ -417,12 +434,13 @@ bool consume_requests(int fd, ClientState* state, AudioBackend* backend) {
       if (!reply_error(fd, 0, 7, "malformed_envelope")) return false;
       continue;
     }
-    if (!handle_request(fd, request, state, backend)) return false;
+    if (!handle_request(fd, request, state, backend, allow_vendor_debug_files)) return false;
   }
   return true;
 }
 
-void serve_client(int fd, AudioBackend* backend, uint64_t frame_period_ns) {
+void serve_client(int fd, AudioBackend* backend, uint64_t frame_period_ns,
+                  bool allow_vendor_debug_files) {
   ClientState state;
   state.frame_period_ns = frame_period_ns;
   while (!g_stop) {
@@ -438,7 +456,7 @@ void serve_client(int fd, AudioBackend* backend, uint64_t frame_period_ns) {
     if (result < 0 && errno == EINTR) continue;
     if (result < 0 || (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL))) break;
     if (result > 0 && (descriptor.revents & POLLIN)
-        && !consume_requests(fd, &state, backend)) break;
+        && !consume_requests(fd, &state, backend, allow_vendor_debug_files)) break;
     if (state.streaming && monotonic_ns() >= state.next_frame_ns) {
       bool first_frame = state.sequence == 0;
       if (!emit_frame(fd, &state, backend)) break;
@@ -499,11 +517,13 @@ int main(int argc, char** argv) {
   long drop_uid = -1;
   long drop_gid = -1;
   bool fake = false;
+  bool allow_vendor_debug_files = false;
   VendorBackendOptions vendor_options;
   uint64_t frame_period_ns = kDefaultFramePeriodNs;
   for (int index = 1; index < argc; ++index) {
     std::string argument = argv[index];
     if (argument == "--fake") fake = true;
+    else if (argument == "--allow-vendor-debug-files") allow_vendor_debug_files = true;
     else if (argument == "--vendor-library" && index + 1 < argc) {
       vendor_options.library_path = argv[++index];
     } else if (argument == "--vendor-open-channels" && index + 1 < argc) {
@@ -562,7 +582,8 @@ int main(int argc, char** argv) {
     } else {
       fprintf(stderr, "usage: r1-factory-audio-agent --expected-uid UID [--fake | "
                       "--vendor-library PATH --vendor-open-channels 2 "
-                      "--vendor-output-channels 1|2 --vendor-output-channel N] [--socket PATH]\n");
+                      "--vendor-output-channels 1|2 --vendor-output-channel N] [--socket PATH] "
+                      "[--allow-vendor-debug-files]\n");
       return 2;
     }
   }
@@ -570,6 +591,10 @@ int main(int argc, char** argv) {
   if (fake == vendor) {
     fprintf(stderr, "factory_backend_unimplemented\n");
     return 3;
+  }
+  if (allow_vendor_debug_files && !vendor) {
+    fprintf(stderr, "vendor_debug_files_require_vendor_backend\n");
+    return 2;
   }
   if (vendor && (vendor_options.library_path[0] != '/'
       || vendor_options.open_channels != 2
@@ -654,7 +679,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<AudioBackend> backend;
     if (fake) backend.reset(new SyntheticBackend());
     else backend.reset(new VendorBackend(vendor_options));
-    serve_client(client, backend.get(), frame_period_ns);
+    serve_client(client, backend.get(), frame_period_ns, allow_vendor_debug_files);
     close(client);
   }
   close(server);

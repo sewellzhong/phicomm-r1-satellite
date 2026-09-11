@@ -28,6 +28,13 @@ final class FactoryAudioValidationCapture {
     static Result record(File outputDirectory, int durationSeconds, String sampleId,
             File playbackReferenceFile, int musicVolumeIndex, int musicVolumeMaxIndex)
             throws Exception {
+        return record(outputDirectory, durationSeconds, sampleId, playbackReferenceFile,
+                musicVolumeIndex, musicVolumeMaxIndex, false);
+    }
+
+    static Result record(File outputDirectory, int durationSeconds, String sampleId,
+            File playbackReferenceFile, int musicVolumeIndex, int musicVolumeMaxIndex,
+            boolean vendorDebugFiles) throws Exception {
         if (durationSeconds < 1 || durationSeconds > 30) {
             throw new IllegalArgumentException("factory_audio_validation_duration_out_of_range");
         }
@@ -64,7 +71,9 @@ final class FactoryAudioValidationCapture {
             output.write(WavHeader.create(0));
             FactoryAudioClient client = FactoryAudioClient.connect();
             try {
-                startHealth = client.startUnattestedValidationCapture();
+                startHealth = vendorDebugFiles
+                        ? client.startVendorDebugValidationCapture()
+                        : client.startUnattestedValidationCapture();
                 if (playbackReferenceFile != null) {
                     playback = new PlaybackRun(playbackReferenceFile);
                     playback.start();
@@ -162,7 +171,7 @@ final class FactoryAudioValidationCapture {
                 diagnosticChannels > 0 ? diagnosticWavFile.getName() : "",
                 diagnosticChannels > 0 ? sha256(diagnosticWavFile) : "",
                 startedAtNanos, playbackReferenceFile, playbackPcmBytes,
-                musicVolumeIndex, musicVolumeMaxIndex, playback);
+                musicVolumeIndex, musicVolumeMaxIndex, playback, vendorDebugFiles);
         return new Result(wavFile, diagnosticChannels > 0 ? diagnosticWavFile : null,
                 metadataFile, frames, sequenceGaps, doaValidFrames);
     }
@@ -174,7 +183,8 @@ final class FactoryAudioValidationCapture {
             int diagnosticPcmBytes, int diagnosticSelectedOutputChannel,
             String diagnosticWavName, String diagnosticWavSha256,
             long captureStartedAtNanos, File playbackReferenceFile, int playbackPcmBytes,
-            int musicVolumeIndex, int musicVolumeMaxIndex, PlaybackRun playback) throws Exception {
+            int musicVolumeIndex, int musicVolumeMaxIndex, PlaybackRun playback,
+            boolean vendorDebugFiles) throws Exception {
         PrintWriter metadata = new PrintWriter(file, "UTF-8");
         try {
             metadata.println("purpose=R1 factory audio bounded validation capture");
@@ -193,6 +203,9 @@ final class FactoryAudioValidationCapture {
             metadata.println("array_processing_claimed=" + health.getArrayProcessingActive());
             metadata.println("aec_active_claimed=" + health.getAecActive());
             metadata.println("aec_configured=" + health.getAecConfigured());
+            metadata.println("vendor_debug_files_requested=" + vendorDebugFiles);
+            metadata.println("vendor_debug_files_active="
+                    + health.getVendorDebugFilesActive());
             metadata.println("frames=" + frames);
             metadata.println("pcm_bytes=" + pcmBytes);
             metadata.println("first_sequence=" + firstSequence);

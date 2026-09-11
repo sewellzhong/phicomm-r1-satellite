@@ -70,7 +70,7 @@ public final class FactoryAudioClient implements Closeable {
     }
 
     public synchronized void startCapture() throws IOException {
-        startCapture(true);
+        startCapture(true, false);
     }
 
     /**
@@ -78,10 +78,16 @@ public final class FactoryAudioClient implements Closeable {
      * separate from startCapture(): callers must never feed its frames to the satellite path.
      */
     public synchronized FactoryAudio.Health startUnattestedValidationCapture() throws IOException {
-        return startCapture(false);
+        return startCapture(false, false);
     }
 
-    private FactoryAudio.Health startCapture(boolean requireProductionAttestation)
+    public synchronized FactoryAudio.Health startVendorDebugValidationCapture()
+            throws IOException {
+        return startCapture(false, true);
+    }
+
+    private FactoryAudio.Health startCapture(boolean requireProductionAttestation,
+            boolean vendorDebugFiles)
             throws IOException {
         requireOpen();
         require(negotiated, "factory_audio_not_negotiated");
@@ -92,7 +98,8 @@ public final class FactoryAudioClient implements Closeable {
                 .setFrameDurationMs(20).build();
         send(requestId, FactoryAudio.Envelope.newBuilder().setStartCapture(
                 FactoryAudio.StartCapture.newBuilder().setFormat(format)
-                        .setIncludeDiagnosticOutput(!requireProductionAttestation)));
+                        .setIncludeDiagnosticOutput(!requireProductionAttestation)
+                        .setVendorDebugFiles(vendorDebugFiles)));
         FactoryAudio.Envelope reply = readReply(requestId);
         if (!reply.hasHealth()
                 || reply.getHealth().getCaptureState()
@@ -101,6 +108,9 @@ public final class FactoryAudioClient implements Closeable {
         }
         FactoryAudio.Health health = reply.getHealth();
         try {
+            if (vendorDebugFiles && !health.getVendorDebugFilesActive()) {
+                throw new IOException("factory_audio_vendor_debug_not_active");
+            }
             if (requireProductionAttestation) {
                 FactoryAudioAttestation.requireProductionChain(health);
             } else {

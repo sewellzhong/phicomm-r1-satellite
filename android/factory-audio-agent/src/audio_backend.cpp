@@ -135,6 +135,13 @@ bool VendorBackend::submit_playback_reference(const std::vector<uint8_t>&) {
   return false;
 }
 
+bool VendorBackend::set_vendor_debug_files(bool enabled) {
+  if (!initialized_ || streaming_ || set_debug_mode_ == nullptr) return false;
+  if (set_debug_mode_(enabled ? 1 : 0) != 0) return false;
+  debug_files_active_ = enabled;
+  return true;
+}
+
 void VendorBackend::stop() {
   if (streaming_ && handle_ != 0) pcm_stop_(handle_);
   streaming_ = false;
@@ -144,6 +151,8 @@ void VendorBackend::release() {
   stop();
   if (handle_ != 0 && pcm_close_ != nullptr) pcm_close_(handle_);
   handle_ = 0;
+  if (initialized_ && set_debug_mode_ != nullptr) set_debug_mode_(0);
+  debug_files_active_ = false;
   if (initialized_ && hal_release_ != nullptr) hal_release_();
   initialized_ = false;
   board_version_.clear();

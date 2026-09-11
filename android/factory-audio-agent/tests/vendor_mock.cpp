@@ -36,5 +36,5 @@ extern "C" int uni_4mic_pcm_stop(intptr_t handle) {
 extern "C" int uni_4mic_pcm_close(intptr_t handle) { return handle == expected_handle ? 0 : -1; }
 extern "C" int get4MicDoaResult() { return 145; }
 extern "C" const char* get4MicBoardVersion() { return "MOCK_UNI_4MIC_V1.1"; }
-extern "C" int set4MicDebugMode(int mode) { return mode == 0 ? 0 : -1; }
+extern "C" int set4MicDebugMode(int mode) { return (mode == 0 || mode == 1) ? 0 : -1; }
 extern "C" int close4MicAlgorithm(int closed) { return closed == 0 ? 0 : -1; }

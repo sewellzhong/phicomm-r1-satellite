@@ -201,12 +201,14 @@ public final class ProbeCommandReceiver extends BroadcastReceiver {
                 : audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
         int volumeMaxIndex = playbackReference == null ? -1
                 : audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        boolean vendorDebugFiles = intent.getBooleanExtra("vendor_debug_files", false);
         Log.i(AUDIO_TAG, "R1_FACTORY_AUDIO_VALIDATION_START nonce=" + nonce
                 + " duration_seconds=" + durationSeconds
-                + " playback_reference=" + (playbackReference != null));
+                + " playback_reference=" + (playbackReference != null)
+                + " vendor_debug_files=" + vendorDebugFiles);
         FactoryAudioValidationCapture.Result result = FactoryAudioValidationCapture.record(
                 diagnostics, durationSeconds, sampleId, playbackReference,
-                volumeIndex, volumeMaxIndex);
+                volumeIndex, volumeMaxIndex, vendorDebugFiles);
         Log.i(AUDIO_TAG, "R1_FACTORY_AUDIO_VALIDATION_COMPLETE nonce=" + nonce
                 + " wav_path=" + result.wavFile.getAbsolutePath()
                 + " diagnostic_wav_path=" + (result.diagnosticWavFile == null

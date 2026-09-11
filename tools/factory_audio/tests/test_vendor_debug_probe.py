@@ -40,6 +40,23 @@ class VendorDebugProbeTest(unittest.TestCase):
         self.assertIn("waking_file_4mic.wav", probe.DEBUG_NAMES)
         self.assertIn("waked_file_2aec.wav", probe.DEBUG_NAMES)
 
+    def test_activity_start_and_native_restore_require_complete_state(self):
+        self.assertTrue(probe.activity_start_succeeded(
+            "Status: ok\nActivity: dev.sewellzhong.r1probe/.MainActivity\nComplete"
+        ))
+        self.assertFalse(probe.activity_start_succeeded(
+            "Warning: Activity not started, its current task has been brought to the front"
+        ))
+        ready = {
+            "status": "listening", "audio_opened": True,
+            "listen": True, "enabled": True,
+        }
+        self.assertTrue(probe.native_listening(ready))
+        for key in ready:
+            incomplete = dict(ready)
+            incomplete[key] = False if key != "status" else "waiting_ha"
+            self.assertFalse(probe.native_listening(incomplete))
+
     def test_complete_phase_requires_nonempty_valid_triplet(self):
         artifacts = {
             "waking_file_4mic.wav": {"status": "pass"},

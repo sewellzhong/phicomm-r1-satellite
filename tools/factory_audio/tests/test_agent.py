@@ -173,6 +173,14 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(3, result.returncode)
         self.assertIn("factory_backend_unimplemented", result.stderr)
 
+    def test_debug_allow_flag_requires_vendor_backend(self):
+        result = subprocess.run([
+            str(AGENT), "--fake", "--allow-vendor-debug-files",
+            "--expected-uid", str(os.getuid()), "--socket", str(self.socket_path) + ".debug"
+        ], capture_output=True, text=True)
+        self.assertEqual(2, result.returncode)
+        self.assertIn("vendor_debug_files_require_vendor_backend", result.stderr)
+
     def test_android_init_socket_is_inherited_without_rebinding_path(self):
         self.client.close()
         self.stop_agent()
@@ -225,6 +233,13 @@ class AgentTest(unittest.TestCase):
         start.start_capture.format.sample_width_bytes = 2
         start.start_capture.format.frame_duration_ms = 20
         start.start_capture.include_diagnostic_output = True
+        start.start_capture.vendor_debug_files = True
+        self.send(start)
+        denied = self.receive()
+        self.assertEqual(self.pb.ERROR_CODE_PERMISSION_DENIED, denied.error.code)
+        self.assertEqual("vendor_debug_files_not_allowed", denied.error.detail)
+        start.request_id = 3
+        start.start_capture.vendor_debug_files = False
         self.send(start)
         health = self.receive().health
         self.assertEqual("unisound_uni4mic_3448", health.backend_name)
@@ -245,19 +260,68 @@ class AgentTest(unittest.TestCase):
         self.assertEqual((0, 1, 2, 3), struct.unpack_from(
             "<hhhh", frame.diagnostic_interleaved_pcm_s16le))
 
-        stop = self.pb.Envelope(protocol_version=1, request_id=3)
+        stop = self.pb.Envelope(protocol_version=1, request_id=4)
         stop.stop_capture.SetInParent()
         self.send(stop)
-        while self.receive().request_id != 3:
+        while self.receive().request_id != 4:
             pass
-        start.request_id = 4
+        start.request_id = 5
         start.start_capture.include_diagnostic_output = False
         self.send(start)
-        while self.receive().request_id != 4:
+        while self.receive().request_id != 5:
             pass
         production_frame = self.receive().audio_frame
         self.assertEqual(0, production_frame.diagnostic_output_channels)
         self.assertEqual(0, len(production_frame.diagnostic_interleaved_pcm_s16le))
+
+    def test_vendor_debug_files_require_agent_allow_and_diagnostic_request(self):
+        self.client.close()
+        self.stop_agent()
+        self.agent = subprocess.Popen([
+            str(AGENT), "--expected-uid", str(os.getuid()),
+            "--socket", str(self.socket_path),
+            "--vendor-library", str(VENDOR_MOCK),
+            "--vendor-open-channels", "2",
+            "--vendor-output-channels", "2",
+            "--vendor-output-channel", "0",
+            "--allow-vendor-debug-files",
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        deadline = time.monotonic() + 5
+        while (self.agent.poll() is None and not self.socket_path.exists()
+               and time.monotonic() < deadline):
+            time.sleep(0.01)
+        self.assertTrue(self.socket_path.exists())
+        self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.client.settimeout(2)
+        self.client.connect(str(self.socket_path))
+        self.negotiate("unisound_uni4mic_3448")
+
+        invalid = self.pb.Envelope(protocol_version=1, request_id=2)
+        invalid.start_capture.format.sample_rate_hz = 16000
+        invalid.start_capture.format.channels = 1
+        invalid.start_capture.format.sample_width_bytes = 2
+        invalid.start_capture.format.frame_duration_ms = 20
+        invalid.start_capture.vendor_debug_files = True
+        self.send(invalid)
+        self.assertEqual(self.pb.ERROR_CODE_INVALID_REQUEST, self.receive().error.code)
+
+        valid = self.pb.Envelope(protocol_version=1, request_id=3)
+        valid.start_capture.CopyFrom(invalid.start_capture)
+        valid.start_capture.include_diagnostic_output = True
+        self.send(valid)
+        health = self.receive().health
+        self.assertEqual(self.pb.CAPTURE_STATE_STREAMING, health.capture_state)
+        self.assertTrue(health.vendor_debug_files_active)
+        self.receive()
+
+        stop = self.pb.Envelope(protocol_version=1, request_id=4)
+        stop.stop_capture.SetInParent()
+        self.send(stop)
+        while True:
+            reply = self.receive()
+            if reply.request_id == 4:
+                break
+        self.assertFalse(reply.health.vendor_debug_files_active)
 
     def test_vendor_backend_rejects_unproven_defaults(self):
         self.client.close()

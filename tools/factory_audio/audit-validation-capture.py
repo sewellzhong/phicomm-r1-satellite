@@ -155,6 +155,13 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
             "validation_unproven_aec_activity_claimed")
     require(values.get("array_processing_claimed") == "true",
             "validation_array_claim_missing")
+    vendor_debug_requested = values.get("vendor_debug_files_requested", "false")
+    vendor_debug_active = values.get("vendor_debug_files_active", "false")
+    require(vendor_debug_requested in {"true", "false"}
+            and vendor_debug_active in {"true", "false"},
+            "validation_vendor_debug_state_invalid")
+    require(vendor_debug_requested == vendor_debug_active,
+            "validation_vendor_debug_not_active")
     frames = integer(values, "frames")
     pcm_bytes = integer(values, "pcm_bytes")
     require(frames > 0 and pcm_bytes == frames * 640, "validation_frame_count_mismatch")
@@ -292,6 +299,8 @@ def audit(wav_path, metadata_path, device, diagnostic_wav_path=None,
         "configured_aec_reference_channels": integer(
             values, "aec_reference_channels_configured"),
         "aec_configured": values.get("aec_configured") == "true",
+        "vendor_debug_files_requested": vendor_debug_requested == "true",
+        "vendor_debug_files_active": vendor_debug_active == "true",
         "claim_boundary": claim_boundary,
         "diagnostic_output": diagnostic,
         "controlled_playback_reference": playback_reference,

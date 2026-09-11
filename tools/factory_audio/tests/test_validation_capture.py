@@ -40,6 +40,8 @@ class ValidationCaptureAuditTest(unittest.TestCase):
             "array_processing_claimed=true",
             "aec_active_claimed=false",
             "aec_configured=true",
+            "vendor_debug_files_requested=false",
+            "vendor_debug_files_active=false",
             f"frames={frames}",
             f"pcm_bytes={frames * 640}",
             "first_sequence=1",
@@ -176,6 +178,23 @@ class ValidationCaptureAuditTest(unittest.TestCase):
             metadata.write_text(text)
             with self.assertRaisesRegex(RuntimeError, "unproven_aec_channels_claimed"):
                 audit_module.audit(wav, metadata, "r1-sample01")
+
+    def test_vendor_debug_request_requires_active_agent_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wav, metadata = self.fixture(root)
+            text = metadata.read_text().replace(
+                "vendor_debug_files_requested=false",
+                "vendor_debug_files_requested=true")
+            metadata.write_text(text)
+            with self.assertRaisesRegex(RuntimeError, "vendor_debug_not_active"):
+                audit_module.audit(wav, metadata, "r1-sample01")
+
+            metadata.write_text(text.replace(
+                "vendor_debug_files_active=false",
+                "vendor_debug_files_active=true"))
+            result = audit_module.audit(wav, metadata, "r1-sample01")
+            self.assertTrue(result["vendor_debug_files_active"])
 
     def test_playback_elapsed_clock_tolerance_is_bounded(self):
         self.assertTrue(audit_module.playback_elapsed_consistent(5396, 5394.49))

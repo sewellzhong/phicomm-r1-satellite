@@ -116,6 +116,11 @@ def render(args):
     init = init.replace("@PROVEN_OUTPUT_CHANNELS@", str(args.output_channels))
     init = init.replace("@PROVEN_OUTPUT_CHANNEL@", str(args.output_channel))
     init = init.replace("/system/lib/libuni4michal.so", args.vendor_library)
+    allow_vendor_debug_files = bool(getattr(args, "allow_vendor_debug_files", False))
+    if allow_vendor_debug_files:
+        marker = "--vendor-output-channel " + str(args.output_channel)
+        require(marker in init, "vendor_debug_init_insertion_point_missing")
+        init = init.replace(marker, marker + " --allow-vendor-debug-files", 1)
     require("@PROVEN_" not in init, "unresolved_init_template_token")
     (output / "init.r1_factory_audio.rc").write_text(init, encoding="utf-8")
     for name in ("r1_factory_audio.te", "file_contexts"):
@@ -131,6 +136,7 @@ def render(args):
         "authorization": authorization,
         "output_channel": args.output_channel,
         "output_channels": args.output_channels,
+        "allow_vendor_debug_files": allow_vendor_debug_files,
         "satellite_uid": client_uid,
         "vendor_library": args.vendor_library,
         "vendor_library_sha256": abi["library_sha256"],
@@ -154,6 +160,7 @@ def main(argv=None):
     ), required=True)
     parser.add_argument("--output-channels", type=int, required=True)
     parser.add_argument("--output-channel", type=int, required=True)
+    parser.add_argument("--allow-vendor-debug-files", action="store_true")
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
     try:

@@ -52,6 +52,9 @@ message HelloReply {
 message StartCapture {
   AudioFormat format = 1;
   bool include_diagnostic_output = 2;
+  // Bounded validation only. The agent also requires an explicit boot-time
+  // allow flag; production capture must leave this false.
+  bool vendor_debug_files = 3;
 }
 
 message StopCapture {}
@@ -73,6 +76,7 @@ message Health {
   // reference coverage or cancellation in the emitted stream.
   uint32 configured_aec_reference_channels = 12;
   bool aec_configured = 13;
+  bool vendor_debug_files_active = 14;
 }
 
 message AudioFrame {

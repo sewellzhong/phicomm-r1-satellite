@@ -30,6 +30,7 @@
 
 ## 阶段与版本记录
 
+- [2026-09-11-r1-vendor-debug-probe](2026-09-11-r1-vendor-debug-probe.md)
 - [2026-09-01-r1-sample01-stage0-report](2026-09-01-r1-sample01-stage0-report.md)
 - [2026-09-01-r1-sample01-stage1-audio-report](2026-09-01-r1-sample01-stage1-audio-report.md)
 - [2026-09-02-r1-sample01-audio-provenance](2026-09-02-r1-sample01-audio-provenance.md)
