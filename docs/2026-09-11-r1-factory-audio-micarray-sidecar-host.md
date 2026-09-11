@@ -59,9 +59,21 @@ lint/hostcheck、native 32 项、R0 73 项与演练、原厂音频 107 项、HA 
 SHA-256 为 `c3d6c630ca9ba666bb96f66c45033dcbdfa6578595e002312e259ac4f4f6eecd`，独立包名且使用
 合成音，不得部署到 R1。
 
+## v86 设备候选
+
+已从源码提交 `4e6a5bbf8d99c228592007021b6cefaf5fa7ad66` 执行非 hostcheck 的干净设备构建：
+Android 单元测试、lint 和 `assembleDebug` 通过。候选包名为 `dev.sewellzhong.r1probe`、
+versionCode 86、min/target API 22，只包含 `armeabi-v7a` 原生库，且不含
+`assets/HOST_CHECK_ONLY`。v1/v2 签名通过，证书 SHA-256
+`0be7a3643442658354c185ec53cb50e73bc1516a56f2760ca46f2c932c1d2639` 与 v85 一致。
+
+固定的私有候选保存在已忽略的本地证据目录，APK SHA-256 为
+`900a6c0f1101ec70a09facc2d03ca758866503c1c9ac39138cb0f22ad7116e40`。本步仍未连接
+ADB、未部署、未采集录音，不改写实机验收状态。
+
 ## 下一入口
 
-先用私有签名生成 v86 设备候选并固定 SHA-256；部署仍须保持当前 v21 boot、不修改分区，随后
-在明确录音确认下运行上述受控导出。导出和离线审计通过后，才以四个固定物理方向采集四组
+部署已固定的 v86 候选时仍须保持当前 v21 boot、不修改分区，并在明确录音确认下运行
+上述受控导出。导出和离线审计通过后，才以四个固定物理方向采集四组
 同规格材料并进入四麦独立响应与 DOA 方向矩阵分析。AEC 的受控播放窗口和消除量计算仍是
 后续独立步骤，不能由非零 2 参考 sidecar 直接推断通过。
