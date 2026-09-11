@@ -98,6 +98,22 @@ def validate_debug_overlay_update(current_overlay, candidate_overlay, current_in
     require(candidate_init == expected_init, "candidate_init_change_not_exact_vendor_debug_flag")
 
 
+def effective_overlay_manifest_hash(manifest):
+    """Resolve the overlay embedded by the current boot candidate.
+
+    Early incremental manifests recorded only their input overlay and optional
+    candidate overlay. Accept those device-locked manifests for chaining while
+    emitting one unambiguous effective hash in every newly built manifest.
+    """
+    value = manifest.get("overlay_manifest_sha256")
+    if value is None:
+        value = (manifest.get("candidate_overlay_manifest_sha256")
+                 or manifest.get("current_overlay_manifest_sha256"))
+    require(isinstance(value, str) and len(value) == 64,
+            "current_boot_overlay_hash_missing")
+    return value
+
+
 def build(args):
     current_a = secure_file(args.current_boot_a, "current_boot_a")
     current_b = secure_file(args.current_boot_b, "current_boot_b")
@@ -144,7 +160,7 @@ def build(args):
             "current_boot_hash_not_manifest_candidate")
     require(current_a.stat().st_size == boot.PARTITION_BYTES,
             "current_boot_size_invalid")
-    require(digest(current_overlay_path) == manifest.get("overlay_manifest_sha256"),
+    require(digest(current_overlay_path) == effective_overlay_manifest_hash(manifest),
             "current_overlay_manifest_hash_mismatch")
     require(overlay.get("device") == reference.get("device"),
             "current_overlay_device_mismatch")
@@ -164,8 +180,15 @@ def build(args):
     matches = [entry for entry in entries if entry.name == AGENT_ENTRY]
     require(len(matches) == 1, "current_agent_entry_not_unique")
     old_agent_hash = boot.digest_bytes(matches[0].data)
-    require(old_agent_hash == overlay.get("agent_sha256"),
-            "embedded_agent_hash_not_overlay")
+    effective_overlay = dict(overlay)
+    if old_agent_hash != overlay.get("agent_sha256"):
+        require(manifest.get("declared_changes") == ["ramdisk_agent"],
+                "embedded_agent_hash_not_overlay")
+        require(manifest.get("old_agent_sha256") == overlay.get("agent_sha256"),
+                "prior_agent_lineage_not_overlay")
+        require(manifest.get("new_agent_sha256") == old_agent_hash,
+                "embedded_agent_hash_not_prior_candidate")
+        effective_overlay["agent_sha256"] = old_agent_hash
     require(old_agent_hash != expected_hash, "agent_update_is_noop")
 
     init_matches = [entry for entry in entries if entry.name == INIT_ENTRY]
@@ -176,7 +199,8 @@ def build(args):
         candidate_overlay = load(candidate_overlay_path)
         candidate_init = candidate_init_path.read_bytes()
         validate_debug_overlay_update(
-            overlay, candidate_overlay, init_matches[0].data, candidate_init, expected_hash)
+            effective_overlay, candidate_overlay, init_matches[0].data,
+            candidate_init, expected_hash)
 
     before = {entry.name: (entry_contract(entry), entry.data) for entry in entries}
     require(len(before) == len(entries), "cpio_duplicate_entry")
@@ -250,6 +274,9 @@ def build(args):
         "authorization": manifest["authorization"],
         "current_boot_manifest_sha256": digest(current_manifest_path),
         "current_overlay_manifest_sha256": digest(current_overlay_path),
+        "overlay_manifest_sha256": (digest(candidate_overlay_path)
+                                    if candidate_overlay_path is not None
+                                    else digest(current_overlay_path)),
         "declared_changes": (["ramdisk_agent", "ramdisk_init_vendor_debug_flag"]
                              if candidate_init is not None else ["ramdisk_agent"]),
     }

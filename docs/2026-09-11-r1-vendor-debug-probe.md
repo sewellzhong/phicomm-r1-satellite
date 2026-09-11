@@ -57,3 +57,12 @@ v84 源码已固定于 `68562aaf0d143434dc9fba517bff8bb4cdd70771`。提交
 门禁。只有代理健康状态确认本次请求的 debug mode 实际启用，才进行新的明确短时录音窗口，
 导出并校验同一窗口的 `4mic/2aec/out` 后删除设备端固定文件。当前结果不计算消除量，R3 与
 R0 状态均不改变。
+
+## v84/v15 实机后续
+
+上述候选已于同日继续部署。现场 boot 双读、单次写入、复位前完整读回、Enforcing 启动、
+原签名 v84 APK 安装与设备端回读均通过；显式 5 秒请求也确认
+`vendor_debug_files_active=true`。但固定 `4mic/2aec/out` 文件仍未生成，内核 AVC 显示
+`mediaserver` 对 `vfat:/sdcard/unidata` 的写入被 Enforcing 拒绝。该结果保持为落盘失败，
+下一步转入临时最小专用策略，不重复当前录音。完整哈希、数据清理和恢复状态见
+[v84 实机记录](2026-09-11-r1-factory-audio-v84-device.md)。

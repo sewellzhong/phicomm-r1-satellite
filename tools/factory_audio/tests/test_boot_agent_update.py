@@ -100,6 +100,8 @@ class BootAgentUpdateTest(unittest.TestCase):
             self.assertEqual("pass_for_device_locked_boot_write", result["status"])
             self.assertEqual(["ramdisk_agent"], result["declared_changes"])
             self.assertEqual(update.digest(new_agent), result["new_agent_sha256"])
+            self.assertEqual(update.digest(root / "overlay.json"),
+                             result["overlay_manifest_sha256"])
             candidate = (Path(args.output_dir) / "boot-agent-update.img").read_bytes()
             _, kernel, ramdisk, second = boot.boot_parts(candidate)
             parsed = {entry.name: entry.data
@@ -186,11 +188,63 @@ class BootAgentUpdateTest(unittest.TestCase):
                 ["ramdisk_agent", "ramdisk_init_vendor_debug_flag"],
                 result["declared_changes"])
             self.assertTrue(result["allow_vendor_debug_files"])
+            self.assertEqual(update.digest(root / "candidate-overlay.json"),
+                             result["overlay_manifest_sha256"])
             candidate = (Path(args.output_dir) / "boot-agent-update.img").read_bytes()
             _, _, ramdisk, _ = boot.boot_parts(candidate)
             parsed = {entry.name: entry.data
                       for entry in boot.parse_cpio(gzip.decompress(ramdisk))}
             self.assertEqual(candidate_init, parsed[update.INIT_ENTRY])
+
+    def test_update_accepts_legacy_incremental_manifest_for_chaining(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            root = Path(directory)
+            args, _, _ = self.fixture(root)
+            manifest_path = root / "manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest["current_overlay_manifest_sha256"] = manifest.pop(
+                "overlay_manifest_sha256")
+            manifest_path.write_text(json.dumps(manifest))
+            previous_reference = update.REFERENCE
+            update.REFERENCE = root / "reference.json"
+            try:
+                with mock.patch.object(update, "assert_agent_elf32_arm"):
+                    result = update.build(args)
+            finally:
+                update.REFERENCE = previous_reference
+            self.assertEqual(update.digest(root / "overlay.json"),
+                             result["overlay_manifest_sha256"])
+
+    def test_update_accepts_agent_only_candidate_with_overlay_lineage(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            root = Path(directory)
+            args, _, first_agent = self.fixture(root)
+            previous_reference = update.REFERENCE
+            update.REFERENCE = root / "reference.json"
+            try:
+                with mock.patch.object(update, "assert_agent_elf32_arm"):
+                    first = update.build(args)
+                first_image = Path(args.output_dir) / "boot-agent-update.img"
+                (root / "next-a.img").write_bytes(first_image.read_bytes())
+                (root / "next-b.img").write_bytes(first_image.read_bytes())
+                first_manifest = Path(args.output_dir) / "manifest.json"
+                legacy = json.loads(first_manifest.read_text())
+                legacy.pop("overlay_manifest_sha256")
+                first_manifest.write_text(json.dumps(legacy))
+                second_agent = root / "second-agent"
+                second_agent.write_bytes(b"second-arm-agent")
+                args.current_boot_a = root / "next-a.img"
+                args.current_boot_b = root / "next-b.img"
+                args.current_boot_manifest = first_manifest
+                args.agent = second_agent
+                args.expected_agent_sha256 = update.digest(second_agent)
+                args.output_dir = root / "second-output"
+                with mock.patch.object(update, "assert_agent_elf32_arm"):
+                    second = update.build(args)
+            finally:
+                update.REFERENCE = previous_reference
+            self.assertEqual(update.digest(first_agent), second["old_agent_sha256"])
+            self.assertEqual(update.digest(second_agent), second["new_agent_sha256"])
 
     def test_update_refuses_unrelated_candidate_init_change(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as directory:
