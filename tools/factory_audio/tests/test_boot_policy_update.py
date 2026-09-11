@@ -95,7 +95,7 @@ class BootPolicyUpdateTest(unittest.TestCase):
                 "temporary": True,
                 "selinux_target_type": "vfat",
                 "filename_transition_confinement": False,
-                "risk_scope": "mediaserver_write_applies_to_visible_vfat_type_objects",
+                "risk_scope": "r1_factory_audio_write_applies_to_visible_vfat_type_objects",
                 "restore_production_boot_after_probe": True,
                 "risk_acknowledgement": update.RISK_ACK,
             },

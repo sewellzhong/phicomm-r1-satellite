@@ -42,11 +42,11 @@ class DevicePolicyTemplateTest(unittest.TestCase):
         self.assertEqual(
             policy_patcher.DIAGNOSTIC_VFAT_VENDOR_FILE_RULES,
             rules[-len(policy_patcher.DIAGNOSTIC_VFAT_VENDOR_FILE_RULES):])
-        self.assertFalse(any(source == "mediaserver" and target == "shell_exec"
+        self.assertFalse(any(source == "r1_factory_audio" and target == "shell_exec"
                              for source, target, _, _ in rules))
         self.assertFalse(any("execute" in permissions
-                             for source, _, _, permissions in rules
-                             if source == "mediaserver"))
+                             for source, target, _, permissions in rules
+                             if source == "r1_factory_audio" and target == "vfat"))
 
     def test_vfat_risk_acknowledgement_is_refused_without_debug_profile(self):
         with self.assertRaisesRegex(

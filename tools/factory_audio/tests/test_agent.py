@@ -181,6 +181,12 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(2, result.returncode)
         self.assertIn("vendor_debug_files_require_vendor_backend", result.stderr)
 
+    def test_sdcard_group_is_retained_only_for_explicit_vendor_debug_boot(self):
+        source = (ROOT / "android/factory-audio-agent/src/main.cpp").read_text()
+        self.assertIn("constexpr gid_t kR1SdcardWriteGid = 1015", source)
+        self.assertIn("allow_vendor_debug_files ? 1 : 0", source)
+        self.assertIn("supplementary_group_drop_mismatch", source)
+
     def test_android_init_socket_is_inherited_without_rebinding_path(self):
         self.client.close()
         self.stop_agent()

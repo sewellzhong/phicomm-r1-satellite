@@ -32,6 +32,7 @@ constexpr int kReferenceUnavailable = 1;
 constexpr int kReferenceActive = 2;
 constexpr int kReferenceStale = 3;
 constexpr uint64_t kDefaultFramePeriodNs = 20000000ULL;
+constexpr gid_t kR1SdcardWriteGid = 1015;
 
 volatile sig_atomic_t g_stop = 0;
 
@@ -642,12 +643,25 @@ int main(int argc, char** argv) {
     return 1;
   }
   if (drop_uid >= 0) {
-    if (geteuid() != 0 || setgroups(0, nullptr) != 0
+    gid_t diagnostic_group = kR1SdcardWriteGid;
+    const size_t diagnostic_group_count = allow_vendor_debug_files ? 1 : 0;
+    if (geteuid() != 0
+        || setgroups(diagnostic_group_count,
+                     allow_vendor_debug_files ? &diagnostic_group : nullptr) != 0
         || setgid(static_cast<gid_t>(drop_gid)) != 0
         || setuid(static_cast<uid_t>(drop_uid)) != 0
         || geteuid() != static_cast<uid_t>(drop_uid)
         || getegid() != static_cast<gid_t>(drop_gid)) {
       perror("privilege_drop"); close(server);
+      if (owns_socket_path) safe_remove_socket(socket_path);
+      return 1;
+    }
+    gid_t retained_group = 0;
+    const int retained_group_count = getgroups(1, &retained_group);
+    if ((!allow_vendor_debug_files && retained_group_count != 0)
+        || (allow_vendor_debug_files
+            && (retained_group_count != 1 || retained_group != kR1SdcardWriteGid))) {
+      fprintf(stderr, "supplementary_group_drop_mismatch\n"); close(server);
       if (owns_socket_path) safe_remove_socket(socket_path);
       return 1;
     }

@@ -58,10 +58,10 @@ RULES = (
 # These rules are therefore intentionally separate from RULES and may only be
 # added to a short-lived diagnostic policy with an explicit risk acknowledgement.
 DIAGNOSTIC_VFAT_VENDOR_FILE_RULES = (
-    ("mediaserver", "vfat", "dir", "search,write,add_name"),
-    ("mediaserver", "vfat", "file", "create,open,write,getattr,setattr"),
+    ("r1_factory_audio", "vfat", "dir", "search,write,add_name"),
+    ("r1_factory_audio", "vfat", "file", "create,open,write,getattr,setattr"),
 )
-DIAGNOSTIC_VFAT_RISK_ACK = "accept-mediaserver-vfat-type-wide-write"
+DIAGNOSTIC_VFAT_RISK_ACK = "accept-r1-factory-audio-vfat-type-wide-write"
 
 
 class PolicyError(RuntimeError):
@@ -158,7 +158,7 @@ def patch(args):
                 "selinux_target_type": "vfat",
                 "filename_transition_confinement": False,
                 "limitation": "vfat_has_no_per_file_selinux_xattrs",
-                "risk_scope": "mediaserver_write_applies_to_visible_vfat_type_objects",
+                "risk_scope": "r1_factory_audio_write_applies_to_visible_vfat_type_objects",
                 "restore_production_boot_after_probe": True,
                 "risk_acknowledgement": risk_ack,
             }

@@ -23,13 +23,13 @@ BASE_BUILDER = Path(__file__).with_name("build-experimental-boot.py")
 POLICY_ENTRY = "sepolicy"
 AGENT_ENTRY = "sbin/r1-factory-audio-agent"
 PROFILE_NAME = "vendor_debug_files_vfat_type_wide"
-RISK_ACK = "accept-mediaserver-vfat-type-wide-write"
+RISK_ACK = "accept-r1-factory-audio-vfat-type-wide-write"
 PATCHER_SHA256 = "9e301f027fb30244ef143d367d49d266c944e90345099a60e3414e7ad09d5c11"
 PATCHER_SOURCE_COMMIT = "e38bff264913e5bc2c8f18f67ec9f1017ace3982"
 BASE_RULE_COUNT = 33
 EXPECTED_DIAGNOSTIC_RULES = (
-    ("mediaserver", "vfat", "dir", "search,write,add_name"),
-    ("mediaserver", "vfat", "file", "create,open,write,getattr,setattr"),
+    ("r1_factory_audio", "vfat", "dir", "search,write,add_name"),
+    ("r1_factory_audio", "vfat", "file", "create,open,write,getattr,setattr"),
 )
 
 _SPEC = importlib.util.spec_from_file_location("r1_experimental_boot", BASE_BUILDER)
@@ -124,7 +124,7 @@ def validate_policy_manifest(manifest, current_policy, candidate_policy, referen
     require(profile.get("filename_transition_confinement") is False,
             "diagnostic_policy_scope_not_disclosed")
     require(profile.get("risk_scope")
-            == "mediaserver_write_applies_to_visible_vfat_type_objects",
+            == "r1_factory_audio_write_applies_to_visible_vfat_type_objects",
             "diagnostic_policy_risk_scope_invalid")
     require(profile.get("restore_production_boot_after_probe") is True,
             "diagnostic_policy_restore_requirement_missing")
