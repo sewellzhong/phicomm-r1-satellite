@@ -30,6 +30,8 @@
 
 ## 阶段与版本记录
 
+- [2026-09-11-r1-factory-audio-v87-sidecar-device](2026-09-11-r1-factory-audio-v87-sidecar-device.md)
+- [2026-09-11-r1-factory-audio-micarray-sidecar-host](2026-09-11-r1-factory-audio-micarray-sidecar-host.md)
 - [2026-09-11-r1-factory-audio-micarray-tap-host](2026-09-11-r1-factory-audio-micarray-tap-host.md)
 - [2026-09-11-r1-factory-audio-debug-write-offline](2026-09-11-r1-factory-audio-debug-write-offline.md)
 - [2026-09-11-r1-factory-audio-v20-device](2026-09-11-r1-factory-audio-v20-device.md)

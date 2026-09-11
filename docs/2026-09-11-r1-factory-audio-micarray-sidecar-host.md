@@ -1,5 +1,8 @@
 # R1 MicArray 原始 sidecar 受控导出主机记录（2026-09-11）
 
+> 后续状态：v86 首次实机窗口暴露 4 声道 WAV 头限制；v87 已修复并完成受控导出，见
+> [v87 实机记录](2026-09-11-r1-factory-audio-v87-sidecar-device.md)。
+
 ## 结论
 
 v86 主机候选已将 v85 只在内存中计数的 `Unisound_MicArray_Process` 旁路载荷保存为同一有界
