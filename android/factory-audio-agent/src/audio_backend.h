@@ -94,6 +94,7 @@ class VendorBackend final : public AudioBackend {
   bool initialized_ = false;
   bool streaming_ = false;
   bool debug_files_active_ = false;
+  uint32_t debug_frames_ = 0;
   std::string board_version_;
   std::vector<uint8_t> input_buffer_;
 
@@ -107,5 +108,6 @@ class VendorBackend final : public AudioBackend {
   int (*get_doa_)() = nullptr;
   const char* (*get_board_version_)() = nullptr;
   int (*set_debug_mode_)(int) = nullptr;
+  int (*set_wakeup_status_)(int) = nullptr;
   int (*close_algorithm_)(int) = nullptr;
 };

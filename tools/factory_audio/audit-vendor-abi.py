@@ -18,6 +18,7 @@ REQUIRED_SYMBOLS = (
     "get4MicBoardVersion",
     "get4MicDoaResult",
     "set4MicDebugMode",
+    "set4MicWakeUpStatus",
     "uni_4mic_hal_init",
     "uni_4mic_hal_release",
     "uni_4mic_pcm_close",

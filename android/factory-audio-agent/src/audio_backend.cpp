@@ -63,6 +63,7 @@ bool VendorBackend::resolve_symbols() {
       && load_symbol(library_, "get4MicDoaResult", &get_doa_)
       && load_symbol(library_, "get4MicBoardVersion", &get_board_version_)
       && load_symbol(library_, "set4MicDebugMode", &set_debug_mode_)
+      && load_symbol(library_, "set4MicWakeUpStatus", &set_wakeup_status_)
       && load_symbol(library_, "close4MicAlgorithm", &close_algorithm_);
 }
 
@@ -105,6 +106,12 @@ bool VendorBackend::start() {
 
 bool VendorBackend::read_frame(BackendFrame* frame) {
   if (!streaming_ || frame == nullptr) return false;
+  // Match firmware 3448's original manager lifecycle only inside an explicit
+  // debug-file request.  The first second is the pre-wake (waking) window;
+  // subsequent frames are marked waked.  Production capture never enters it.
+  if (debug_files_active_ && debug_frames_ == 50 && set_wakeup_status_(1) != 0) {
+    return false;
+  }
   // Firmware 3448's wrapper returns tinyalsa pcm_read's status: 0 on success,
   // a negative value on failure. It does not return the byte count.
   int read_status = pcm_read_(
@@ -126,6 +133,7 @@ bool VendorBackend::read_frame(BackendFrame* frame) {
   int doa = get_doa_();
   frame->doa_valid = doa >= 0 && doa < 360;
   frame->doa_degrees = frame->doa_valid ? doa : 0;
+  if (debug_files_active_) ++debug_frames_;
   return true;
 }
 
@@ -136,10 +144,23 @@ bool VendorBackend::submit_playback_reference(const std::vector<uint8_t>&) {
 }
 
 bool VendorBackend::set_vendor_debug_files(bool enabled) {
-  if (!initialized_ || streaming_ || set_debug_mode_ == nullptr) return false;
-  if (set_debug_mode_(enabled ? 1 : 0) != 0) return false;
-  debug_files_active_ = enabled;
-  return true;
+  if (!initialized_ || streaming_ || set_debug_mode_ == nullptr
+      || set_wakeup_status_ == nullptr) return false;
+  if (enabled) {
+    if (set_debug_mode_(1) != 0) return false;
+    if (set_wakeup_status_(0) != 0) {
+      set_debug_mode_(0);
+      return false;
+    }
+    debug_frames_ = 0;
+    debug_files_active_ = true;
+    return true;
+  }
+  const bool wake_reset = set_wakeup_status_(0) == 0;
+  const bool debug_reset = set_debug_mode_(0) == 0;
+  debug_frames_ = 0;
+  debug_files_active_ = false;
+  return wake_reset && debug_reset;
 }
 
 void VendorBackend::stop() {
@@ -151,7 +172,9 @@ void VendorBackend::release() {
   stop();
   if (handle_ != 0 && pcm_close_ != nullptr) pcm_close_(handle_);
   handle_ = 0;
+  if (initialized_ && set_wakeup_status_ != nullptr) set_wakeup_status_(0);
   if (initialized_ && set_debug_mode_ != nullptr) set_debug_mode_(0);
+  debug_frames_ = 0;
   debug_files_active_ = false;
   if (initialized_ && hal_release_ != nullptr) hal_release_();
   initialized_ = false;
@@ -169,5 +192,6 @@ void VendorBackend::release() {
   get_doa_ = nullptr;
   get_board_version_ = nullptr;
   set_debug_mode_ = nullptr;
+  set_wakeup_status_ = nullptr;
   close_algorithm_ = nullptr;
 }

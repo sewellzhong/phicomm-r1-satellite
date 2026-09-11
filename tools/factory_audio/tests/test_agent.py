@@ -281,6 +281,8 @@ class AgentTest(unittest.TestCase):
         environment["R1_FACTORY_AUDIO_TEST_DEBUG_DIR"] = self.temporary.name
         environment["R1_VENDOR_MOCK_SYSTEM_COMMAND"] = (
             "mkdir -p " + self.temporary.name + "/")
+        wake_trace = Path(self.temporary.name) / "wake-status"
+        environment["R1_VENDOR_MOCK_WAKE_STATUS_FILE"] = str(wake_trace)
         self.agent = subprocess.Popen([
             str(AGENT), "--expected-uid", str(os.getuid()),
             "--socket", str(self.socket_path),
@@ -316,7 +318,9 @@ class AgentTest(unittest.TestCase):
         health = self.receive().health
         self.assertEqual(self.pb.CAPTURE_STATE_STREAMING, health.capture_state)
         self.assertTrue(health.vendor_debug_files_active)
-        self.receive()
+        for _ in range(51):
+            self.receive()
+        self.assertTrue(wake_trace.read_text().startswith("01"))
 
         stop = self.pb.Envelope(protocol_version=1, request_id=4)
         stop.stop_capture.SetInParent()
@@ -326,6 +330,7 @@ class AgentTest(unittest.TestCase):
             if reply.request_id == 4:
                 break
         self.assertFalse(reply.health.vendor_debug_files_active)
+        self.assertTrue(wake_trace.read_text().endswith("0"))
 
     def test_vendor_debug_files_refuse_non_allowlisted_shell_command(self):
         self.client.close()
