@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import struct
+import subprocess
 import sys
 
 
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 REFERENCE = ROOT / "docs/references/r1-3448-boot-baseline.json"
 BASE_BUILDER = Path(__file__).with_name("build-experimental-boot.py")
 POLICY_ENTRY = "sepolicy"
+AGENT_ENTRY = "sbin/r1-factory-audio-agent"
 PROFILE_NAME = "vendor_debug_files_vfat_type_wide"
 RISK_ACK = "accept-mediaserver-vfat-type-wide-write"
 PATCHER_SHA256 = "9e301f027fb30244ef143d367d49d266c944e90345099a60e3414e7ad09d5c11"
@@ -80,6 +82,25 @@ def effective_overlay_manifest_hash(manifest):
     return value
 
 
+def assert_agent_elf32_arm(path):
+    header = subprocess.run(
+        ["readelf", "-hW", str(path)], check=True, capture_output=True, text=True
+    ).stdout
+    require("Class:                             ELF32" in header, "agent_not_elf32")
+    require("Machine:                           ARM" in header, "agent_not_arm")
+
+
+def validate_agent_overlay(current_overlay, candidate_overlay, old_hash, new_hash):
+    require(current_overlay.get("agent_sha256") == old_hash,
+            "embedded_agent_hash_not_current_overlay")
+    require(candidate_overlay.get("agent_sha256") == new_hash,
+            "candidate_overlay_agent_hash_mismatch")
+    keys = set(current_overlay) | set(candidate_overlay)
+    for key in keys - {"agent_sha256"}:
+        require(current_overlay.get(key) == candidate_overlay.get(key),
+                f"candidate_overlay_contract_changed:{key}")
+
+
 def validate_policy_manifest(manifest, current_policy, candidate_policy, reference):
     require(manifest.get("schema_version") == 1, "policy_manifest_schema_invalid")
     require(manifest.get("status") == "pass_for_boot_staging_only",
@@ -132,6 +153,21 @@ def build(args):
                                        "current_overlay_manifest")
     candidate_policy = secure_file(args.candidate_policy, "candidate_policy")
     policy_manifest_path = secure_file(args.policy_manifest, "policy_manifest")
+    candidate_agent = None
+    candidate_overlay_path = None
+    if getattr(args, "candidate_agent", None) is not None:
+        require(getattr(args, "expected_agent_sha256", None) is not None,
+                "expected_agent_sha256_required")
+        require(getattr(args, "candidate_overlay_manifest", None) is not None,
+                "candidate_overlay_manifest_required")
+        candidate_agent = secure_file(args.candidate_agent, "candidate_agent")
+        candidate_overlay_path = secure_file(
+            args.candidate_overlay_manifest, "candidate_overlay_manifest")
+    else:
+        require(getattr(args, "expected_agent_sha256", None) is None,
+                "candidate_agent_required_for_expected_hash")
+        require(getattr(args, "candidate_overlay_manifest", None) is None,
+                "candidate_agent_required_for_overlay")
     output = Path(args.output_dir).resolve()
     try:
         output.relative_to(ROOT)
@@ -182,15 +218,34 @@ def build(args):
         policy_manifest, current_policy, candidate_policy, reference)
     require(boot.digest_bytes(current_policy) != digest(candidate_policy),
             "policy_update_is_noop")
+    old_agent_hash = None
+    new_agent_hash = None
+    candidate_overlay = None
+    if candidate_agent is not None:
+        agent_matches = [entry for entry in entries if entry.name == AGENT_ENTRY]
+        require(len(agent_matches) == 1, "current_agent_entry_not_unique")
+        old_agent_hash = boot.digest_bytes(agent_matches[0].data)
+        new_agent_hash = args.expected_agent_sha256.lower()
+        require(len(new_agent_hash) == 64
+                and all(character in "0123456789abcdef" for character in new_agent_hash),
+                "expected_agent_sha256_invalid")
+        require(digest(candidate_agent) == new_agent_hash, "candidate_agent_hash_mismatch")
+        require(old_agent_hash != new_agent_hash, "agent_update_is_noop")
+        assert_agent_elf32_arm(candidate_agent)
+        candidate_overlay = load(candidate_overlay_path)
+        validate_agent_overlay(overlay, candidate_overlay, old_agent_hash, new_agent_hash)
 
     before = {entry.name: (entry_contract(entry), entry.data) for entry in entries}
     require(len(before) == len(entries), "cpio_duplicate_entry")
     boot.replace(entries, POLICY_ENTRY, candidate_policy.read_bytes())
+    if candidate_agent is not None:
+        boot.replace(entries, AGENT_ENTRY, candidate_agent.read_bytes())
     after = {entry.name: (entry_contract(entry), entry.data) for entry in entries}
     require(set(before) == set(after), "ramdisk_entry_set_changed")
     for name in before:
         require(before[name][0] == after[name][0], f"ramdisk_metadata_changed:{name}")
-        if name != POLICY_ENTRY:
+        if name not in ({POLICY_ENTRY, AGENT_ENTRY}
+                        if candidate_agent is not None else {POLICY_ENTRY}):
             require(before[name][1] == after[name][1], f"ramdisk_payload_changed:{name}")
 
     new_cpio = boot.build_cpio(entries)
@@ -220,7 +275,12 @@ def build(args):
     require(set(updated) == set(before), "verified_ramdisk_entry_set_changed")
     for name in before:
         require(updated[name][0] == before[name][0], f"verified_ramdisk_metadata_changed:{name}")
-        expected = candidate_policy.read_bytes() if name == POLICY_ENTRY else before[name][1]
+        if name == POLICY_ENTRY:
+            expected = candidate_policy.read_bytes()
+        elif name == AGENT_ENTRY and candidate_agent is not None:
+            expected = candidate_agent.read_bytes()
+        else:
+            expected = before[name][1]
         require(updated[name][1] == expected, f"verified_ramdisk_payload_changed:{name}")
 
     output.mkdir(mode=0o700)
@@ -250,10 +310,21 @@ def build(args):
         "authorization": current_manifest["authorization"],
         "current_boot_manifest_sha256": digest(current_manifest_path),
         "current_overlay_manifest_sha256": digest(current_overlay_path),
-        "overlay_manifest_sha256": digest(current_overlay_path),
-        "declared_changes": ["ramdisk_enforcing_sepolicy_temporary_vfat_diagnostic"],
+        "overlay_manifest_sha256": (digest(candidate_overlay_path)
+                                    if candidate_overlay_path is not None
+                                    else digest(current_overlay_path)),
+        "declared_changes": (["ramdisk_agent",
+                              "ramdisk_enforcing_sepolicy_temporary_vfat_diagnostic"]
+                             if candidate_agent is not None else
+                             ["ramdisk_enforcing_sepolicy_temporary_vfat_diagnostic"]),
         "restore_production_boot_after_probe": True,
     }
+    if candidate_agent is not None:
+        result.update({
+            "old_agent_sha256": old_agent_hash,
+            "new_agent_sha256": new_agent_hash,
+            "candidate_overlay_manifest_sha256": digest(candidate_overlay_path),
+        })
     result_path = output / "manifest.json"
     result_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n",
                            encoding="utf-8")
@@ -269,13 +340,16 @@ def main(argv=None):
     parser.add_argument("--current-overlay-manifest", required=True)
     parser.add_argument("--candidate-policy", required=True)
     parser.add_argument("--policy-manifest", required=True)
+    parser.add_argument("--candidate-agent")
+    parser.add_argument("--expected-agent-sha256")
+    parser.add_argument("--candidate-overlay-manifest")
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
     try:
         print(json.dumps(build(args), sort_keys=True))
         return 0
     except (UpdateError, boot.BootError, OSError, ValueError, KeyError,
-            json.JSONDecodeError, struct.error) as error:
+            json.JSONDecodeError, struct.error, subprocess.CalledProcessError) as error:
         print("Boot policy update refused: " + str(error), file=sys.stderr)
         return 2
 

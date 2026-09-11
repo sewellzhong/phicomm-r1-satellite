@@ -6,6 +6,7 @@ import stat
 import struct
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -51,7 +52,8 @@ class BootPolicyUpdateTest(unittest.TestCase):
         for name in ("current-a.img", "current-b.img"):
             (root / name).write_bytes(image)
         overlay = {"device": device, "authorization": authorization,
-                   "allow_vendor_debug_files": True}
+                   "allow_vendor_debug_files": True,
+                   "agent_sha256": boot.digest_bytes(b"agent")}
         (root / "overlay.json").write_text(json.dumps(overlay))
         manifest = {
             "status": "pass_for_device_locked_boot_write", "device": device,
@@ -106,6 +108,9 @@ class BootPolicyUpdateTest(unittest.TestCase):
             "current_overlay_manifest": root / "overlay.json",
             "candidate_policy": candidate,
             "policy_manifest": root / "policy-manifest.json",
+            "candidate_agent": None,
+            "expected_agent_sha256": None,
+            "candidate_overlay_manifest": None,
             "output_dir": root / "output",
         })
         return args, entries, policy_manifest
@@ -171,6 +176,36 @@ class BootPolicyUpdateTest(unittest.TestCase):
             with self.assertRaisesRegex(update.UpdateError,
                                         "embedded_policy_hash_not_policy_manifest"):
                 self.run_build(root, args)
+
+    def test_update_changes_only_agent_and_temporary_policy(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            root = Path(directory)
+            args, original_entries, _ = self.fixture(root)
+            agent = root / "candidate-agent"
+            agent.write_bytes(b"new-arm-agent")
+            overlay = json.loads(Path(args.current_overlay_manifest).read_text())
+            overlay["agent_sha256"] = update.digest(agent)
+            candidate_overlay = root / "candidate-overlay.json"
+            candidate_overlay.write_text(json.dumps(overlay))
+            args.candidate_agent = agent
+            args.expected_agent_sha256 = update.digest(agent)
+            args.candidate_overlay_manifest = candidate_overlay
+            with mock.patch.object(update, "assert_agent_elf32_arm"):
+                result = self.run_build(root, args)
+            self.assertEqual([
+                "ramdisk_agent",
+                "ramdisk_enforcing_sepolicy_temporary_vfat_diagnostic",
+            ], result["declared_changes"])
+            candidate = (root / "output/boot-policy-update.img").read_bytes()
+            _, _, ramdisk, _ = boot.boot_parts(candidate)
+            parsed = {entry.name: entry.data
+                      for entry in boot.parse_cpio(gzip.decompress(ramdisk))}
+            self.assertEqual(agent.read_bytes(), parsed[update.AGENT_ENTRY])
+            self.assertEqual(Path(args.candidate_policy).read_bytes(),
+                             parsed[update.POLICY_ENTRY])
+            for entry in original_entries:
+                if entry.name not in (update.AGENT_ENTRY, update.POLICY_ENTRY):
+                    self.assertEqual(entry.data, parsed[entry.name])
 
 
 if __name__ == "__main__":
