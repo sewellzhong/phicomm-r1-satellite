@@ -15,7 +15,8 @@ SPEC.loader.exec_module(audit_module)
 
 class DoaDirectionMatrixAuditTest(unittest.TestCase):
     def fixture(self, root, observed=(35, 125, 215, 305), concentrated=True,
-                claim_boundary="transport_reported_doa_and_runtime_output_shape"):
+                claim_boundary="transport_reported_doa_and_runtime_output_shape",
+                evaluation_mode=None):
         captures = []
         for label, expected, angle in zip(
                 ("front", "right", "back", "left"),
@@ -47,15 +48,17 @@ class DoaDirectionMatrixAuditTest(unittest.TestCase):
                 "audit_report": report.name,
             })
         manifest = root / "manifest.json"
-        manifest.write_text(json.dumps({
-            "device": "r1-sample01", "captures": captures,
-        }), encoding="utf-8")
+        value = {"device": "r1-sample01", "captures": captures}
+        if evaluation_mode is not None:
+            value["evaluation_mode"] = evaluation_mode
+        manifest.write_text(json.dumps(value), encoding="utf-8")
         return manifest
 
     def test_accepts_cardinal_pattern_with_unknown_device_rotation(self):
         with tempfile.TemporaryDirectory() as directory:
             result = audit_module.audit(self.fixture(Path(directory)))
         self.assertEqual("pass", result["status"])
+        self.assertEqual("relative_cardinal_acceptance", result["evaluation_mode"])
         self.assertAlmostEqual(35.0, result["fitted_device_zero_offset_degrees"])
         self.assertEqual("four_direction_reported_doa_relative_response_only",
                          result["claim_boundary"])
@@ -80,6 +83,41 @@ class DoaDirectionMatrixAuditTest(unittest.TestCase):
                 claim_boundary="micarray_symbol_binding_continuity_and_nonempty_payloads",
             ))
         self.assertEqual("pass", result["status"])
+
+    def test_vendor_native_mode_preserves_angles_without_directional_acceptance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = audit_module.audit(self.fixture(
+                Path(directory),
+                observed=(305, 225, 145, 225),
+                evaluation_mode="vendor_native_diagnostic",
+            ))
+        self.assertEqual("pass", result["status"])
+        self.assertEqual("skipped_by_user", result["directional_acceptance"])
+        self.assertFalse(result["directional_relationship_evaluated"])
+        self.assertEqual("vendor_native_degrees_unremapped",
+                         result["reported_angle_semantics"])
+        self.assertNotIn("expected_degrees", result["captures"][0])
+        self.assertNotIn("residual_degrees", result["captures"][0])
+        self.assertIn("doa_directional_accuracy", result["unverified"])
+
+    def test_vendor_native_mode_still_fails_missing_doa_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.fixture(root, evaluation_mode="vendor_native_diagnostic")
+            report = root / "front.json"
+            value = json.loads(report.read_text())
+            value["frames"] = 200
+            value["doa_valid_fraction"] = value["doa_valid_frames"] / 200
+            report.write_text(json.dumps(value))
+            result = audit_module.audit(manifest)
+        self.assertEqual("fail", result["status"])
+        self.assertFalse(result["captures"][0]["valid_fraction_ok"])
+
+    def test_rejects_unknown_evaluation_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = self.fixture(Path(directory), evaluation_mode="factory_pass")
+            with self.assertRaisesRegex(RuntimeError, "evaluation_mode_invalid"):
+                audit_module.audit(manifest)
 
     def test_rejects_wrong_labels(self):
         with tempfile.TemporaryDirectory() as directory:

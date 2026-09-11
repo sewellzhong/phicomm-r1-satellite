@@ -1,0 +1,10 @@
+{
+  "device": "r1-sample01",
+  "evaluation_mode": "vendor_native_diagnostic",
+  "captures": [
+    {"label": "front", "audit_report": "front/audit.json"},
+    {"label": "right", "audit_report": "right/audit.json"},
+    {"label": "back", "audit_report": "back/audit.json"},
+    {"label": "left", "audit_report": "left/audit.json"}
+  ]
+}

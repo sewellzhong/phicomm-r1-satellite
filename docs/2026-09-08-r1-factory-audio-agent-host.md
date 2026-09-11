@@ -198,6 +198,15 @@ python3 tools/factory_audio/audit-doa-direction-matrix.py \
 它不证明四支麦克风各自响应，也不证明AEC消除量或DSP质量。原始录音、单次报告、矩阵
 清单和矩阵报告均保留在仓库外。
 
+2026-09-12起，当前首台按用户决定不再进行需要等距离、等音量声源的方向准确率人工验收。
+需按原厂上报语义检查功能与数据时，复制
+`tools/factory_audio/templates/doa-vendor-native.example.json`；其中
+`evaluation_mode=vendor_native_diagnostic`会原样保留原厂0～359度均值、直方图和集中度，
+不拟合零点、不生成期望角或残差。该模式仅在四份单次审计均通过且DOA有效帧比例满足
+门槛时返回`pass`，同时固定输出`directional_acceptance=skipped_by_user`、
+`directional_relationship_evaluated=false`并保留方向准确率为未验证。旧模板显式使用
+`relative_cardinal_acceptance`，仅用于历史或具备受控声学条件的专业诊断。
+
 ## 2026-09-11实机结果
 
 首个v2候选使用标准Android boot ID且ramdisk未按4字节对齐，被原厂U-Boot SHA检查拒绝并

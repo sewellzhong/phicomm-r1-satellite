@@ -1,5 +1,6 @@
 {
   "device": "r1-sample01",
+  "evaluation_mode": "relative_cardinal_acceptance",
   "captures": [
     {"label": "front", "expected_degrees": 0, "audit_report": "front/audit.json"},
     {"label": "right", "expected_degrees": 90, "audit_report": "right/audit.json"},

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit four labelled R1 DOA captures without contacting a device."""
+"""Audit or summarize four labelled R1 DOA captures without contacting a device."""
 
 import argparse
 import hashlib
@@ -10,6 +10,8 @@ import sys
 
 
 EXPECTED_LABELS = {"front", "right", "back", "left"}
+RELATIVE_CARDINAL_MODE = "relative_cardinal_acceptance"
+VENDOR_NATIVE_MODE = "vendor_native_diagnostic"
 
 
 def require(condition, message):
@@ -53,6 +55,9 @@ def audit(manifest_path, min_valid_fraction=0.8, min_resultant_length=0.5,
     manifest_path = Path(manifest_path).resolve()
     manifest = load_json(manifest_path)
     require(manifest.get("device") == "r1-sample01", "device_not_r1_sample01")
+    evaluation_mode = manifest.get("evaluation_mode", RELATIVE_CARDINAL_MODE)
+    require(evaluation_mode in {RELATIVE_CARDINAL_MODE, VENDOR_NATIVE_MODE},
+            "evaluation_mode_invalid")
     captures = manifest.get("captures")
     require(isinstance(captures, list) and len(captures) == 4,
             "exactly_four_direction_captures_required")
@@ -64,8 +69,9 @@ def audit(manifest_path, min_valid_fraction=0.8, min_resultant_length=0.5,
     differences = []
     for item in captures:
         expected = item.get("expected_degrees")
-        require(isinstance(expected, (int, float)) and 0 <= expected < 360,
-                f"expected_degrees_invalid_{item.get('label')}")
+        if evaluation_mode == RELATIVE_CARDINAL_MODE:
+            require(isinstance(expected, (int, float)) and 0 <= expected < 360,
+                    f"expected_degrees_invalid_{item.get('label')}")
         report_path = Path(item.get("audit_report", ""))
         if not report_path.is_absolute():
             report_path = manifest_path.parent / report_path
@@ -103,15 +109,40 @@ def audit(manifest_path, min_valid_fraction=0.8, min_resultant_length=0.5,
                 f"capture_concentration_mismatch_{item.get('label')}")
         require(abs(valid_fraction - report["doa_valid_frames"] / report["frames"]) < 1e-9,
                 f"capture_valid_fraction_mismatch_{item.get('label')}")
-        differences.append(circular_difference(observed, expected))
-        rows.append({
+        row = {
             "label": item["label"],
-            "expected_degrees": expected,
             "observed_mean_degrees": observed,
             "doa_valid_fraction": valid_fraction,
             "resultant_length": concentration,
             "audit_report_sha256": sha256(report_path),
-        })
+        }
+        if evaluation_mode == RELATIVE_CARDINAL_MODE:
+            differences.append(circular_difference(observed, expected))
+            row["expected_degrees"] = expected
+        rows.append(row)
+
+    if evaluation_mode == VENDOR_NATIVE_MODE:
+        for row in rows:
+            row["valid_fraction_ok"] = row["doa_valid_fraction"] >= min_valid_fraction
+        data_pass = all(row["valid_fraction_ok"] for row in rows)
+        return {
+            "status": "pass" if data_pass else "fail",
+            "device": manifest["device"],
+            "evaluation_mode": evaluation_mode,
+            "claim_boundary": "four_direction_vendor_reported_doa_data_only",
+            "manifest_sha256": sha256(manifest_path),
+            "reported_angle_semantics": "vendor_native_degrees_unremapped",
+            "directional_acceptance": "skipped_by_user",
+            "directional_relationship_evaluated": False,
+            "thresholds": {"min_valid_fraction": min_valid_fraction},
+            "captures": rows,
+            "unverified": [
+                "doa_directional_accuracy",
+                "independent_four_microphone_response",
+                "aec_cancellation_effect",
+                "dsp_output_quality",
+            ],
+        }
 
     offset = circular_offset(differences)
     for row in rows:
@@ -128,6 +159,7 @@ def audit(manifest_path, min_valid_fraction=0.8, min_resultant_length=0.5,
     return {
         "status": "pass" if directional_pass else "fail",
         "device": manifest["device"],
+        "evaluation_mode": evaluation_mode,
         "claim_boundary": "four_direction_reported_doa_relative_response_only",
         "manifest_sha256": sha256(manifest_path),
         "fitted_device_zero_offset_degrees": offset,
@@ -137,6 +169,8 @@ def audit(manifest_path, min_valid_fraction=0.8, min_resultant_length=0.5,
             "max_residual_degrees": max_residual_degrees,
         },
         "captures": rows,
+        "directional_acceptance": "evaluated",
+        "directional_relationship_evaluated": True,
         "unverified": [
             "independent_four_microphone_response",
             "aec_cancellation_effect",
