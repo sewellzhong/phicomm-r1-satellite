@@ -7,15 +7,17 @@ import dev.sewellzhong.r1probe.esphome.proto.EsphomeApi;
 import dev.sewellzhong.r1probe.esphome.proto.MessageIds;
 import java.io.IOException;
 
-/** Six stable number keys and one diagnostic sensor key, not protocol message IDs. Credentials never pass this surface. */
+/** Stable configuration keys and one diagnostic sensor key. Credentials never pass this surface. */
 final class NativeControls {
     private static final int BASE = 0x52310001;
-    private static final String[] IDS = {"wait_seconds", "quiet_seconds", "command_seconds", "volume", "speech_speed", "followup_wait_seconds"};
-    private static final String[] NAMES = {"等待开口时间", "讲话结束停顿时间", "单条命令总时长", "音量", "语速", "持续对话等待开口时间"};
-    private static final float[] MIN = {1, .2f, 5, 0, .5f, 1}, MAX = {120, 10, 120, 100, 1.5f, 120}, STEP = {1, .1f, 1, 1, .05f, 1};
+    private static final String[] IDS = {"wait_seconds", "quiet_seconds", "command_seconds", "volume", "speech_speed", "followup_wait_seconds", "timer_volume"};
+    private static final String[] NAMES = {"等待开口时间", "讲话结束停顿时间", "单条命令总时长", "音量", "语速", "持续对话等待开口时间", "计时器铃声音量"};
+    private static final float[] MIN = {1, .2f, 5, 0, .5f, 1, 1}, MAX = {120, 10, 120, 100, 1.5f, 120, 100}, STEP = {1, .1f, 1, 1, .05f, 1, 1};
+    private static final int TIMER_RINGTONE_KEY = BASE + 8;
     private final NativeSettings settings;
     private final AudioManager audio;
-    private final float[] previous = {Float.NaN, Float.NaN, Float.NaN, Float.NaN, Float.NaN, Float.NaN};
+    private final float[] previous = {Float.NaN, Float.NaN, Float.NaN, Float.NaN, Float.NaN, Float.NaN, Float.NaN};
+    private String previousTimerRingtone;
     private boolean subscribed;
     private volatile int wakeGeneration;
     private int lastGeneration = -1;
@@ -29,11 +31,11 @@ final class NativeControls {
         switch(i) {
             case 0: return settings.waitSeconds(); case 1: return settings.quietSeconds();
             case 2: return settings.commandSeconds(); case 4: return settings.speechSpeed();
-            case 5: return settings.followupWaitSeconds();
+            case 5: return settings.followupWaitSeconds(); case 6: return settings.timerVolumePercent();
             default: return settings.volumePercent();
         }
     }
-    private int key(int index) { return BASE + (index == 5 ? 6 : index); }
+    private int key(int index) { return BASE + (index >= 5 ? index + 1 : index); }
     void list(NativeVoiceSession.Sender sender) throws IOException {
         sender.send(MessageIds.ListEntitiesSensorResponse,
             EsphomeApi.ListEntitiesSensorResponse.newBuilder().setKey(BASE+5).setObjectId("wake_generation")
@@ -42,13 +44,27 @@ final class NativeControls {
             EsphomeApi.ListEntitiesNumberResponse.newBuilder().setKey(key(i)).setObjectId(IDS[i]).setName(NAMES[i])
                 .setMinValue(MIN[i]).setMaxValue(MAX[i]).setStep(STEP[i])
                 .setEntityCategoryValue(1).setModeValue(i == 3 ? 2 : 1)
-                .setUnitOfMeasurement((i < 3 || i == 5) ? "s" : i == 3 ? "%" : "倍").build());
+                .setUnitOfMeasurement((i < 3 || i == 5) ? "s" : (i == 3 || i == 6) ? "%" : "倍").build());
+        sender.send(MessageIds.ListEntitiesSelectResponse,
+            EsphomeApi.ListEntitiesSelectResponse.newBuilder().setKey(TIMER_RINGTONE_KEY)
+                .setObjectId("timer_ringtone").setName("计时器铃声")
+                .addOptions("classic").addOptions("gentle").addOptions("urgent")
+                .setEntityCategoryValue(1).build());
     }
     boolean message(int type, byte[] payload, NativeVoiceSession.Sender sender) throws IOException {
         if (type == MessageIds.SubscribeStatesRequest) { subscribed = true; publish(sender, true); return true; }
+        if (type == MessageIds.SelectCommandRequest) {
+            EsphomeApi.SelectCommandRequest command = EsphomeApi.SelectCommandRequest.parseFrom(payload);
+            if (command.getKey() != TIMER_RINGTONE_KEY || command.getDeviceId() != 0) return true;
+            String value = command.getState();
+            if ("classic".equals(value) || "gentle".equals(value) || "urgent".equals(value))
+                settings.setting("timer_ringtone", value);
+            publish(sender, true); return true;
+        }
         if (type != MessageIds.NumberCommandRequest) return false;
         EsphomeApi.NumberCommandRequest command = EsphomeApi.NumberCommandRequest.parseFrom(payload);
-        int i = command.getKey() == BASE+6 ? 5 : command.getKey() - BASE; float v = command.getState();
+        int i = command.getKey() >= BASE+6 ? command.getKey() - BASE - 1
+                : command.getKey() - BASE; float v = command.getState();
         if (command.getKey() == BASE+5) return true; // Sensor key is never a number command.
         if (command.getDeviceId() != 0 || i < 0 || i >= IDS.length) return true;
         if (Float.isNaN(v) || Float.isInfinite(v) || v < MIN[i] || v > MAX[i]) { publish(sender, true); return true; }
@@ -72,6 +88,12 @@ final class NativeControls {
                 sender.send(MessageIds.NumberStateResponse, EsphomeApi.NumberStateResponse.newBuilder().setKey(key(i)).setState(v).build());
                 previous[i] = v;
             }
+        }
+        String ringtone = settings.timerRingtone();
+        if (force || !ringtone.equals(previousTimerRingtone)) {
+            sender.send(MessageIds.SelectStateResponse, EsphomeApi.SelectStateResponse.newBuilder()
+                .setKey(TIMER_RINGTONE_KEY).setState(ringtone).build());
+            previousTimerRingtone = ringtone;
         }
     }
 }

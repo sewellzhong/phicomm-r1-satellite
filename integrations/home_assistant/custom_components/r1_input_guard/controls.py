@@ -8,7 +8,7 @@ from .volume import percentage
 class Control:
     target: str | None
     operation: str
-    value: float = 0
+    value: float | str = 0
 
 
 def normalize(text):
@@ -73,6 +73,16 @@ def parse_control(text):
     text = re.sub(r'^(?:把|将)', '', text)
     wait = parse_wait(text)
     if wait: return wait
+    match = re.fullmatch(r'计时器(?:的)?铃声(?:设置为|设为|调成|改成)(经典|柔和|紧急)(?:铃声)?', text)
+    if match:
+        return Control('timer_ringtone', 'choice', {'经典':'classic','柔和':'gentle','紧急':'urgent'}[match[1]])
+    if re.fullmatch(r'(?:现在|当前)?计时器(?:的)?铃声(?:是)?(?:什么|哪种)', text):
+        return Control('timer_ringtone', 'query')
+    match = re.fullmatch(r'计时器(?:铃声)?音量(?:设置为|设为|调到|调成)(?:百分之)?([0-9零一二三四五六七八九十百]+)(?:%|百分比)?', text)
+    if match and (value := numeric(match[1])) is not None:
+        return Control('timer_volume', 'percent', value)
+    if re.fullmatch(r'(?:现在|当前)?计时器(?:铃声)?音量(?:是)?多少', text):
+        return Control('timer_volume', 'query')
     if text in ('再长一点','再多等一点'): return Control(None,'repeat_seconds',5)
     if text in ('再短一点','再少等一点'): return Control(None,'repeat_seconds',-5)
     # Only accept the alias when the entire normalized sentence is a speed control.

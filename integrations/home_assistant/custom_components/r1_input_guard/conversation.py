@@ -197,13 +197,18 @@ class NativeConversation(conversation.ConversationEntity):
                 return answer('请说明要延长或缩短首次唤醒等待时间，还是持续对话等待时间。')
             if target is None or command.operation == 'repeat' and (not previous or previous[0] != target):
                 return answer('请说明要调节音量还是语速，以及要调到多少。')
-            label = {'volume':'音量','speech_speed':'语速','wait_seconds':'首次唤醒等待开口时间','followup_wait_seconds':'持续对话等待开口时间'}[target]
-            current = owner.number(target)
+            label = {'volume':'音量','speech_speed':'语速','wait_seconds':'首次唤醒等待开口时间',
+                     'followup_wait_seconds':'持续对话等待开口时间','timer_volume':'计时器铃声音量',
+                     'timer_ringtone':'计时器铃声'}[target]
+            current = owner.select(target) if target == 'timer_ringtone' else owner.number(target)
             if current is None: return answer(f'{label}暂时不可用，没有修改设置。')
             self._busy.add(key)
             try:
                 if command.operation == 'query':
                     value = current
+                elif target == 'timer_ringtone':
+                    value = await owner.set_timer_ringtone(command.value, user_input.context)
+                    self._controls[key] = (target, now)
                 else:
                     value = command.value
                     if command.operation in ('relative', 'repeat', 'repeat_seconds'): value += current
@@ -211,25 +216,33 @@ class NativeConversation(conversation.ConversationEntity):
                     elif command.operation == 'percent' and target == 'speech_speed': value /= 100
                     elif command.operation == 'percent' and target in time_targets:
                         return answer('等待时间请用秒设置，并说明首次唤醒还是持续对话。')
-                    low, high = (1,120) if target in time_targets else (0, 100) if target == 'volume' else (.5, 1.5)
+                    low, high = (1,120) if target in time_targets else (1, 100) if target == 'timer_volume' \
+                        else (0, 100) if target == 'volume' else (.5, 1.5)
                     if command.operation in ('relative', 'repeat', 'repeat_seconds'):
                         value = max(low, min(high, value))
                         if abs(value-current) < .002:
                             self._controls[key] = (target, now)
                             return answer(f'{label}已经达到' + ('上限。' if command.value > 0 else '下限。'))
                     elif not low <= value <= high:
-                        return answer(f'{label}范围是' + ('一秒到一百二十秒。' if target in time_targets else '百分之零到百分之一百。' if target == 'volume' else '百分之五十到百分之一百五十。'))
+                        return answer(f'{label}范围是' + ('一秒到一百二十秒。' if target in time_targets
+                            else '百分之一到百分之一百。' if target == 'timer_volume'
+                            else '百分之零到百分之一百。' if target == 'volume'
+                            else '百分之五十到百分之一百五十。'))
                     requested = value
                     value = await (owner.set_wait(target,value,user_input.context) if target in time_targets
+                                   else owner.set_timer_volume(value, user_input.context) if target == 'timer_volume'
                                    else owner.set_volume(value, user_input.context) if target == 'volume'
                                    else owner.set_speed(value, user_input.context))
                     if target == 'speech_speed':
                         from .interaction import update_reply_speed
                         update_reply_speed(self.hass, user_input, value)
                     self._controls[key] = (target, now)
+                if target == 'timer_ringtone':
+                    shown = {'classic':'经典','gentle':'柔和','urgent':'紧急'}[value]
+                    return answer(f'{label}现在是{shown}铃声。')
                 if target in time_targets:
                     return answer(f'{label}现在是{round(value)}秒。' + ('' if command.operation == 'query' else '下一轮收音生效。'))
-                percent = round(value if target == 'volume' else value * 100)
+                percent = round(value if target in ('volume', 'timer_volume') else value * 100)
                 rounded = command.operation != 'query' and abs(value-requested) > .002
                 return answer(f'{label}' + ('采用最接近的档位，已调到' if rounded else '现在是') + f'百分之{percent}。')
             except HomeAssistantError:

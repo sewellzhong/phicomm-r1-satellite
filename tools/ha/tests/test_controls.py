@@ -22,19 +22,28 @@ class GrammarTest(unittest.TestCase):
           '现在雨速多少':None,'现在音量是多少':Control('volume','query'),'再慢一点':Control('speech_speed','repeat',-.05),
           '调到80%':Control(None,'percent',80),'电视音量调到30%':None,'为什么语速慢一点更清楚':None,
           '语速调到百分之一百五十':Control('speech_speed','percent',150)}
+        cases.update({'计时器铃声设为柔和':Control('timer_ringtone','choice','gentle'),
+          '当前计时器铃声是什么':Control('timer_ringtone','query'),
+          '计时器铃声音量调到百分之四十五':Control('timer_volume','percent',45),
+          '计时器音量是多少':Control('timer_volume','query')})
         for text, expected in cases.items():
             with self.subTest(text=text): self.assertEqual(expected,parse_control(text))
 
 class ControlTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.values={'volume':35,'speech_speed':.85,'wait_seconds':10,'followup_wait_seconds':15}
+        self.values={'volume':35,'speech_speed':.85,'wait_seconds':10,'followup_wait_seconds':15,
+                     'timer_volume':100,'timer_ringtone':'classic'}
         async def write(key, value, context): self.values[key]=value;return value
-        self.owner=SimpleNamespace(device_id='r1',number=self.values.get,
+        self.owner=SimpleNamespace(device_id='r1',number=self.values.get,select=self.values.get,
             set_volume=AsyncMock(side_effect=lambda v,c: None),set_speed=AsyncMock())
         async def volume(v,c):return await write('volume',v,c)
         async def speed(v,c):return await write('speech_speed',v,c)
+        async def timer_volume(v,c):return await write('timer_volume',v,c)
+        async def timer_ringtone(v,c):return await write('timer_ringtone',v,c)
         self.owner.set_volume.side_effect=volume;self.owner.set_speed.side_effect=speed
         self.owner.set_wait=AsyncMock(side_effect=write)
+        self.owner.set_timer_volume=AsyncMock(side_effect=timer_volume)
+        self.owner.set_timer_ringtone=AsyncMock(side_effect=timer_ringtone)
         self.agent=NativeConversation(SimpleNamespace(entry_id='test',data={'conversation_registry_id':'router'}))
         self.agent.hass=SimpleNamespace(data={'r1_input_guard_interaction':{'test':self.owner}})
     async def ask(self,text,device='r1',session='same'):
@@ -61,6 +70,12 @@ class ControlTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn('请说明',await self.ask('再小一点'))
         self.owner.set_volume.side_effect=HomeAssistantError('offline')
         self.assertIn('未能确认',await self.ask('音量调到35%'))
+    async def test_timer_sound_has_confirmed_number_and_select_paths(self):
+        self.assertIn('柔和铃声',await self.ask('计时器铃声设为柔和'))
+        self.assertEqual('gentle',self.values['timer_ringtone'])
+        self.assertIn('45',await self.ask('计时器铃声音量调到百分之四十五'))
+        self.assertEqual(45,self.values['timer_volume'])
+        self.assertIn('范围',await self.ask('计时器铃声音量调到0%'))
 
 class TtsCacheTest(unittest.TestCase):
     def test_speed_changes_default_options_used_by_ha_cache_key(self):
@@ -122,4 +137,5 @@ class WaitControlTest(ControlTest):
         self.assertIn('范围',await self.ask('续听等待时间调到121秒'))
         self.assertIn('10秒',await self.ask('恢复首次等待时间默认值'))
         self.assertIn('15秒',await self.ask('恢复续听等待时间默认值'))
-        self.assertEqual({'volume':35,'speech_speed':.85,'wait_seconds':10,'followup_wait_seconds':15},self.values)
+        self.assertEqual({'volume':35,'speech_speed':.85,'wait_seconds':10,'followup_wait_seconds':15,
+                          'timer_volume':100,'timer_ringtone':'classic'},self.values)

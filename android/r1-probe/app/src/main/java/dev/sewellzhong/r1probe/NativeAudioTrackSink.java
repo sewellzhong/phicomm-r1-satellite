@@ -10,9 +10,12 @@ final class NativeAudioTrackSink implements NativePcmPlayback.Sink {
     private final AudioTrack track;
     private long previousHead, wraps;
     private final NativeVolume volume;
+    private final float gainMultiplier;
     NativeAudioTrackSink() { this(null); }
-    NativeAudioTrackSink(NativeVolume volume) {
+    NativeAudioTrackSink(NativeVolume volume) { this(volume, 1f); }
+    NativeAudioTrackSink(NativeVolume volume, float gainMultiplier) {
         this.volume = volume;
+        this.gainMultiplier = Math.max(0f, Math.min(1f, gainMultiplier));
         int minimum = AudioTrack.getMinBufferSize(16000, AudioFormat.CHANNEL_OUT_MONO,
                 AudioFormat.ENCODING_PCM_16BIT);
         if (minimum <= 0) throw new IllegalStateException("invalid_playback_buffer");
@@ -23,10 +26,10 @@ final class NativeAudioTrackSink implements NativePcmPlayback.Sink {
         }
     }
     @Override public void start() {
-        if (volume != null) { track.setVolume(volume.gain()); volume.prepareOutput(); }
+        if (volume != null) { track.setVolume(volume.gain() * gainMultiplier); volume.prepareOutput(); }
         track.play();
     }
-    @Override public int write(byte[] bytes, int offset, int length) { if (volume != null) track.setVolume(volume.gain());
+    @Override public int write(byte[] bytes, int offset, int length) { if (volume != null) track.setVolume(volume.gain() * gainMultiplier);
         return track.write(bytes, offset, length); }
     @Override public long playedFrames() {
         long current = track.getPlaybackHeadPosition() & 0xffffffffL;

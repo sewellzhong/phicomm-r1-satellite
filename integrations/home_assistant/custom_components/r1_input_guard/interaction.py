@@ -67,7 +67,9 @@ class Interaction:
         registry = self.resolve()
         if not self.device_id: return None
         label = {'wait_seconds':'等待开口时间', 'quiet_seconds':'讲话结束停顿时间',
-                 'command_seconds':'单条命令总时长', 'followup_wait_seconds':'持续对话等待开口时间', 'volume':'音量', 'speech_speed':'语速', 'wake_generation':'唤醒会话序号'}.get(suffix)
+                 'command_seconds':'单条命令总时长', 'followup_wait_seconds':'持续对话等待开口时间',
+                 'volume':'音量', 'speech_speed':'语速', 'timer_volume':'计时器铃声音量',
+                 'timer_ringtone':'计时器铃声', 'wake_generation':'唤醒会话序号'}.get(suffix)
         matches = [e.entity_id for e in registry.entities.values() if e.platform == 'esphome'
                    and e.device_id == self.device_id and e.domain == domain
                    and (e.unique_id.lower().endswith('-' + suffix) or (label is not None and e.unique_id == self.mac.upper() + '/0/' + domain + '/' + label))]
@@ -86,6 +88,38 @@ class Interaction:
         try: value = float(state.state)
         except ValueError: return None
         return value if math.isfinite(value) else None
+
+    def select(self, suffix):
+        entity_id = self.entity(suffix, 'select')
+        state = self.hass.states.get(entity_id) if entity_id else None
+        return None if state is None or state.state in ('unknown', 'unavailable') else state.state
+
+    async def set_timer_volume(self, percent, context=None):
+        target = self.entity('timer_volume')
+        if target is None or self.number('timer_volume') is None or not math.isfinite(percent) \
+                or not 1 <= percent <= 100:
+            raise HomeAssistantError('r1_timer_volume_unavailable')
+        expected = math.floor(percent + .5)
+        await self.hass.services.async_call('number', 'set_value',
+            {'entity_id': target, 'value': expected}, blocking=True, context=context)
+        for _ in range(30):
+            actual = self.number('timer_volume')
+            if actual is not None and abs(actual - expected) < .05: return actual
+            await asyncio.sleep(.1)
+        raise HomeAssistantError('r1_timer_volume_not_confirmed')
+
+    async def set_timer_ringtone(self, value, context=None):
+        if value not in ('classic', 'gentle', 'urgent'):
+            raise HomeAssistantError('r1_timer_ringtone_invalid')
+        target = self.entity('timer_ringtone', 'select')
+        if target is None or self.select('timer_ringtone') is None:
+            raise HomeAssistantError('r1_timer_ringtone_unavailable')
+        await self.hass.services.async_call('select', 'select_option',
+            {'entity_id': target, 'option': value}, blocking=True, context=context)
+        for _ in range(30):
+            if self.select('timer_ringtone') == value: return value
+            await asyncio.sleep(.1)
+        raise HomeAssistantError('r1_timer_ringtone_not_confirmed')
 
     async def set_volume(self, percent, context=None):
         target = self.entity('volume')
@@ -335,7 +369,7 @@ class Interaction:
     @staticmethod
     def _validated_alarm_state(value, request_id, operation):
         if not isinstance(value, dict) or value.get('request_id') != request_id \
-                or value.get('operation') != operation or value.get('schema') != 1:
+                or value.get('operation') != operation or value.get('schema') != 2:
             raise HomeAssistantError('r1_alarm_response_invalid')
         version, alarms = value.get('version'), value.get('alarms')
         offset, complete = value.get('page_offset'), value.get('page_complete')
@@ -366,6 +400,9 @@ class Interaction:
             except KeyError: raise HomeAssistantError('r1_alarm_response_invalid')
             if not valid_editable(alarm_fields) or type(alarm.get('revision')) is not int \
                     or alarm['revision'] < 0 or alarm['revision'] > version:
+                raise HomeAssistantError('r1_alarm_response_invalid')
+            expected_prompt = (alarm_fields['name'] + '时间到了') if alarm_fields['name'] else '闹钟时间到了'
+            if alarm.get('prompt_mode') != 'tone_only' or alarm.get('prompt_text') != expected_prompt:
                 raise HomeAssistantError('r1_alarm_response_invalid')
         return value
 

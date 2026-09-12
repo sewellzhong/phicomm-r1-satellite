@@ -22,6 +22,7 @@ public final class NativeAlarmController {
     }
     public interface Ringer {
         void start();
+        default void start(String ringtone, int volumePercent, String promptText) { start(); }
         void stop();
         boolean active();
         String failure();
@@ -31,7 +32,7 @@ public final class NativeAlarmController {
         void suppressed();
     }
 
-    private static final int SCHEMA = 1;
+    private static final int SCHEMA = 2;
     private static final int MAX_ALARMS = 32;
     private static final long LATE_GRACE_MILLIS = 5 * 60 * 1000L;
     private static final long RETRY_MILLIS = 5000L;
@@ -43,6 +44,8 @@ public final class NativeAlarmController {
         int minuteOfDay;
         int weekdays;
         int snoozeMinutes;
+        String ringtone;
+        int volumePercent;
         boolean enabled;
         long nextWallMillis;
         long snoozeWallMillis;
@@ -63,6 +66,7 @@ public final class NativeAlarmController {
     private boolean clockPending;
     private String scheduledZone;
     private String lastRingerFailure;
+    private String activeRingerId;
 
     public NativeAlarmController(Store store, Clock clock, Ringer ringer) {
         this(store, clock, ringer, new Policy() {
@@ -82,12 +86,20 @@ public final class NativeAlarmController {
 
     public synchronized void put(String id, String name, String date, int hour, int minute,
             int weekdays, boolean enabled, int snoozeMinutes, long expectedVersion) throws IOException {
+        put(id, name, date, hour, minute, weekdays, enabled, snoozeMinutes,
+                "classic", 100, expectedVersion);
+    }
+
+    public synchronized void put(String id, String name, String date, int hour, int minute,
+            int weekdays, boolean enabled, int snoozeMinutes, String ringtone,
+            int volumePercent, long expectedVersion) throws IOException {
         checkVersion(expectedVersion);
         id = checked(id, 128, "alarm_id_invalid");
         name = checked(name, 256, "alarm_name_invalid");
         date = date == null ? "" : checked(date, 10, "alarm_date_invalid");
         if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || weekdays < 0 || weekdays > 127
-                || snoozeMinutes < 1 || snoozeMinutes > 60 || (!date.isEmpty() && weekdays != 0)
+                || snoozeMinutes < 1 || snoozeMinutes > 60 || volumePercent < 1 || volumePercent > 100
+                || !validRingtone(ringtone) || (!date.isEmpty() && weekdays != 0)
                 || (date.isEmpty() && weekdays == 0)) reject("alarm_schedule_invalid");
         if (!date.isEmpty()) try { parseDate(date); }
         catch (RuntimeException error) { reject("alarm_date_invalid"); }
@@ -96,6 +108,7 @@ public final class NativeAlarmController {
         AlarmValue candidate = new AlarmValue(id);
         candidate.name = name; candidate.date = date; candidate.minuteOfDay = hour * 60 + minute;
         candidate.weekdays = weekdays; candidate.enabled = enabled; candidate.snoozeMinutes = snoozeMinutes;
+        candidate.ringtone = ringtone; candidate.volumePercent = volumePercent;
         candidate.nextWallMillis = enabled && clock.wallTrusted() ? nextOccurrence(candidate, clock.wallMillis(), true) : 0;
         if (enabled && clock.wallTrusted() && candidate.nextWallMillis == 0) reject("alarm_time_not_future");
         String before = encodeState();
@@ -104,11 +117,12 @@ public final class NativeAlarmController {
             value.name = candidate.name; value.date = candidate.date; value.minuteOfDay = candidate.minuteOfDay;
             value.weekdays = candidate.weekdays; value.enabled = candidate.enabled;
             value.snoozeMinutes = candidate.snoozeMinutes; value.nextWallMillis = candidate.nextWallMillis;
+            value.ringtone = candidate.ringtone; value.volumePercent = candidate.volumePercent;
         } else alarms.put(id, value);
         value.snoozeWallMillis = 0; value.lastOccurrenceWallMillis = 0;
         ringing.remove(id);
         value.revision = ++version;
-        if (ringing.isEmpty()) ringer.stop();
+        outputChanged();
         commitOrRollback(before);
     }
 
@@ -119,7 +133,7 @@ public final class NativeAlarmController {
         String before = encodeState();
         alarms.remove(id);
         ringing.remove(id); version++;
-        if (ringing.isEmpty()) ringer.stop();
+        outputChanged();
         commitOrRollback(before);
     }
 
@@ -133,7 +147,7 @@ public final class NativeAlarmController {
         value.enabled = enabled; value.snoozeWallMillis = 0; value.nextWallMillis = next;
         ringing.remove(value.id);
         value.revision = ++version;
-        if (ringing.isEmpty()) ringer.stop();
+        outputChanged();
         commitOrRollback(before);
     }
 
@@ -143,7 +157,7 @@ public final class NativeAlarmController {
         if (id == null || id.isEmpty()) { changed = !ringing.isEmpty(); ringing.clear(); }
         else changed = ringing.remove(checked(id, 128, "alarm_id_invalid"));
         if (!changed && !ringer.active()) return false;
-        if (ringing.isEmpty()) ringer.stop();
+        outputChanged();
         stops++;
         try { persist(); }
         catch (IOException error) { persistenceFailures++; throw error; }
@@ -170,7 +184,7 @@ public final class NativeAlarmController {
             value.snoozeWallMillis = saturatingAdd(now, delay * 60_000L);
             value.revision = ++version; ringing.remove(target); snoozes++;
         }
-        if (ringing.isEmpty()) ringer.stop();
+        outputChanged();
         commitOrRollback(before);
         return true;
     }
@@ -221,6 +235,9 @@ public final class NativeAlarmController {
                 .put("hour", value.minuteOfDay / 60).put("minute", value.minuteOfDay % 60)
                 .put("weekdays", value.weekdays).put("enabled", value.enabled)
                 .put("snooze_minutes", value.snoozeMinutes)
+                .put("ringtone", value.ringtone).put("volume_percent", value.volumePercent)
+                .put("prompt_text", value.name.isEmpty() ? "闹钟时间到了" : value.name + "时间到了")
+                .put("prompt_mode", "tone_only")
                 .put("next_wall_ms", value.nextWallMillis > 0 ? value.nextWallMillis : JSONObject.NULL)
                 .put("snooze_wall_ms", value.snoozeWallMillis > 0 ? value.snoozeWallMillis : JSONObject.NULL)
                 .put("ringing", ringing.contains(value.id)).put("revision", value.revision));
@@ -235,17 +252,33 @@ public final class NativeAlarmController {
                 .put("ringer_failures", ringerFailures).put("suppressed", suppressed);
     }
 
-    public synchronized void close() { ringing.clear(); ringer.stop(); }
+    public synchronized void close() { ringing.clear(); activeRingerId = null; ringer.stop(); }
     public synchronized boolean ringing() { return !ringing.isEmpty(); }
 
     private void ensureRinger() {
-        if (ringing.isEmpty() || ringer.active() || clock.wallMillis() < nextRingerAttempt) return;
-        ringer.start();
+        if (ringing.isEmpty()) return;
+        String first = ringing.iterator().next();
+        if (ringer.active() && first.equals(activeRingerId)) return;
+        if (ringer.active()) ringer.stop();
+        if (clock.wallMillis() < nextRingerAttempt) return;
+        AlarmValue value = alarms.get(first);
+        activeRingerId = first;
+        ringer.start(value.ringtone, value.volumePercent,
+                value.name.isEmpty() ? "闹钟时间到了" : value.name + "时间到了");
         String failure = ringer.failure();
         if (failure != null && !failure.equals(lastRingerFailure)) {
             ringerFailures++; lastRingerFailure = failure;
         }
         nextRingerAttempt = saturatingAdd(clock.wallMillis(), RETRY_MILLIS);
+    }
+
+    private void outputChanged() {
+        String first = ringing.isEmpty() ? null : ringing.iterator().next();
+        if (activeRingerId != null && !activeRingerId.equals(first)) {
+            ringer.stop(); activeRingerId = null; nextRingerAttempt = 0;
+        }
+        if (ringing.isEmpty()) { ringer.stop(); activeRingerId = null; }
+        else ensureRinger();
     }
 
     private long nextOccurrence(AlarmValue value, long after, boolean strictlyFuture) {
@@ -285,6 +318,7 @@ public final class NativeAlarmController {
                     .put("id", value.id).put("name", value.name).put("date", value.date)
                     .put("minute_of_day", value.minuteOfDay).put("weekdays", value.weekdays)
                     .put("snooze_minutes", value.snoozeMinutes).put("enabled", value.enabled)
+                    .put("ringtone", value.ringtone).put("volume_percent", value.volumePercent)
                     .put("next_wall_ms", value.nextWallMillis).put("snooze_wall_ms", value.snoozeWallMillis)
                     .put("last_occurrence_wall_ms", value.lastOccurrenceWallMillis).put("revision", value.revision));
             root.put("alarms", values).put("ringing", new JSONArray(ringing));
@@ -310,7 +344,8 @@ public final class NativeAlarmController {
         if (encoded == null || encoded.isEmpty()) return;
         try {
             JSONObject root = new JSONObject(encoded);
-            if (root.getInt("schema") != SCHEMA) throw new JSONException("schema");
+            int schema = root.getInt("schema");
+            if (schema != 1 && schema != SCHEMA) throw new JSONException("schema");
             version = root.optLong("version", 0); scheduledZone = safeZone(root.optString("time_zone", scheduledZone));
             fires = root.optLong("fires"); stops = root.optLong("stops"); snoozes = root.optLong("snoozes");
             missed = root.optLong("missed"); suppressed = Math.max(0, root.optLong("suppressed"));
@@ -323,8 +358,11 @@ public final class NativeAlarmController {
                 if (!value.date.isEmpty()) parseDate(value.date);
                 value.minuteOfDay = item.getInt("minute_of_day"); value.weekdays = item.getInt("weekdays");
                 value.snoozeMinutes = item.getInt("snooze_minutes"); value.enabled = item.getBoolean("enabled");
+                value.ringtone = schema >= 2 ? item.optString("ringtone", "classic") : "classic";
+                value.volumePercent = schema >= 2 ? item.optInt("volume_percent", 100) : 100;
                 if (value.minuteOfDay < 0 || value.minuteOfDay >= 1440 || value.weekdays < 0 || value.weekdays > 127
                         || value.snoozeMinutes < 1 || value.snoozeMinutes > 60
+                        || !validRingtone(value.ringtone) || value.volumePercent < 1 || value.volumePercent > 100
                         || (!value.date.isEmpty() && value.weekdays != 0) || (value.date.isEmpty() && value.weekdays == 0))
                     throw new JSONException("schedule");
                 value.nextWallMillis = item.optLong("next_wall_ms"); value.snoozeWallMillis = item.optLong("snooze_wall_ms");
@@ -356,6 +394,9 @@ public final class NativeAlarmController {
         int year = Integer.parseInt(value.substring(0, 4)), month = Integer.parseInt(value.substring(5, 7)), day = Integer.parseInt(value.substring(8, 10));
         Calendar check = Calendar.getInstance(TimeZone.getTimeZone("UTC")); check.clear(); check.setLenient(false);
         check.set(year, month - 1, day); check.getTimeInMillis(); return new int[]{year, month, day};
+    }
+    private static boolean validRingtone(String value) {
+        return "classic".equals(value) || "gentle".equals(value) || "urgent".equals(value);
     }
     private static int weekdayBit(int calendarDay) {
         return 1 << ((calendarDay + 5) % 7); // Monday=bit0 ... Sunday=bit6.

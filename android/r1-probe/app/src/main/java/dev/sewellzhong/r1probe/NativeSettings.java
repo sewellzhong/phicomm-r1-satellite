@@ -34,11 +34,17 @@ final class NativeSettings {
     float quietSeconds() { return prefs.getFloat("quiet_seconds", 1.8f); }
     float commandSeconds() { return prefs.getFloat("command_seconds", 30); }
     int volumePercent() { return Math.round(prefs.getFloat("volume", 0)); }
+    int timerVolumePercent() { return Math.max(1, Math.min(100, Math.round(prefs.getFloat("timer_volume", 100)))); }
+    String timerRingtone() {
+        String value = prefs.getString("timer_ringtone", "classic");
+        return "gentle".equals(value) || "urgent".equals(value) ? value : "classic";
+    }
     synchronized void initializeVolume(int percent) {
         if (!prefs.contains("volume")) setting("volume", Math.max(0, Math.min(100, percent)));
     }
     float speechSpeed() { return prefs.getFloat("speech_speed", .85f); }
     synchronized void setting(String key, float value) { commit(prefs.edit().putFloat(key, value)); }
+    synchronized void setting(String key, String value) { commit(prefs.edit().putString(key, value)); }
     synchronized int adjustVolume(int delta) {
         int target = Math.max(0, Math.min(100, volumePercent() + delta));
         if (target != volumePercent()) commit(prefs.edit().putFloat("volume", target));

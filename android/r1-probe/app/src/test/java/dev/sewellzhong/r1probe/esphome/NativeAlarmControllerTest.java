@@ -30,7 +30,13 @@ public final class NativeAlarmControllerTest {
         boolean active;
         int starts, stops;
         String failure;
+        String ringtone, promptText;
+        int volumePercent;
         public void start() { starts++; active = failure == null; }
+        public void start(String ringtone, int volumePercent, String promptText) {
+            this.ringtone = ringtone; this.volumePercent = volumePercent; this.promptText = promptText;
+            start();
+        }
         public void stop() { stops++; active = false; }
         public boolean active() { return active; }
         public String failure() { return failure; }
@@ -54,6 +60,33 @@ public final class NativeAlarmControllerTest {
         assertEquals(1, ringer.starts); assertEquals(1, state.getInt("ringing_count"));
         assertFalse(state.getJSONArray("alarms").getJSONObject(0).getBoolean("enabled"));
         assertEquals(1, state.getLong("fires"));
+    }
+
+    @Test public void ringtoneVolumeAndDynamicPromptMetadataArePersistedAndApplied() throws Exception {
+        alarms.put("medicine", "吃药", "2026-09-12", 7, 1, 0, true, 10,
+                "urgent", 45, -1);
+        NativeAlarmController restored = new NativeAlarmController(store, clock, ringer);
+        JSONObject configured = restored.snapshot().getJSONArray("alarms").getJSONObject(0);
+        assertEquals(2, restored.snapshot().getInt("schema"));
+        assertEquals("urgent", configured.getString("ringtone"));
+        assertEquals(45, configured.getInt("volume_percent"));
+        assertEquals("吃药时间到了", configured.getString("prompt_text"));
+        assertEquals("tone_only", configured.getString("prompt_mode"));
+        clock.advance(60_000); restored.tick();
+        assertEquals("urgent", ringer.ringtone); assertEquals(45, ringer.volumePercent);
+        assertEquals("吃药时间到了", ringer.promptText);
+    }
+
+    @Test public void invalidSoundSettingsDoNotReplaceAlarm() throws Exception {
+        alarms.put("wake", "原名", "2026-09-12", 7, 1, 0, true, 10, -1);
+        for (Object[] invalid : new Object[][]{{"missing", 50}, {"classic", 0}, {"classic", 101}}) {
+            try {
+                alarms.put("wake", "未保存", "2026-09-12", 7, 2, 0, true, 10,
+                        (String) invalid[0], (Integer) invalid[1], -1);
+                fail();
+            } catch (IOException expected) { assertEquals("alarm_schedule_invalid", expected.getMessage()); }
+        }
+        assertEquals("原名", alarms.snapshot().getJSONArray("alarms").getJSONObject(0).getString("name"));
     }
 
     @Test public void weeklyAlarmSchedulesNextOccurrenceBeforeRinging() throws Exception {

@@ -48,7 +48,9 @@ public final class NativeAlarmProtocol {
                     alarms.put(request.getString("id"), request.optString("name", ""),
                             request.optString("date", ""), request.getInt("hour"),
                             request.getInt("minute"), request.optInt("weekdays", 0),
-                            request.optBoolean("enabled", true), request.optInt("snooze_minutes", 10), expected);
+                            request.optBoolean("enabled", true), request.optInt("snooze_minutes", 10),
+                            request.optString("ringtone", "classic"),
+                            request.optInt("volume_percent", 100), expected);
                     break;
                 case "delete": alarms.delete(request.getString("id"), expected); break;
                 case "enable": alarms.enable(request.getString("id"), request.getBoolean("enabled"), expected); break;

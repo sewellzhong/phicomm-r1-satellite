@@ -19,6 +19,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         vol.Optional('weekdays', default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=127)),
         vol.Optional('enabled', default=True): cv.boolean,
         vol.Optional('snooze_minutes', default=10): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+        vol.Optional('ringtone', default='classic'): vol.In(('classic', 'gentle', 'urgent')),
+        vol.Optional('volume_percent', default=100): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
         vol.Optional('expected_version'): vol.All(vol.Coerce(int), vol.Range(min=0)),
     }, 'async_alarm_put')
     platform.async_register_entity_service('alarm_delete', {

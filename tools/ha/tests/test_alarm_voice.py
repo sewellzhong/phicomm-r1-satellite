@@ -17,6 +17,7 @@ def alarm(alarm_id='wake', name='起床', hour=7, minute=30, date_value='', week
           enabled=True):
     return {'id': alarm_id, 'name': name, 'date': date_value, 'hour': hour, 'minute': minute,
             'weekdays': weekdays, 'enabled': enabled, 'snooze_minutes': 10,
+            'ringtone': 'classic', 'volume_percent': 100,
             'next_wall_ms': 1, 'snooze_wall_ms': None, 'ringing': False, 'revision': 3}
 
 
@@ -71,6 +72,11 @@ class AlarmVoiceGrammarTest(unittest.TestCase):
         self.assertEqual(AlarmVoiceCommand('enable','起床',enabled=False),
                          parse_alarm_voice('停用我的起床闹钟',today))
         self.assertEqual('batch_unsupported',parse_alarm_voice('删除所有闹钟',today).issue)
+        self.assertEqual(AlarmVoiceCommand('sound','起床',ringtone='gentle'),
+                         parse_alarm_voice('把起床闹钟铃声设为柔和',today))
+        self.assertEqual(AlarmVoiceCommand('sound','起床',volume_percent=45),
+                         parse_alarm_voice('起床闹钟音量调到百分之四十五',today))
+        self.assertEqual('volume_invalid',parse_alarm_voice('起床闹钟音量设为0',today).issue)
 
 
 class AlarmVoiceExecutionTest(unittest.IsolatedAsyncioTestCase):
@@ -109,6 +115,14 @@ class AlarmVoiceExecutionTest(unittest.IsolatedAsyncioTestCase):
         self.owner.alarm_write.side_effect=HomeAssistantError('r1_alarm_pending')
         result=await execute_alarm_voice(self.owner,AlarmVoiceCommand('enable','起床',enabled=False),self.context)
         self.assertIn('待同步',result);self.assertNotIn('R1确认',result)
+
+    async def test_sound_setting_preserves_schedule_and_uses_shared_write(self):
+        result=await execute_alarm_voice(self.owner,
+            AlarmVoiceCommand('sound','起床',ringtone='urgent',volume_percent=45),self.context)
+        self.assertIn('R1确认铃声和音量设置',result)
+        values=self.owner.alarm_write.await_args.kwargs
+        self.assertEqual('urgent',values['ringtone']);self.assertEqual(45,values['volume_percent'])
+        self.assertEqual(7,values['hour']);self.assertEqual(31,values['weekdays'])
 
     async def test_query_exposes_effective_pending_without_claiming_sync(self):
         desired={key:value for key,value in alarm('later','吃药',20,0,'',127).items()

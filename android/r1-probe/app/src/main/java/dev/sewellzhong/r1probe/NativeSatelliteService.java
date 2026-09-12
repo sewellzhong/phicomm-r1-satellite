@@ -112,6 +112,9 @@ public final class NativeSatelliteService extends Service {
             @Override public String timeZoneId() { return java.util.TimeZone.getDefault().getID(); }
         }, new NativeAlarmController.Ringer() {
             @Override public void start() { timerAlarm.startAlarm(); }
+            @Override public void start(String ringtone, int volumePercent, String promptText) {
+                timerAlarm.startAlarm(ringtone, volumePercent, promptText);
+            }
             @Override public void stop() { timerAlarm.stopAlarm(); }
             @Override public boolean active() { return timerAlarm.alarmActive(); }
             @Override public String failure() { return timerAlarm.failure(); }

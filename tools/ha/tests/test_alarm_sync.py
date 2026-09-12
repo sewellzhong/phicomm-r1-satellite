@@ -13,11 +13,12 @@ def state(request, version=3, alarms=None, total=None):
     alarms = alarms if alarms is not None else [{
         'id': 'wake', 'name': '起床', 'date': '', 'hour': 7, 'minute': 30,
         'weekdays': 31, 'enabled': True, 'snooze_minutes': 10,
+        'ringtone': 'classic', 'volume_percent': 100,
         'next_wall_ms': 1789171200000, 'snooze_wall_ms': None,
-        'ringing': False, 'revision': version,
+        'ringing': False, 'revision': version, 'prompt_text': '起床时间到了', 'prompt_mode': 'tone_only',
     }]
     offset=request.get('page_offset',0);total=len(alarms) if total is None else total
-    return {'schema': 1, 'request_id': request['request_id'], 'operation': request['operation'],
+    return {'schema': 2, 'request_id': request['request_id'], 'operation': request['operation'],
             'version': version, 'alarm_count': total, 'ringing_count': 0,
             'ringer_active': False, 'clock_pending': False, 'time_zone': 'Asia/Hong_Kong',
             'alarms': alarms, 'page_offset': offset, 'page_complete': offset+len(alarms)==total}
@@ -95,6 +96,8 @@ class AlarmSyncTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HomeAssistantError): Interaction._validated_alarm_state(bad,'a'*32,'status')
         bad=state(request);bad['time_zone']='Not/AZone'
         with self.assertRaises(HomeAssistantError): Interaction._validated_alarm_state(bad,'a'*32,'status')
+        bad=state(request);bad['alarms'][0]['prompt_mode']='spoken'
+        with self.assertRaises(HomeAssistantError): Interaction._validated_alarm_state(bad,'a'*32,'status')
 
     async def test_all_pages_are_version_locked_and_published_together(self):
         self.services.all_alarms=[dict(state({'request_id':'a'*32,'operation':'status'})['alarms'][0],
@@ -139,7 +142,8 @@ class AlarmSyncTest(unittest.IsolatedAsyncioTestCase):
         self.owner.alarm_request=request
         await self.owner.replay_alarm_pending()
         self.assertEqual([('put', {'id':'wake','name':'起床','date':'','hour':7,'minute':30,
-            'weekdays':31,'enabled':False,'snooze_minutes':10,'expected_version':8})],calls)
+            'weekdays':31,'enabled':False,'snooze_minutes':10,'ringtone':'classic',
+            'volume_percent':100,'expected_version':8})],calls)
         self.assertEqual([],self.owner.alarm_pending.items())
         self.assertEqual('synced',self.owner.alarm_sync_status)
 
@@ -190,7 +194,7 @@ class PendingAlarmTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_delete_of_new_offline_alarm_drops_the_pending_creation(self):
         values={'id':'later','name':'稍后','date':'','hour':9,'minute':0,'weekdays':127,
-                'enabled':True,'snooze_minutes':5}
+                'enabled':True,'snooze_minutes':5,'ringtone':'gentle','volume_percent':45}
         await self.pending.queue('put',values,self.baseline)
         await self.pending.queue('delete',{'id':'later'},self.baseline)
         self.assertEqual([],self.pending.items())

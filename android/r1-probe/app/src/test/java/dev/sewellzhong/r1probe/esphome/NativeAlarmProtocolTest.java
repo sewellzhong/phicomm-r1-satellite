@@ -49,6 +49,7 @@ public class NativeAlarmProtocolTest {
         JSONObject request = new JSONObject().put("request_id", "0123456789abcdef0123456789abcdef")
                 .put("operation", "put").put("id", "wake").put("name", "起床")
                 .put("date", "2026-09-13").put("hour", 7).put("minute", 30)
+                .put("ringtone", "gentle").put("volume_percent", 55)
                 .put("expected_version", 0);
         assertTrue(send(41, request));
         EsphomeApi.ExecuteServiceResponse response = response();
@@ -58,6 +59,8 @@ public class NativeAlarmProtocolTest {
         assertEquals(1, state.getLong("version")); assertEquals(1, state.getInt("alarm_count"));
         assertEquals(0, state.getInt("page_offset")); assertTrue(state.getBoolean("page_complete"));
         assertEquals("wake", state.getJSONArray("alarms").getJSONObject(0).getString("id"));
+        assertEquals("gentle", state.getJSONArray("alarms").getJSONObject(0).getString("ringtone"));
+        assertEquals(55, state.getJSONArray("alarms").getJSONObject(0).getInt("volume_percent"));
     }
 
     @Test public void staleWriteFailsWithoutClosingProtocolOrMutatingState() throws Exception {
