@@ -32,6 +32,7 @@
 
 ## 阶段与版本记录
 
+- [2026-09-12-r1-streaming-cancellation-host](2026-09-12-r1-streaming-cancellation-host.md)
 - [2026-09-12-r1-streaming-conversation-host](2026-09-12-r1-streaming-conversation-host.md)
 - [2026-09-12-r1-factory-audio-postwake-device](2026-09-12-r1-factory-audio-postwake-device.md)
 - [2026-09-11-r1-factory-audio-v87-sidecar-device](2026-09-11-r1-factory-audio-v87-sidecar-device.md)
