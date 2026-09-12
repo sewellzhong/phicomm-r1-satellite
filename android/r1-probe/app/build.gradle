@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("101")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.01-http-tts-diagnostics")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("102")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.02-http-wav-negotiation")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

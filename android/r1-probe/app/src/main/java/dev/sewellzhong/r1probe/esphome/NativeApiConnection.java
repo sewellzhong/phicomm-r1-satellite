@@ -117,7 +117,7 @@ public final class NativeApiConnection {
                     send(MessageIds.DeviceInfoResponse,EsphomeApi.DeviceInfoResponse.newBuilder().setName(name)
                             .setFriendlyName(satellite ? "R1 原生语音" : "R1 Native Foundation").setMacAddress(mac).setManufacturer("Phicomm")
                             .setModel("R1 API22").setEsphomeVersion("2026.8.0").setProjectName("sewellzhong.r1-satellite")
-                            .setProjectVersion(satellite ? "1.01-http-tts-diagnostics" : "0.43-foundation")
+                            .setProjectVersion(satellite ? "1.02-http-wav-negotiation" : "0.43-foundation")
                             .setVoiceAssistantFeatureFlags(satellite ? SATELLITE_FEATURES : 0).build());
                 } else if(type==MessageIds.DeviceCapabilitiesRequest) {
                     send(MessageIds.DeviceCapabilitiesResponse,satellite ? EsphomeApi.DeviceCapabilitiesResponse.newBuilder()
@@ -125,6 +125,7 @@ public final class NativeApiConnection {
                             : EsphomeApi.DeviceCapabilitiesResponse.getDefaultInstance());
                 } else if(type==MessageIds.ListEntitiesRequest) {
                     if (satellite) handler.listEntities(this::send);
+                    if (satellite) sendTtsFormat();
                     send(MessageIds.ListEntitiesDoneResponse,EsphomeApi.ListEntitiesDoneResponse.getDefaultInstance());
                 } else if(satellite && type==MessageIds.VoiceAssistantConfigurationRequest) {
                     sendWakeConfiguration();
@@ -149,6 +150,18 @@ public final class NativeApiConnection {
                 if(noise!=null)noise.close();socket.close();
             }
         }
+    }
+    private void sendTtsFormat() throws IOException {
+        send(MessageIds.ListEntitiesMediaPlayerResponse, ttsFormatEntity());
+    }
+    static EsphomeApi.ListEntitiesMediaPlayerResponse ttsFormatEntity() {
+        EsphomeApi.MediaPlayerSupportedFormat format = EsphomeApi.MediaPlayerSupportedFormat.newBuilder()
+                .setFormat("wav").setSampleRate(16000).setNumChannels(1).setSampleBytes(2)
+                .setPurpose(EsphomeApi.MediaPlayerFormatPurpose.MEDIA_PLAYER_FORMAT_PURPOSE_ANNOUNCEMENT)
+                .build();
+        return EsphomeApi.ListEntitiesMediaPlayerResponse.newBuilder()
+                .setObjectId("r1_tts_format").setKey(0x52315454).setName("R1 TTS Format")
+                .setSupportsPause(false).setFeatureFlags(0).addSupportedFormats(format).build();
     }
     private void sendWakeConfiguration() throws IOException {
         EsphomeApi.VoiceAssistantConfigurationResponse.Builder config = EsphomeApi.VoiceAssistantConfigurationResponse.newBuilder()
