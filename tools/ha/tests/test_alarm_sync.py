@@ -93,6 +93,8 @@ class AlarmSyncTest(unittest.IsolatedAsyncioTestCase):
         request={'request_id':'a'*32,'operation':'status'}
         bad=state(request);bad['alarm_count']=2
         with self.assertRaises(HomeAssistantError): Interaction._validated_alarm_state(bad,'a'*32,'status')
+        bad=state(request);bad['time_zone']='Not/AZone'
+        with self.assertRaises(HomeAssistantError): Interaction._validated_alarm_state(bad,'a'*32,'status')
 
     async def test_all_pages_are_version_locked_and_published_together(self):
         self.services.all_alarms=[dict(state({'request_id':'a'*32,'operation':'status'})['alarms'][0],

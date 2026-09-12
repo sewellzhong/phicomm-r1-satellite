@@ -140,6 +140,25 @@ class NativeConversation(conversation.ConversationEntity):
         from .interaction import bridge
         from .controls import parse_control
         owner = bridge(self.hass, self._entry_id) if hasattr(self.hass, 'data') else None
+        from .alarm_voice import alarm_local_date, parse_alarm_voice, execute_alarm_voice
+        alarm_command = parse_alarm_voice(user_input.text, alarm_local_date(owner))
+        if alarm_command:
+            def alarm_answer(text):
+                response = intent.IntentResponse(language=user_input.language)
+                response.async_set_speech(text)
+                return conversation.ConversationResult(response=response, conversation_id=outer,
+                                                         continue_conversation=True)
+            self._last_control_diagnostic = {"matched": True, "kind": "alarm",
+                "device_id": user_input.device_id, "satellite_id": user_input.satellite_id,
+                "bound_device": owner.device_id if owner else None,
+                "operation": alarm_command.operation, "issue": alarm_command.issue}
+            if not owner or not owner.device_id or user_input.device_id != owner.device_id:
+                return alarm_answer('无法确定要管理的音箱，请通过R1发出指令。')
+            self._busy.add(key)
+            try:
+                return alarm_answer(await execute_alarm_voice(owner, alarm_command, user_input.context))
+            finally:
+                self._busy.discard(key)
         command = parse_control(user_input.text)
         self._last_control_diagnostic = {"matched": command is not None, "device_id": user_input.device_id,
             "satellite_id": user_input.satellite_id, "bound_device": owner.device_id if owner else None,

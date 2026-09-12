@@ -5,6 +5,7 @@ import json
 import math
 import re
 from uuid import uuid4
+from zoneinfo import ZoneInfoNotFoundError
 from aioesphomeapi import APIConnectionError
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
@@ -12,6 +13,7 @@ from homeassistant.helpers import entity_registry as er, device_registry as dr
 from homeassistant.helpers.event import async_track_time_interval, async_track_state_change_event
 from homeassistant.helpers.entity import DeviceInfo
 from .alarm_pending import AlarmPending, editable, valid_editable
+from .alarm_voice import alarm_time_zone
 
 
 def bridge(hass, entry_id):
@@ -135,16 +137,16 @@ class Interaction:
         service = name.replace('-', '_') + '_alarm_sync'
         return service if self.hass.services.has_service('esphome', service) else None
 
-    async def alarm_request(self, operation, **values):
+    async def alarm_request(self, operation, *, context=None, **values):
         if operation not in ('status', 'put', 'delete', 'enable', 'stop', 'snooze'):
             raise HomeAssistantError('r1_alarm_operation_invalid')
         async with self._alarm_lock:
             try:
-                state = await self._alarm_page(operation, values)
+                state = await self._alarm_page(operation, values, context)
                 alarms = list(state['alarms'])
                 while not state['page_complete']:
                     page = await self._alarm_page('status', {
-                        'expected_version': state['version'], 'page_offset': len(alarms)})
+                        'expected_version': state['version'], 'page_offset': len(alarms)}, context)
                     if page['version'] != state['version'] or page['page_offset'] != len(alarms):
                         raise HomeAssistantError('r1_alarm_response_stale')
                     alarms.extend(page['alarms'])
@@ -173,10 +175,10 @@ class Interaction:
             for listener in tuple(self.listeners): listener()
             return state
 
-    async def alarm_write(self, operation, **values):
+    async def alarm_write(self, operation, *, context=None, **values):
         """Write immediately only from a confirmed baseline; otherwise persist desired state."""
         if operation not in ('put', 'delete', 'enable'):
-            return await self.alarm_request(operation, **values)
+            return await self.alarm_request(operation, context=context, **values)
         pending = self.alarm_pending.items()
         if pending or self.alarm_sync_status != 'synced' or self.alarm_service() is None:
             await self.alarm_pending.queue(operation, values, self.alarm_state)
@@ -185,7 +187,7 @@ class Interaction:
             for listener in tuple(self.listeners): listener()
             raise HomeAssistantError('r1_alarm_pending')
         try:
-            return await self.alarm_request(operation, **values)
+            return await self.alarm_request(operation, context=context, **values)
         except HomeAssistantError:
             if self.alarm_last_error != 'transport_failed':
                 raise
@@ -246,7 +248,7 @@ class Interaction:
         for listener in tuple(self.listeners): listener()
         return self.alarm_state
 
-    async def _alarm_page(self, operation, values):
+    async def _alarm_page(self, operation, values, context=None):
         service = self.alarm_service()
         if service is None: raise HomeAssistantError('r1_alarm_unavailable')
         request_id = uuid4().hex
@@ -254,7 +256,7 @@ class Interaction:
         encoded = json.dumps(request, ensure_ascii=False, separators=(',', ':'))
         if len(encoded.encode()) > 4096: raise HomeAssistantError('r1_alarm_request_too_large')
         response = await self.hass.services.async_call('esphome', service,
-            {'request': encoded}, blocking=True, return_response=True)
+            {'request': encoded}, blocking=True, return_response=True, context=context)
         return self._validated_alarm_state(response, request_id, operation)
 
     @staticmethod
@@ -270,6 +272,16 @@ class Interaction:
         count = value.get('alarm_count')
         if not isinstance(count, int) or count < offset + len(alarms) or count > 32 \
                 or complete != (offset + len(alarms) == count):
+            raise HomeAssistantError('r1_alarm_response_invalid')
+        zone = value.get('time_zone')
+        if not isinstance(zone, str) or not zone or len(zone) > 64 \
+                or type(value.get('ringing_count')) is not int or value['ringing_count'] < 0 \
+                or value['ringing_count'] > count or not isinstance(value.get('ringer_active'), bool) \
+                or not isinstance(value.get('clock_pending'), bool):
+            raise HomeAssistantError('r1_alarm_response_invalid')
+        try:
+            alarm_time_zone(zone)
+        except (ValueError, ZoneInfoNotFoundError):
             raise HomeAssistantError('r1_alarm_response_invalid')
         seen = set()
         for alarm in alarms:
