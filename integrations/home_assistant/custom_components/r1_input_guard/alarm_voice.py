@@ -25,6 +25,7 @@ class AlarmVoiceCommand:
     minute: int | None = None
     date_value: str | None = None
     weekdays: int | None = None
+    enabled: bool | None = None
     issue: str | None = None
 
 
@@ -158,6 +159,12 @@ def parse_alarm_voice(text, today=None):
         name = match[1].removeprefix("我的")
         return AlarmVoiceCommand("delete", name=name,
                                  issue="batch_unsupported" if name in ("所有", "全部") else None)
+    match = re.fullmatch(r"(?:启用|开启|打开)(.+?)闹钟", text)
+    if match:
+        return AlarmVoiceCommand("enable", name=match[1].removeprefix("我的"), enabled=True)
+    match = re.fullmatch(r"(?:停用|禁用|关闭)(.+?)闹钟", text)
+    if match:
+        return AlarmVoiceCommand("enable", name=match[1].removeprefix("我的"), enabled=False)
     match = re.fullmatch(r"(?:把|将)(.+?)闹钟(?:的时间)?(?:改到|改成|设为|设置为|调到)(.+)", text)
     if match:
         remainder, hour, minute, date_value, weekdays, issue = _schedule_and_time(match[2], today, False)
@@ -273,6 +280,12 @@ async def execute_alarm_voice(owner, command, context=None):
         if command.operation == "delete":
             values = {'id': current['id'], 'expected_version': owner.alarm_state['version']}
             action = "取消"
+        elif command.operation == "enable":
+            if current.get('enabled') is command.enabled:
+                return f"名为{command.name}的闹钟已经{'启用' if command.enabled else '停用'}。"
+            values = {'id': current['id'], 'enabled': command.enabled,
+                      'expected_version': owner.alarm_state['version']}
+            action = "启用" if command.enabled else "停用"
         else:
             values = editable(current)
             values.update(hour=command.hour, minute=command.minute)
@@ -281,8 +294,9 @@ async def execute_alarm_voice(owner, command, context=None):
             values['expected_version'] = owner.alarm_state['version']
             action = "修改"
     try:
-        await owner.alarm_write('delete' if command.operation == 'delete' else 'put',
-                                context=context, **values)
+        operation = 'delete' if command.operation == 'delete' else \
+            'enable' if command.operation == 'enable' else 'put'
+        await owner.alarm_write(operation, context=context, **values)
     except HomeAssistantError as error:
         if str(error) == 'r1_alarm_pending':
             return f"已记录{action}的待同步变更，但尚未送达R1。"

@@ -66,6 +66,10 @@ class AlarmVoiceGrammarTest(unittest.TestCase):
         self.assertEqual(AlarmVoiceCommand('update','起床',8,0),
                          parse_alarm_voice('把起床闹钟改到早上八点',today))
         self.assertEqual(AlarmVoiceCommand('delete','起床'),parse_alarm_voice('取消起床闹钟',today))
+        self.assertEqual(AlarmVoiceCommand('enable','起床',enabled=True),
+                         parse_alarm_voice('打开起床闹钟',today))
+        self.assertEqual(AlarmVoiceCommand('enable','起床',enabled=False),
+                         parse_alarm_voice('停用我的起床闹钟',today))
         self.assertEqual('batch_unsupported',parse_alarm_voice('删除所有闹钟',today).issue)
 
 
@@ -90,6 +94,22 @@ class AlarmVoiceExecutionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn('待同步',result);self.assertIn('尚未送达R1',result)
         self.assertNotIn('R1确认',result)
 
+    async def test_enable_disable_uses_versioned_shared_write_and_is_idempotent(self):
+        result=await execute_alarm_voice(self.owner,AlarmVoiceCommand('enable','起床',enabled=False),self.context)
+        self.assertIn('R1确认停用',result)
+        self.owner.alarm_write.assert_awaited_once_with('enable',context=self.context,
+            id='wake',enabled=False,expected_version=3)
+        self.owner.alarm_write.reset_mock()
+        self.owner.alarm_state['alarms'][0]['enabled']=False
+        result=await execute_alarm_voice(self.owner,AlarmVoiceCommand('enable','起床',enabled=False),self.context)
+        self.assertIn('已经停用',result)
+        self.owner.alarm_write.assert_not_awaited()
+
+    async def test_offline_enable_is_pending_not_confirmed(self):
+        self.owner.alarm_write.side_effect=HomeAssistantError('r1_alarm_pending')
+        result=await execute_alarm_voice(self.owner,AlarmVoiceCommand('enable','起床',enabled=False),self.context)
+        self.assertIn('待同步',result);self.assertNotIn('R1确认',result)
+
     async def test_query_exposes_effective_pending_without_claiming_sync(self):
         desired={key:value for key,value in alarm('later','吃药',20,0,'',127).items()
                  if key in ('id','name','date','hour','minute','weekdays','enabled','snooze_minutes')}
@@ -105,6 +125,13 @@ class AlarmVoiceExecutionTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('起床',result)
         cancelled=await execute_alarm_voice(self.owner,AlarmVoiceCommand('query','起床'),self.context)
         self.assertIn('等待取消同步',cancelled);self.assertIn('尚未送达R1',cancelled)
+
+    async def test_query_reports_multiple_independent_alarms(self):
+        self.owner.alarm_state['alarms'].append(alarm('medicine','吃药',20,0,'',127,False))
+        result=await execute_alarm_voice(self.owner,AlarmVoiceCommand('query'),self.context)
+        self.assertIn('共2个',result)
+        self.assertIn('起床，工作日07:30，已启用',result)
+        self.assertIn('吃药，每天20:00，已停用',result)
 
     async def test_missing_or_duplicate_target_never_writes(self):
         result=await execute_alarm_voice(self.owner,AlarmVoiceCommand('delete','不存在'),self.context)

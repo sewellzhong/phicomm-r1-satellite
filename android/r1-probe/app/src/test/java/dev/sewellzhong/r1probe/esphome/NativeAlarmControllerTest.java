@@ -65,6 +65,22 @@ public final class NativeAlarmControllerTest {
         assertEquals(epoch("Asia/Hong_Kong", 2026, 9, 19, 7, 1), value.getLong("next_wall_ms"));
     }
 
+    @Test public void multipleAlarmsDueTogetherRemainIndependentUntilEachIsStopped() throws Exception {
+        alarms.put("medicine", "吃药", "2026-09-12", 7, 1, 0, true, 5, -1);
+        alarms.put("meeting", "开会", "2026-09-12", 7, 1, 0, true, 10, -1);
+        clock.advance(60_000); alarms.tick();
+        JSONObject state = alarms.snapshot();
+        assertEquals(2, state.getInt("alarm_count"));
+        assertEquals(2, state.getInt("ringing_count"));
+        assertEquals(1, ringer.starts);
+        assertTrue(alarms.stopRinging("medicine"));
+        assertEquals(1, alarms.snapshot().getInt("ringing_count"));
+        assertTrue(ringer.active);
+        assertTrue(alarms.stopRinging("meeting"));
+        assertEquals(0, alarms.snapshot().getInt("ringing_count"));
+        assertFalse(ringer.active);
+    }
+
     @Test public void overdueAlarmOutsideGraceIsRecordedWithoutRinging() throws Exception {
         alarms.put("old", "旧闹钟", "2026-09-12", 7, 1, 0, true, 10, -1);
         clock.advance(6 * 60_000L + 1); alarms.tick();
