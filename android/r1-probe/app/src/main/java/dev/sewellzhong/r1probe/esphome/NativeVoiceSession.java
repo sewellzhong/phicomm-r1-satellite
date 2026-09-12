@@ -23,6 +23,7 @@ public final class NativeVoiceSession {
         boolean terminated();
         String failure();
         void stop();
+        default boolean startUrl(String url) throws IOException { return false; }
     }
     public interface Sender { void send(int type, MessageLite message) throws IOException; }
     public interface Clock { long millis(); }
@@ -32,6 +33,8 @@ public final class NativeVoiceSession {
     private String conversationId;
     private long conversationExpires;
     private boolean continueConversation;
+    private String ttsUrl;
+    private boolean urlStreaming;
     public boolean shouldContinue() {
         return state == State.IDLE && outcome == Outcome.COMPLETE && (continueConversation || playbackReported);
     }
@@ -95,6 +98,9 @@ public final class NativeVoiceSession {
             if (state == State.CANCELLING && event != EsphomeApi.VoiceAssistantEvent.VOICE_ASSISTANT_RUN_END)
                 return true;
             switch (event) {
+                case VOICE_ASSISTANT_RUN_START:
+                    ttsUrl = uniqueData(response, "url", false);
+                    break;
                 case VOICE_ASSISTANT_INTENT_END:
                     for (EsphomeApi.VoiceAssistantEventData data : response.getDataList()) {
                         if ("conversation_id".equals(data.getName())) {
@@ -107,14 +113,26 @@ public final class NativeVoiceSession {
                         }
                     }
                     break;
+                case VOICE_ASSISTANT_INTENT_PROGRESS:
+                    if ("1".equals(uniqueData(response, "tts_start_streaming", false))
+                            && ttsUrl != null && !streamStarted)
+                        startUrlPlayback();
+                    break;
                 case VOICE_ASSISTANT_RUN_END:
                     runEnded = true;
                     if (!ttsExpected || state == State.CANCELLING) finishRun();
                     else completePlayback();
                     break;
                 case VOICE_ASSISTANT_TTS_START:
+                    expectTts();
+                    break;
                 case VOICE_ASSISTANT_TTS_END:
                     expectTts();
+                    String finalUrl = uniqueData(response, "url", false);
+                    if (!streamStarted) {
+                        if (finalUrl != null) ttsUrl = finalUrl;
+                        if (ttsUrl != null) startUrlPlayback();
+                    }
                     break;
                 case VOICE_ASSISTANT_TTS_STREAM_START:
                     expectTts();
@@ -169,6 +187,7 @@ public final class NativeVoiceSession {
         continueConversation = false;
         if (clock.millis() >= conversationExpires) conversationId = null;
         ttsExpected = false; streamStarted = false; streamEnded = false;
+        ttsUrl = null; urlStreaming = false;
         runEnded = false; playbackReported = false; replyDeadline = 0;
         frames = 0;
         deadline = clock.millis() + 10000;
@@ -229,6 +248,7 @@ public final class NativeVoiceSession {
             if (playback != null && playback.failure() != null) {
                 outcome = Outcome.FAILED; cancel(); return;
             }
+            if (urlStreaming && playback != null && playback.complete()) streamEnded = true;
             completePlayback();
         }
     }
@@ -247,6 +267,23 @@ public final class NativeVoiceSession {
             replyDeadline = clock.millis() + 300000;
         }
         deadline = replyDeadline;
+    }
+    private void startUrlPlayback() throws IOException {
+        expectTts();
+        if (playback == null || ttsUrl == null || !playback.startUrl(ttsUrl))
+            abortConnection("tts_http_start_failed");
+        streamStarted = true; urlStreaming = true; state = State.PLAYING; ttsUrl = null;
+    }
+    private static String uniqueData(EsphomeApi.VoiceAssistantEventResponse response,
+            String name, boolean required) throws IOException {
+        String value = null;
+        for (EsphomeApi.VoiceAssistantEventData data : response.getDataList()) {
+            if (!name.equals(data.getName())) continue;
+            if (value != null) throw new IOException("duplicate_voice_event_data");
+            value = data.getValue();
+        }
+        if (required && (value == null || value.isEmpty())) throw new IOException("voice_event_data_missing");
+        return value == null || value.isEmpty() ? null : value;
     }
     private void completePlayback() throws IOException {
         if (!streamEnded || playback == null || !playback.complete()) return;

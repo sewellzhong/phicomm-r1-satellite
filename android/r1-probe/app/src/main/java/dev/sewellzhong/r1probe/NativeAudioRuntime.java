@@ -323,6 +323,15 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
             long eventMillis = System.nanoTime() / 1_000_000L;
             switch (kind) {
                 case VOICE_ASSISTANT_STT_END: transcripts++; break;
+                case VOICE_ASSISTANT_INTENT_PROGRESS:
+                    for (dev.sewellzhong.r1probe.esphome.proto.EsphomeApi.VoiceAssistantEventData data :
+                            dev.sewellzhong.r1probe.esphome.proto.EsphomeApi.VoiceAssistantEventResponse
+                                    .parseFrom(payload).getDataList()) {
+                        if ("tts_start_streaming".equals(data.getName()) && "1".equals(data.getValue())) {
+                            replies++; ttsStreamStartMillis = eventMillis;
+                        }
+                    }
+                    break;
                 case VOICE_ASSISTANT_TTS_STREAM_START:
                     replies++; ttsStreamStartMillis = eventMillis; break;
                 case VOICE_ASSISTANT_RUN_END: haRunEndMillis = eventMillis; break;

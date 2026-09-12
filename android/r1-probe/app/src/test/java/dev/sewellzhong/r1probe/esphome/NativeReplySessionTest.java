@@ -16,16 +16,23 @@ public class NativeReplySessionTest {
     private boolean drained, stopped;
     private int ends;
     private String failure;
+    private String url;
     private final NativeVoiceSession session = new NativeVoiceSession((id,msg)->sent.add(msg),()->now,
         new NativeAudioCoordinatorTest.Player() {
             public boolean complete() { return drained; }
             public String failure() { return failure; }
             public void stop() { stopped=true; }
             public void end() { ends++; }
+            public boolean startUrl(String value) { url=value; return true; }
         });
     private void event(EsphomeApi.VoiceAssistantEvent event) throws Exception {
         session.handle(MessageIds.VoiceAssistantEventResponse, EsphomeApi.VoiceAssistantEventResponse
                 .newBuilder().setEventType(event).build().toByteArray());
+    }
+    private void event(EsphomeApi.VoiceAssistantEvent event, String name, String value) throws Exception {
+        session.handle(MessageIds.VoiceAssistantEventResponse, EsphomeApi.VoiceAssistantEventResponse
+                .newBuilder().setEventType(event).addData(EsphomeApi.VoiceAssistantEventData
+                        .newBuilder().setName(name).setValue(value)).build().toByteArray());
     }
     private void start() throws Exception {
         session.handle(MessageIds.SubscribeVoiceAssistantRequest, EsphomeApi.SubscribeVoiceAssistantRequest
@@ -45,6 +52,20 @@ public class NativeReplySessionTest {
         assertEquals(NativeVoiceSession.State.PLAYING,session.state());
         drained=true; session.tick(); session.tick();
         assertEquals(1,acknowledgements()); assertEquals(NativeVoiceSession.State.IDLE,session.state());
+    }
+    @Test public void authenticatedUrlStartsAtIntentProgressBeforeRunEnd() throws Exception {
+        start();
+        event(EsphomeApi.VoiceAssistantEvent.VOICE_ASSISTANT_RUN_START,
+                "url", "http://ha.local/api/tts_proxy/fixed?authSig=test");
+        event(EsphomeApi.VoiceAssistantEvent.VOICE_ASSISTANT_INTENT_PROGRESS,
+                "tts_start_streaming", "1");
+        assertEquals("http://ha.local/api/tts_proxy/fixed?authSig=test", url);
+        assertEquals(NativeVoiceSession.State.PLAYING, session.state());
+        event(EsphomeApi.VoiceAssistantEvent.VOICE_ASSISTANT_RUN_END);
+        assertEquals(0, acknowledgements());
+        drained=true; session.tick();
+        assertEquals(1, acknowledgements());
+        assertEquals(NativeVoiceSession.State.IDLE, session.state());
     }
     @Test public void drainedBeforeRunEndWaitsAndSendsOnlyOneAcknowledgement() throws Exception {
         start(); event(EsphomeApi.VoiceAssistantEvent.VOICE_ASSISTANT_TTS_STREAM_START);

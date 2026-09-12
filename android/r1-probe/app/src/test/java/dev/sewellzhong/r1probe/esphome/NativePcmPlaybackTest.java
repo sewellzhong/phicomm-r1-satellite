@@ -1,6 +1,7 @@
 package dev.sewellzhong.r1probe.esphome;
 
 import org.junit.Test;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
@@ -9,6 +10,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
 
 public class NativePcmPlaybackTest {
+    private static byte[] wav(byte[] pcm) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(new byte[]{'R','I','F','F'}); little(out, 36 + pcm.length, 4);
+        out.write(new byte[]{'W','A','V','E','f','m','t',' '}); little(out, 16, 4);
+        little(out, 1, 2); little(out, 1, 2); little(out, 16000, 4);
+        little(out, 32000, 4); little(out, 2, 2); little(out, 16, 2);
+        out.write(new byte[]{'d','a','t','a'}); little(out, pcm.length, 4); out.write(pcm);
+        return out.toByteArray();
+    }
+    private static void little(ByteArrayOutputStream out, int value, int bytes) {
+        for (int i=0; i<bytes; i++) out.write((value >>> (8*i)) & 255);
+    }
     private static class Gate implements NativePcmPlayback.Gate {
         volatile boolean ready, requested, released, drainNotified;
         public void request() { requested=true; }
@@ -61,6 +74,34 @@ public class NativePcmPlaybackTest {
             assertEquals(1500, player.highWaterBytes());
             assertTrue(player.underruns() >= 0);
         } finally { player.stop(); }
+    }
+    @Test public void streamingWavIsParsedAndDrainedWithoutWholeReplyBuffer() throws Exception {
+        Gate gate = new Gate(); gate.ready = true; Sink sink = new Sink(); sink.drained = true;
+        NativePcmPlayback player = new NativePcmPlayback(() -> sink, gate);
+        byte[] pcm = new byte[1280]; pcm[3] = 17;
+        try {
+            player.start(); player.streamWav(new ByteArrayInputStream(wav(pcm))); completed(player);
+            assertArrayEquals(pcm, sink.data.toByteArray()); assertTrue(sink.closed);
+        } finally { player.stop(); }
+    }
+    @Test public void streamingWavRejectsWrongPcmFormat() throws Exception {
+        Gate gate = new Gate(); gate.ready = true;
+        NativePcmPlayback player = new NativePcmPlayback(Sink::new, gate);
+        byte[] invalid = wav(new byte[640]); invalid[24] = (byte) 0x44; invalid[25] = (byte) 0xac;
+        try {
+            player.start();
+            try { player.streamWav(new ByteArrayInputStream(invalid)); fail(); }
+            catch (IOException expected) { assertEquals("tts_wav_format_invalid", expected.getMessage()); }
+        } finally { player.stop(); }
+    }
+    @Test public void earlyUrlRejectsNonHttpCredentialsAndFragmentsBeforePlayback() throws Exception {
+        NativePcmPlayback player = new NativePcmPlayback(Sink::new, new Gate());
+        for (String url : new String[]{"file:///tmp/reply.wav", "http://user@ha.local/reply.wav",
+                "https://ha.local/reply.wav#fragment"}) {
+            try { player.startUrl(url); fail(); }
+            catch (IOException expected) { assertEquals("tts_url_invalid", expected.getMessage()); }
+            assertTrue(player.terminated());
+        }
     }
     @Test public void overflowAndOddSamplesAreRejectedWithoutUnboundedAllocation() throws Exception {
         Gate gate=new Gate(); NativePcmPlayback player=new NativePcmPlayback(Sink::new,gate);

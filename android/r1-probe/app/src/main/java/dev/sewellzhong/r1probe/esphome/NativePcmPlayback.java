@@ -1,6 +1,11 @@
 package dev.sewellzhong.r1probe.esphome;
 
 import java.io.IOException;
+import java.io.BufferedInputStream;
+import java.io.EOFException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.Arrays;
 
 /** Bounded PCM S16LE/16k mono player. Receiving bytes and draining the hardware are distinct. */
@@ -32,6 +37,8 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
     private volatile Sink sink;
     private volatile Thread worker;
     private volatile Thread stopper;
+    private volatile Thread source;
+    private volatile HttpURLConnection sourceConnection;
     private boolean sinkStopClaimed;
     private long generation;
     private int highWaterBytes;
@@ -70,6 +77,20 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
         worker.setDaemon(true);
         worker.start();
     }
+    @Override public synchronized boolean startUrl(String value) throws IOException {
+        if (value == null || value.length() == 0 || value.length() > 2048)
+            throw new IOException("tts_url_invalid");
+        URL url = new URL(value);
+        String scheme = url.getProtocol();
+        if (!("http".equals(scheme) || "https".equals(scheme)) || url.getHost().isEmpty()
+                || url.getUserInfo() != null || url.getRef() != null)
+            throw new IOException("tts_url_invalid");
+        start();
+        source = new Thread(() -> fetch(url), "native-http-tts");
+        source.setDaemon(true); source.start();
+        event("playback_http_started,generation=" + generation);
+        return true;
+    }
     @Override public synchronized void audio(byte[] data) throws IOException {
         if (worker == null || ended || stopped || failure != null) throw new IOException("playback_not_receiving");
         if (data.length == 0 || (data.length & 1) != 0) throw new IOException("invalid_pcm_samples");
@@ -85,7 +106,8 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
         notifyAll();
     }
     @Override public boolean complete() { return done && worker != null && !worker.isAlive(); }
-    @Override public boolean terminated() { return (worker == null || !worker.isAlive()) && (stopper == null || !stopper.isAlive()); }
+    @Override public boolean terminated() { return (worker == null || !worker.isAlive())
+            && (stopper == null || !stopper.isAlive()) && (source == null || !source.isAlive()); }
     @Override public String failure() { return failure; }
     @Override public synchronized void stop() {
         boolean first = !stopped;
@@ -93,6 +115,10 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
         Arrays.fill(ring, (byte) 0); size = 0; notifyAll();
         if (first) event("playback_stop_requested,generation=" + generation);
         if (worker != null) worker.interrupt();
+        Thread currentSource = source;
+        if (currentSource != null) currentSource.interrupt();
+        HttpURLConnection connection = sourceConnection;
+        if (connection != null) connection.disconnect();
         Sink current = sink;
         if (current != null && !sinkStopClaimed) {
             sinkStopClaimed = true;
@@ -101,6 +127,121 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
             }, "native-playback-stop");
             stopper.setDaemon(true); stopper.start();
         }
+    }
+
+    private void fetch(URL url) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) url.openConnection();
+            sourceConnection = connection;
+            connection.setInstanceFollowRedirects(false);
+            connection.setConnectTimeout(10000); connection.setReadTimeout(65000);
+            connection.setRequestProperty("Accept", "audio/wav,audio/x-wav");
+            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK)
+                throw new IOException("tts_http_status");
+            try (InputStream input = new BufferedInputStream(connection.getInputStream(), 4096)) {
+                streamWav(input);
+            }
+        } catch (Exception error) {
+            if (!stopped) { failure = "playback_http_failed"; stop(); }
+        } finally {
+            sourceConnection = null;
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    void streamWav(InputStream input) throws IOException {
+        byte[] riff = readExact(input, 12);
+        if (!ascii(riff, 0, "RIFF") || !ascii(riff, 8, "WAVE"))
+            throw new IOException("tts_wav_header_invalid");
+        boolean format = false;
+        long total = 0;
+        while (!stopped) {
+            byte[] header = readExact(input, 8);
+            long length = littleUnsigned(header, 4);
+            if (ascii(header, 0, "fmt ")) {
+                if (length < 16 || length > 64) throw new IOException("tts_wav_format_invalid");
+                byte[] fmt = readExact(input, (int) length);
+                if (little(fmt, 0) != 1 || little(fmt, 2) != 1
+                        || littleUnsigned(fmt, 4) != 16000 || little(fmt, 12) != 2
+                        || little(fmt, 14) != 16)
+                    throw new IOException("tts_wav_format_invalid");
+                format = true;
+            } else if (ascii(header, 0, "data")) {
+                if (!format) throw new IOException("tts_wav_data_before_format");
+                long remaining = length == 0xffffffffL ? Long.MAX_VALUE : length;
+                byte[] frame = new byte[640];
+                while (!stopped && remaining > 0) {
+                    int wanted = (int) Math.min(frame.length, remaining);
+                    int count = readSome(input, frame, wanted);
+                    if (count < 0) {
+                        if (remaining != Long.MAX_VALUE) throw new EOFException("tts_wav_truncated");
+                        break;
+                    }
+                    if ((count & 1) != 0 || (total += count) > 10 * 1024 * 1024L)
+                        throw new IOException("tts_wav_size_invalid");
+                    audioBlocking(Arrays.copyOf(frame, count));
+                    if (remaining != Long.MAX_VALUE) remaining -= count;
+                }
+                Arrays.fill(frame, (byte) 0);
+                if (!stopped) end();
+                return;
+            } else {
+                if (length > 1024 * 1024L) throw new IOException("tts_wav_chunk_invalid");
+                skipExact(input, length);
+            }
+            if ((length & 1) != 0) skipExact(input, 1);
+        }
+    }
+
+    private synchronized void audioBlocking(byte[] data) throws IOException {
+        long deadline = System.nanoTime() + 300_000_000_000L;
+        while (!stopped && failure == null && size + data.length > ring.length) {
+            if (System.nanoTime() >= deadline) throw new IOException("tts_http_backpressure_timeout");
+            try { wait(20); }
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt(); throw new IOException("tts_http_interrupted", e);
+            }
+        }
+        if (stopped || failure != null) throw new IOException("tts_http_stopped");
+        audio(data);
+    }
+
+    private static byte[] readExact(InputStream input, int length) throws IOException {
+        byte[] result = new byte[length]; int offset = 0;
+        while (offset < length) {
+            int count = input.read(result, offset, length - offset);
+            if (count < 0) throw new EOFException("tts_wav_truncated");
+            offset += count;
+        }
+        return result;
+    }
+    private static int readSome(InputStream input, byte[] target, int length) throws IOException {
+        int offset = 0;
+        while (offset < length) {
+            int count = input.read(target, offset, length - offset);
+            if (count < 0) return offset == 0 ? -1 : offset;
+            offset += count;
+        }
+        return offset;
+    }
+    private static void skipExact(InputStream input, long length) throws IOException {
+        while (length > 0) {
+            long skipped = input.skip(length);
+            if (skipped <= 0) { if (input.read() < 0) throw new EOFException("tts_wav_truncated"); skipped = 1; }
+            length -= skipped;
+        }
+    }
+    private static boolean ascii(byte[] bytes, int offset, String value) {
+        for (int i = 0; i < value.length(); i++) if (bytes[offset + i] != (byte) value.charAt(i)) return false;
+        return true;
+    }
+    private static int little(byte[] bytes, int offset) {
+        return (bytes[offset] & 255) | ((bytes[offset + 1] & 255) << 8);
+    }
+    private static long littleUnsigned(byte[] bytes, int offset) {
+        return (bytes[offset] & 255L) | ((bytes[offset + 1] & 255L) << 8)
+                | ((bytes[offset + 2] & 255L) << 16) | ((bytes[offset + 3] & 255L) << 24);
     }
 
     private void play() {
@@ -135,6 +276,7 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
                         head = (head + 1) % ring.length;
                     }
                     size -= count;
+                    notifyAll();
                     if (count > 0) starving = false;
                     if (count == 0 && ended) break;
                 }

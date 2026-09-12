@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("99")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.99-streaming-clock-proof")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("100")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.00-early-http-tts")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 
