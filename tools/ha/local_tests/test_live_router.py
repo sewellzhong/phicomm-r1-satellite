@@ -65,6 +65,13 @@ class LiveRouterTest(unittest.IsolatedAsyncioTestCase):
         return conversation.ConversationInput(agent_id='conversation.native',text=text,context=Context(user_id='fixture-user'),conversation_id='outer',language='zh-CN',device_id='r1',satellite_id='assist_satellite.r1')
 
     async def test_actual_router_delegates_and_uses_same_source_bound_hub_session(self):
+        # Bind the capability decision to the retained, unmodified household
+        # router source. This snapshot must stay on the public non-streaming
+        # path until that external component exposes a real incremental API.
+        self.assertFalse(self.router.supports_streaming)
+        with patch('custom_components.r1_input_guard.conversation.conversation.async_get_agent',
+                   return_value=self.router):
+            self.assertFalse(self.adapter.supports_streaming)
         await self.adapter.async_process(self.user('解释一下月亮为什么发光'))
         await self.adapter.async_process(self.user('再解释一下'))
         self.assertEqual(1,len(self.hub.sessions))
