@@ -5,6 +5,9 @@ import java.io.BufferedInputStream;
 import java.io.EOFException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.net.URL;
 import java.util.Arrays;
 
@@ -34,6 +37,7 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
     private boolean ended;
     private volatile boolean stopped, done;
     private volatile String failure;
+    private volatile String httpFailure = "none";
     private volatile Sink sink;
     private volatile Thread worker;
     private volatile Thread stopper;
@@ -54,6 +58,7 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
     public long firstWriteMillis() { return firstWriteMillis; }
     public long drainedMillis() { return drainedMillis; }
     public long releasedMillis() { return releasedMillis; }
+    public String httpFailure() { return httpFailure; }
 
     public NativePcmPlayback(Factory factory, Gate gate) { this(factory, gate, NO_EVENTS); }
     public NativePcmPlayback(Factory factory, Gate gate, Observer observer) {
@@ -67,6 +72,7 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
         if (!terminated()) throw new IOException("playback_already_running");
         Arrays.fill(ring, (byte) 0);
         head = 0; size = 0; ended = false; stopped = false; done = false; failure = null;
+        httpFailure = "none";
         stopper = null; sinkStopClaimed = false;
         highWaterBytes = 0; underruns = 0; generation++;
         requestedMillis = System.nanoTime() / 1_000_000L;
@@ -143,11 +149,19 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
                 streamWav(input);
             }
         } catch (Exception error) {
-            if (!stopped) { failure = "playback_http_failed"; stop(); }
+            if (!stopped) { httpFailure = safeHttpFailure(error); failure = "playback_http_failed"; stop(); }
         } finally {
             sourceConnection = null;
             if (connection != null) connection.disconnect();
         }
+    }
+    private static String safeHttpFailure(Exception error) {
+        if (error instanceof SocketTimeoutException) return "timeout";
+        if (error instanceof UnknownHostException) return "unknown_host";
+        if (error instanceof ConnectException) return "connect";
+        String message = error.getMessage();
+        if (message != null && message.matches("tts_[a-z_]+")) return message;
+        return error instanceof IOException ? "io" : "runtime";
     }
 
     void streamWav(InputStream input) throws IOException {

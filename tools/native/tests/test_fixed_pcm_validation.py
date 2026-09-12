@@ -18,6 +18,7 @@ def state(status="listening", **updates):
         "playback_first_write_ms": 0, "playback_drained_ms": 0,
         "playback_released_ms": 0, "playback_buffer_high_water_bytes": 0,
         "playback_underruns": 0,
+        "playback_http_error": "none",
         "tts_stream_start_ms": 0, "ha_run_end_ms": 0,
     }
     audio.update(updates)

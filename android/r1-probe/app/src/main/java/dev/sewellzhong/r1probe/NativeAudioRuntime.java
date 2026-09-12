@@ -217,6 +217,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("playback_released_ms", playback.releasedMillis())
                 .put("playback_buffer_high_water_bytes", playback.highWaterBytes())
                 .put("playback_underruns", playback.underruns())
+                .put("playback_http_error", playback.httpFailure())
                 .put("tts_stream_start_ms", ttsStreamStartMillis)
                 .put("ha_run_end_ms", haRunEndMillis)
                 .put("prompt_index", lastPromptIndex).put("reference_correlation", promptReference.correlation)

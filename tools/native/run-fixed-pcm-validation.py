@@ -94,7 +94,8 @@ def safe_report(before, after, cancelled, source):
                      "first_write_before_run_end": bool(first and run_end and first < run_end),
                      "released_ms": new["playback_released_ms"],
                      "buffer_high_water_bytes": new["playback_buffer_high_water_bytes"],
-                     "underruns": new["playback_underruns"]},
+                     "underruns": new["playback_underruns"],
+                     "http_error": new.get("playback_http_error", "none")},
         "text_saved": False, "credentials_saved": False,
     }
 
