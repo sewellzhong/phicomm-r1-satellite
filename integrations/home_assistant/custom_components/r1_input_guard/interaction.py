@@ -1,4 +1,4 @@
-"""Device-bound HA 2026.8.2 compatibility bridge. Never claims announce support."""
+"""Device-bound HA 2026.8.2 compatibility bridge."""
 import asyncio
 from datetime import timedelta
 import math
@@ -185,8 +185,7 @@ class Interaction:
             satellite_id = self.entity('assist_satellite', 'assist_satellite')
             component = self.hass.data.get('assist_satellite')
             satellite = component.get_entity(satellite_id) if component and satellite_id else None
-            # Fixed-version adapter: this implementation queries config only with ANNOUNCE.
-            # Use its existing authenticated client/config callback without advertising that bit.
+            # Fixed-version adapter: ANNOUNCE devices expose wake configuration here.
             if satellite is not None and satellite.available:
                 async with asyncio.timeout(12): await satellite._update_satellite_config()
             for listener in tuple(self.listeners): listener()

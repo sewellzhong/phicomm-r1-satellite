@@ -9,6 +9,7 @@ import dev.sewellzhong.r1probe.assist.CommandWindow;
 import dev.sewellzhong.r1probe.assist.DiagnosticWindowRequest;
 import dev.sewellzhong.r1probe.assist.PcmPrebuffer;
 import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
+import dev.sewellzhong.r1probe.esphome.NativeAnnouncementController;
 import dev.sewellzhong.r1probe.esphome.NativeAudioCoordinator;
 import dev.sewellzhong.r1probe.esphome.NativePcmPlayback;
 import dev.sewellzhong.r1probe.esphome.NativeVoiceSession;
@@ -159,6 +160,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     @Override public void listEntities(NativeVoiceSession.Sender sender) throws IOException { controls.list(sender); }
 
     private final NativePcmPlayback playback;
+    private final NativeAnnouncementController announcements;
     private volatile boolean wakeEnabled;
     private volatile boolean everOpened;
     private volatile boolean authenticated;
@@ -218,6 +220,10 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("playback_buffer_high_water_bytes", playback.highWaterBytes())
                 .put("playback_underruns", playback.underruns())
                 .put("playback_http_error", playback.httpFailure())
+                .put("announcement_active", announcements.active())
+                .put("announcement_requests", announcements.requests())
+                .put("announcement_completed", announcements.completed())
+                .put("announcement_failures", announcements.failures())
                 .put("tts_stream_start_ms", ttsStreamStartMillis)
                 .put("ha_run_end_ms", haRunEndMillis)
                 .put("prompt_index", lastPromptIndex).put("reference_correlation", promptReference.correlation)
@@ -264,6 +270,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 promptReference.finish(System.nanoTime()); playbackRequested = false;
             }
         }, this::diagnosticEvent);
+        announcements = new NativeAnnouncementController(playback);
         coordinator = new NativeAudioCoordinator(playback, () -> System.nanoTime() / 1_000_000L,
                 this::diagnosticEvent);
     }
@@ -308,6 +315,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         this.sender = sender;
         authenticated = true;
         coordinator.connected(sender);
+        announcements.connected(sender);
         status = listen ? "waiting_subscription" : "authenticated_no_microphone";
         if (!listen) return;
         capture = new Thread(this::captureLoop, "native-command-capture");
@@ -315,6 +323,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     }
     @Override public void message(int type, byte[] payload) throws IOException {
         if (controls.message(type, payload, sender)) return;
+        if (announcements.message(type, payload, coordinator.ready())) return;
         coordinator.message(type, payload);
         if (type == dev.sewellzhong.r1probe.esphome.proto.MessageIds.VoiceAssistantEventResponse) {
             dev.sewellzhong.r1probe.esphome.proto.EsphomeApi.VoiceAssistantEvent kind =
@@ -351,12 +360,15 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         if (recorder != null && System.nanoTime() - lastRead > 10_000_000_000L) {
             failure = "native_capture_timeout"; stopRecorder(); throw new IOException(failure);
         }
+        announcements.tick();
+        // Recompute voice readiness only after an announcement advances or finishes, so a
+        // preannounce -> media handoff never publishes a transient idle window to capture.
         coordinator.tick();
     }
     @Override public void closed() {
         if (!stopping.compareAndSet(false, true)) return;
         if(diagnostic!=null) diagnostic.stop("connection_closed");
-        stopRecorder(); coordinator.closed();
+        stopRecorder(); announcements.closed(); coordinator.closed();
         new NativeVolume(context, settings).restoreOutput();
         if (capture != null) capture.interrupt();
         status = "closed";

@@ -29,10 +29,10 @@ public final class NativeApiConnection {
     private NoiseSession noise;
     private final Handler handler;
     private final boolean satellite;
-    // aioesphomeapi 45.6.1 model.py: VOICE_ASSISTANT | API_AUDIO. SPEAKER is
+    // aioesphomeapi 45.6.1 model.py: VOICE_ASSISTANT | API_AUDIO | ANNOUNCE. SPEAKER is
     // intentionally absent: this client consumes HA's authenticated early TTS URL, so HA must
     // not also push the same stream through VoiceAssistantAudio at TTS_END.
-    public static final int SATELLITE_FEATURES = 5;
+    public static final int SATELLITE_FEATURES = 21;
     private boolean ready;
     private volatile long writeStarted;
     private Thread watchdog;
@@ -117,7 +117,7 @@ public final class NativeApiConnection {
                     send(MessageIds.DeviceInfoResponse,EsphomeApi.DeviceInfoResponse.newBuilder().setName(name)
                             .setFriendlyName(satellite ? "R1 原生语音" : "R1 Native Foundation").setMacAddress(mac).setManufacturer("Phicomm")
                             .setModel("R1 API22").setEsphomeVersion("2026.8.0").setProjectName("sewellzhong.r1-satellite")
-                            .setProjectVersion(satellite ? "1.02-http-wav-negotiation" : "0.43-foundation")
+                            .setProjectVersion(satellite ? "1.03-native-announcement" : "0.43-foundation")
                             .setVoiceAssistantFeatureFlags(satellite ? SATELLITE_FEATURES : 0).build());
                 } else if(type==MessageIds.DeviceCapabilitiesRequest) {
                     send(MessageIds.DeviceCapabilitiesResponse,satellite ? EsphomeApi.DeviceCapabilitiesResponse.newBuilder()
