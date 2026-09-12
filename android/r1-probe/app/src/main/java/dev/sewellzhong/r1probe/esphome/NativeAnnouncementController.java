@@ -10,6 +10,7 @@ public final class NativeAnnouncementController {
     private NativeVoiceSession.Sender sender;
     private String mediaUrl;
     private volatile boolean active;
+    private volatile boolean interrupted;
     private volatile long requests;
     private volatile long completed;
     private volatile long failures;
@@ -55,6 +56,12 @@ public final class NativeAnnouncementController {
     /** Called by the single protocol owner; never sends from a playback worker. */
     public void tick() throws IOException {
         if (!active) return;
+        if (interrupted) {
+            interrupted = false;
+            playback.stop();
+            finish(false);
+            return;
+        }
         if (playback.failure() != null) {
             if (playback.terminated()) finish(false);
             return;
@@ -77,8 +84,16 @@ public final class NativeAnnouncementController {
         if (active) failures++;
         active = false;
         mediaUrl = null;
+        interrupted = false;
         sender = null;
         if (playback != null) playback.stop();
+    }
+
+    /** Thread-safe request; the protocol owner sends the failure response from tick(). */
+    public void interrupt() {
+        if (!active) return;
+        interrupted = true;
+        playback.stop();
     }
 
     private String takeMediaUrl() {

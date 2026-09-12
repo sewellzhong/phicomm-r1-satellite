@@ -6,7 +6,7 @@ import java.util.Arrays;
 
 /** Audio producer -> bounded mailbox -> single network owner. No concurrent Noise calls. */
 public final class NativeAudioCoordinator implements NativeApiConnection.Handler {
-    public enum CancelReason { USER_STOP, NEW_WAKE, DIRECT_SPEECH, CONNECTION_CLOSED, PLAYBACK_FAILURE, SERVICE_STOP }
+    public enum CancelReason { USER_STOP, NEW_WAKE, DIRECT_SPEECH, TIMER_ALARM, CONNECTION_CLOSED, PLAYBACK_FAILURE, SERVICE_STOP }
     public enum RestartReason { NONE, NEW_WAKE, DIRECT_SPEECH }
     private enum CancelPhase { NONE, REQUESTED, DISPATCHED, COMPLETE }
     public interface Observer { void event(String detail); }

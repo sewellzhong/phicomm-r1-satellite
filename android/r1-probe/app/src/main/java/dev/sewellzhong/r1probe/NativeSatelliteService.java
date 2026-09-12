@@ -18,6 +18,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
+import dev.sewellzhong.r1probe.esphome.NativeTimerController;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -37,6 +38,8 @@ public final class NativeSatelliteService extends Service {
     private HotspotCapabilityProbe hotspot;
     private R1MessageDispatchBridge originalProvisioning;
     private R1SystemKeyMonitor systemKeys;
+    private NativeTimerController timers;
+    private NativeTimerAlarm timerAlarm;
     private volatile boolean destroyed;
     private volatile Socket client;
     private volatile LocalSocket adminClient;
@@ -78,6 +81,21 @@ public final class NativeSatelliteService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         settings = new NativeSettings(this);
+        timerAlarm = new NativeTimerAlarm(this, settings, new NativeTimerAlarm.Gate() {
+            @Override public void requestRelease() {
+                NativeAudioRuntime current = audio;
+                if (current != null) current.timerAlarmStarting();
+            }
+            @Override public boolean released() {
+                NativeAudioRuntime current = audio;
+                return current == null || current.localPlaybackTerminated();
+            }
+        });
+        timers = new NativeTimerController(new NativeTimerStore(this), new NativeTimerController.Clock() {
+            @Override public long elapsedMillis() { return android.os.SystemClock.elapsedRealtime(); }
+            @Override public long wallMillis() { return System.currentTimeMillis(); }
+            @Override public boolean wallTrusted() { return wallMillis() >= 1577836800000L; }
+        }, timerAlarm);
         diagnostic = new AudioDiagnostic(getFilesDir());
         hardware = new HardwareInputMonitor(this, settings);
         capabilities = new DeviceCapabilityProbe(this);
@@ -87,6 +105,7 @@ public final class NativeSatelliteService extends Service {
         try {
             systemKeys = new R1SystemKeyMonitor(this, new R1SystemKeyMonitor.Listener() {
                 @Override public void shortPress() {
+                    if (timers.stopRinging()) return;
                     NativeAudioRuntime current = audio;
                     if (current != null) current.cancelAudio(
                             dev.sewellzhong.r1probe.esphome.NativeAudioCoordinator.CancelReason.USER_STOP);
@@ -134,6 +153,7 @@ public final class NativeSatelliteService extends Service {
     private void serve() {
         try {
             while (!destroyed) {
+                timers.tick();
                 if (!settings.enabled()) { state = settings.configured() ? "disabled" : "uninitialized"; Thread.sleep(200); continue; }
                 if (!AudioOwner.acquire(this)) { state = "audio_owned_by_other_runtime"; Thread.sleep(1000); continue; }
                 try {
@@ -148,6 +168,7 @@ public final class NativeSatelliteService extends Service {
                     synchronized (this) { if (!destroyed) publish(); }
                     while (!destroyed && settings.enabled()) {
                         if (!wakeLock.isHeld()) wakeLock.acquire(120000L);
+                        timers.tick();
                         state = "waiting_ha";
                         audioPermitted();
                         try {
@@ -155,7 +176,7 @@ public final class NativeSatelliteService extends Service {
                             if (destroyed || !settings.enabled()) { closeClient(); break; }
                             boolean permitted = audioPermitted();
                             NativeAudioRuntime current = new NativeAudioRuntime(this,
-                                    settings.listening() && permitted, this::audioPermitted);
+                                    settings.listening() && permitted, this::audioPermitted, timers);
                             current.diagnostic(diagnostic);
                             audio = current;
                             byte[] key = settings.key();
@@ -279,6 +300,8 @@ public final class NativeSatelliteService extends Service {
                         case "stop": settings.enable(false, false); closeClient(); closeServer(); break;
                         case "rotate": settings.rotate(); break;
                         case "hardware-reset": hardware.reset(); break;
+                        case "timer-stop": timers.stopRinging(); break;
+                        case "timer-status": break;
                         case "capability-status": break;
                         case "bluetooth-discoverable": capabilities.openDiscoverable(command.optInt("seconds", 60)); break;
                         case "bluetooth-close": capabilities.closeDiscoverable(); break;
@@ -312,6 +335,8 @@ public final class NativeSatelliteService extends Service {
                             || action.startsWith("hotspot-") || action.startsWith("original-provisioning-")
                             || action.equals("provisioning-recover") || action.equals("provisioning-handoff-probe"))
                         response = capabilitySnapshot();
+                    if (action.equals("timer-stop") || action.equals("timer-status"))
+                        response = timers.snapshot();
                     if (actionResponse != null) {
                         java.util.Iterator<String> keys = actionResponse.keys();
                         while (keys.hasNext()) { String key = keys.next(); response.put(key, actionResponse.get(key)); }
@@ -380,7 +405,7 @@ public final class NativeSatelliteService extends Service {
         info.setAttribute("version", "2026.8.0"); info.setAttribute("mac", settings.mac().replace(":", "").toLowerCase(java.util.Locale.ROOT));
         info.setAttribute("platform", "R1"); info.setAttribute("network", "wifi");
         info.setAttribute("api_encryption", "Noise_NNpsk0_25519_ChaChaPoly_SHA256");
-        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.03-native-announcement");
+        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.04-native-timers");
         registration = new NsdManager.RegistrationListener() {
             @Override public void onServiceRegistered(NsdServiceInfo serviceInfo) { }
             @Override public void onRegistrationFailed(NsdServiceInfo serviceInfo, int code) { error = "discovery_registration_failed"; }
@@ -405,7 +430,7 @@ public final class NativeSatelliteService extends Service {
     }
     @Override public void onDestroy() {
         diagnostic.stop("service_destroyed");
-        hardware.stop(); capabilities.close(); hotspot.close();
+        hardware.stop(); capabilities.close(); hotspot.close(); timers.close();
         if (systemKeys != null) systemKeys.stop();
         if (originalProvisioning != null) try { originalProvisioning.serviceDestroyed(); }
         catch (Exception ignored) { }

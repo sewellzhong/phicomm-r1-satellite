@@ -92,4 +92,14 @@ public final class NativeAnnouncementControllerTest {
         controller.closed();
         assertTrue(player.stopped); assertFalse(controller.active()); assertTrue(sent.isEmpty());
     }
+
+    @Test public void crossThreadInterruptIsFailedByProtocolOwnerTick() throws Exception {
+        controller.connected((id, message) -> sent.add(message));
+        controller.message(MessageIds.VoiceAssistantAnnounceRequest,
+                request("https://ha/media.wav", "", false), true);
+        controller.interrupt();
+        assertTrue(sent.isEmpty());
+        controller.tick();
+        assertFalse(controller.active()); assertEquals(1, sent.size()); assertFalse(success(0));
+    }
 }

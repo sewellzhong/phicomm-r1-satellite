@@ -12,6 +12,7 @@ import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
 import dev.sewellzhong.r1probe.esphome.NativeAnnouncementController;
 import dev.sewellzhong.r1probe.esphome.NativeAudioCoordinator;
 import dev.sewellzhong.r1probe.esphome.NativePcmPlayback;
+import dev.sewellzhong.r1probe.esphome.NativeTimerController;
 import dev.sewellzhong.r1probe.esphome.NativeVoiceSession;
 import java.io.IOException;
 import java.util.Arrays;
@@ -224,6 +225,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("announcement_requests", announcements.requests())
                 .put("announcement_completed", announcements.completed())
                 .put("announcement_failures", announcements.failures())
+                .put("timers", timers == null ? org.json.JSONObject.NULL : timers.snapshot())
                 .put("tts_stream_start_ms", ttsStreamStartMillis)
                 .put("ha_run_end_ms", haRunEndMillis)
                 .put("prompt_index", lastPromptIndex).put("reference_correlation", promptReference.correlation)
@@ -234,6 +236,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     }
     private final AtomicBoolean stopping = new AtomicBoolean();
     private final NativeAudioCoordinator coordinator;
+    private final NativeTimerController timers;
     private volatile boolean playbackRequested;
     private volatile AudioRecord recorder;
     private volatile long lastRead;
@@ -244,15 +247,20 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private AudioRecord stopTarget;
 
     public NativeAudioRuntime(Context context) {
-        this(context, true);
+        this(context, true, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null);
     }
     public NativeAudioRuntime(Context context, boolean listen) {
-        this(context, listen, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)));
+        this(context, listen, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission) {
+        this(context, listen, permission, null);
+    }
+    NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
+            NativeTimerController timers) {
         this.context = context.getApplicationContext();
         this.listen = listen;
         this.permission = permission;
+        this.timers = timers;
         settings = new NativeSettings(context);
         controls = new NativeControls(context, settings);
         wakeEnabled = settings.wakeEnabled();
@@ -275,6 +283,12 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 this::diagnosticEvent);
     }
     boolean cancelAudio(NativeAudioCoordinator.CancelReason reason) { return coordinator.requestCancel(reason); }
+    void timerAlarmStarting() {
+        announcements.interrupt();
+        coordinator.requestCancel(NativeAudioCoordinator.CancelReason.TIMER_ALARM);
+        playback.stop();
+    }
+    boolean localPlaybackTerminated() { return playback.terminated(); }
     public synchronized void fixedPcmStart() throws IOException {
         if (!listen || fixedPcmRun || !"listening".equals(status) || !coordinator.ready())
             throw new IOException("fixed_pcm_requires_idle_listener");
@@ -323,7 +337,9 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     }
     @Override public void message(int type, byte[] payload) throws IOException {
         if (controls.message(type, payload, sender)) return;
-        if (announcements.message(type, payload, coordinator.ready())) return;
+        if (timers != null && timers.message(type, payload)) return;
+        if (announcements.message(type, payload, coordinator.ready()
+                && (timers == null || !timers.ringing()))) return;
         coordinator.message(type, payload);
         if (type == dev.sewellzhong.r1probe.esphome.proto.MessageIds.VoiceAssistantEventResponse) {
             dev.sewellzhong.r1probe.esphome.proto.EsphomeApi.VoiceAssistantEvent kind =
@@ -351,6 +367,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     }
     @Override public void tick() throws IOException {
         if (sender != null) controls.tick(sender);
+        if (timers != null) timers.tick();
         if (failure != null) throw new IOException(failure);
         long now = System.nanoTime();
         if (listen && now - lastIsolationCheck > 1_000_000_000L) {

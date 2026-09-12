@@ -8,8 +8,8 @@ import dev.sewellzhong.r1probe.esphome.proto.EsphomeApi;
 import static org.junit.Assert.*;
 
 public final class NativeApiConnectionTest {
-    @Test public void advertisesOnlyImplementedVoiceAudioAndAnnouncementFeatures() {
-        assertEquals(21, NativeApiConnection.SATELLITE_FEATURES);
+    @Test public void advertisesOnlyImplementedVoiceAudioTimerAndAnnouncementFeatures() {
+        assertEquals(29, NativeApiConnection.SATELLITE_FEATURES);
     }
     @Test public void internalTtsEntityNegotiatesOnlyBoundedAnnouncementWav() {
         EsphomeApi.ListEntitiesMediaPlayerResponse entity = NativeApiConnection.ttsFormatEntity();
