@@ -376,6 +376,13 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         }
     }
     public String status() { return status; }
+    String indicatorStatus() {
+        NativeMediaController.State mediaState = media.state();
+        if (announcements.active() || mediaState == NativeMediaController.State.PLAYING
+                || mediaState == NativeMediaController.State.PREPARING || !playback.terminated())
+            return "playing";
+        return status;
+    }
     public boolean audioOpened() { return everOpened; }
     public boolean terminated() { return (capture == null || !capture.isAlive()) && (promptPlayer == null || !promptPlayer.isAlive()) && playback.terminated() && (recorderStopper == null || !recorderStopper.isAlive()); }
     @Override public boolean wakeEnabled() { return wakeEnabled; }

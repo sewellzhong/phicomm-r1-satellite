@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("114")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.14-alarm-buttons")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("115")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.15-privacy-mute")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

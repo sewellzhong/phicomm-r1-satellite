@@ -23,6 +23,10 @@ final class NativeSettings {
     boolean configured() { return prefs.contains("psk") && prefs.contains("id"); }
     boolean enabled() { return configured() && prefs.getBoolean("enabled", false); }
     boolean listening() { return prefs.getBoolean("listening", false); }
+    boolean privacyMuted() { return prefs.getBoolean("privacy_muted", false); }
+    synchronized void privacyMuted(boolean muted) {
+        commit(prefs.edit().putBoolean("privacy_muted", muted));
+    }
     boolean audioBlocked() { return prefs.getBoolean("audio_blocked", false); }
     String audioBlockReason() { return prefs.getString("audio_block_reason", "audio_backend_stalled"); }
     void blockAudio() { blockAudio("audio_backend_stalled"); }

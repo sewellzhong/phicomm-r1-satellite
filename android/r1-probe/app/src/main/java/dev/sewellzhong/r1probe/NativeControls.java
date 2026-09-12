@@ -14,10 +14,12 @@ final class NativeControls {
     private static final String[] NAMES = {"等待开口时间", "讲话结束停顿时间", "单条命令总时长", "音量", "语速", "持续对话等待开口时间", "计时器铃声音量"};
     private static final float[] MIN = {1, .2f, 5, 0, .5f, 1, 1}, MAX = {120, 10, 120, 100, 1.5f, 120, 100}, STEP = {1, .1f, 1, 1, .05f, 1, 1};
     private static final int TIMER_RINGTONE_KEY = BASE + 8;
+    private static final int PRIVACY_MUTE_KEY = BASE + 9;
     private final NativeSettings settings;
     private final AudioManager audio;
     private final float[] previous = {Float.NaN, Float.NaN, Float.NaN, Float.NaN, Float.NaN, Float.NaN, Float.NaN};
     private String previousTimerRingtone;
+    private Boolean previousPrivacyMuted;
     private boolean subscribed;
     private volatile int wakeGeneration;
     private int lastGeneration = -1;
@@ -50,6 +52,10 @@ final class NativeControls {
                 .setObjectId("timer_ringtone").setName("计时器铃声")
                 .addOptions("classic").addOptions("gentle").addOptions("urgent")
                 .setEntityCategoryValue(1).build());
+        sender.send(MessageIds.ListEntitiesBinarySensorResponse,
+            EsphomeApi.ListEntitiesBinarySensorResponse.newBuilder().setKey(PRIVACY_MUTE_KEY)
+                .setObjectId("microphone_privacy_muted").setName("麦克风隐私静音")
+                .setEntityCategoryValue(2).build());
     }
     boolean message(int type, byte[] payload, NativeVoiceSession.Sender sender) throws IOException {
         if (type == MessageIds.SubscribeStatesRequest) { subscribed = true; publish(sender, true); return true; }
@@ -94,6 +100,14 @@ final class NativeControls {
             sender.send(MessageIds.SelectStateResponse, EsphomeApi.SelectStateResponse.newBuilder()
                 .setKey(TIMER_RINGTONE_KEY).setState(ringtone).build());
             previousTimerRingtone = ringtone;
+        }
+        boolean privacyMuted = settings.privacyMuted();
+        if (force || previousPrivacyMuted == null
+                || previousPrivacyMuted.booleanValue() != privacyMuted) {
+            sender.send(MessageIds.BinarySensorStateResponse,
+                    EsphomeApi.BinarySensorStateResponse.newBuilder()
+                            .setKey(PRIVACY_MUTE_KEY).setState(privacyMuted).build());
+            previousPrivacyMuted = Boolean.valueOf(privacyMuted);
         }
     }
 }

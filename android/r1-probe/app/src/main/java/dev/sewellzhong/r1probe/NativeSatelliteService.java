@@ -41,6 +41,8 @@ public final class NativeSatelliteService extends Service {
     private R1MessageDispatchBridge originalProvisioning;
     private R1SystemKeyMonitor systemKeys;
     private R1PhysicalButtonActions buttonActions;
+    private R1PrivacyController privacy;
+    private R1PrivacyLed privacyLed;
     private NativeTimerController timers;
     private NativeAlarmController alarms;
     private NativeDndController dnd;
@@ -73,6 +75,13 @@ public final class NativeSatelliteService extends Service {
             if (!destroyed) main.postDelayed(this, 60000L);
         }
     };
+    private final Runnable refreshIndicators = new Runnable() {
+        @Override public void run() {
+            if (destroyed) return;
+            refreshLed();
+            main.postDelayed(this, 200L);
+        }
+    };
     private NsdManager nsd;
     private NsdManager.RegistrationListener registration;
     private final BroadcastReceiver network = new BroadcastReceiver() {
@@ -86,6 +95,16 @@ public final class NativeSatelliteService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         settings = new NativeSettings(this);
+        privacyLed = new R1PrivacyLed();
+        privacy = new R1PrivacyController(new R1PrivacyController.Store() {
+            @Override public boolean muted() { return settings.privacyMuted(); }
+            @Override public void save(boolean muted) { settings.privacyMuted(muted); }
+        }, () -> {
+            NativeAudioRuntime current = audio;
+            if (current != null) current.closed();
+            closeClient();
+        }, privacyLed);
+        privacy.applyPersistedState();
         NativeDndController.Clock civilClock = new NativeDndController.Clock() {
             @Override public long wallMillis() { return System.currentTimeMillis(); }
             @Override public boolean wallTrusted() { return wallMillis() >= 1577836800000L; }
@@ -156,6 +175,13 @@ public final class NativeSatelliteService extends Service {
                         trigger.setDaemon(true); trigger.start();
                         return true;
                     },
+                    () -> {
+                        boolean muted = privacy.toggleFromPhysicalButton();
+                        // Reconnect in both directions: muted creates a management-only runtime;
+                        // local unmute restores capture without granting HA an unmute operation.
+                        closeClient();
+                        return muted;
+                    },
                     new R1PhysicalButtonActions.Scheduler() {
                         @Override public Object schedule(Runnable action, long delayMillis) {
                             main.postDelayed(action, delayMillis);
@@ -171,6 +197,7 @@ public final class NativeSatelliteService extends Service {
         hardware.start();
         if (settings.enabled()) audioPermitted();
         main.postDelayed(renewLock, 60000L);
+        main.post(refreshIndicators);
         Notification.Builder builder;
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -202,6 +229,7 @@ public final class NativeSatelliteService extends Service {
             while (!destroyed) {
                 timers.tick();
                 alarms.tick();
+                refreshLed();
                 if (!settings.enabled()) { state = settings.configured() ? "disabled" : "uninitialized"; Thread.sleep(200); continue; }
                 if (!AudioOwner.acquire(this)) { state = "audio_owned_by_other_runtime"; Thread.sleep(1000); continue; }
                 try {
@@ -218,6 +246,7 @@ public final class NativeSatelliteService extends Service {
                         if (!wakeLock.isHeld()) wakeLock.acquire(120000L);
                         timers.tick();
                         alarms.tick();
+                        refreshLed();
                         state = "waiting_ha";
                         audioPermitted();
                         try {
@@ -225,7 +254,8 @@ public final class NativeSatelliteService extends Service {
                             if (destroyed || !settings.enabled()) { closeClient(); break; }
                             boolean permitted = audioPermitted();
                             NativeAudioRuntime current = new NativeAudioRuntime(this,
-                                    settings.listening() && permitted, this::audioPermitted, timers, alarms, dnd);
+                                    settings.listening() && permitted && !privacy.muted(),
+                                    this::audioPermitted, timers, alarms, dnd);
                             current.diagnostic(diagnostic);
                             audio = current;
                             byte[] key = settings.key();
@@ -349,6 +379,8 @@ public final class NativeSatelliteService extends Service {
                         case "stop": settings.enable(false, false); closeClient(); closeServer(); break;
                         case "rotate": settings.rotate(); break;
                         case "hardware-reset": hardware.reset(); break;
+                        case "button-short": buttonActions.shortPress(); break;
+                        case "button-long": buttonActions.longPress(); break;
                         case "timer-stop": timers.stopRinging(); break;
                         case "timer-status": break;
                         case "alarm-put":
@@ -400,6 +432,7 @@ public final class NativeSatelliteService extends Service {
                     response = action.startsWith("diagnostic-") && !"diagnostic-window".equals(action)
                             ? diagnosticSnapshot() : snapshot();
                     if (action.equals("capability-status") || action.equals("hardware-reset")
+                            || action.startsWith("button-")
                             || action.startsWith("bluetooth-") || action.startsWith("ble-")
                             || action.startsWith("hotspot-") || action.startsWith("original-provisioning-")
                             || action.equals("provisioning-recover") || action.equals("provisioning-handoff-probe"))
@@ -438,6 +471,25 @@ public final class NativeSatelliteService extends Service {
                 .put("producer_over_budget",diagnostic.producerOverBudget())
                 .put("sha256",ready?diagnostic.hash():JSONObject.NULL);
     }
+    private void refreshLed() {
+        if (privacyLed == null || privacy == null || settings == null) return;
+        R1PrivacyLed.State target;
+        if (privacy.muted()) target = R1PrivacyLed.State.MUTED;
+        else if (settings.provisioningPending()) target = R1PrivacyLed.State.PROVISIONING;
+        else if (!settings.enabled()) target = R1PrivacyLed.State.OFF;
+        else if ((timers != null && timers.ringing()) || (alarms != null && alarms.ringing()))
+            target = R1PrivacyLed.State.PLAYING;
+        else if (audio == null) target = R1PrivacyLed.State.DISCONNECTED;
+        else {
+            String audioState = audio.indicatorStatus();
+            if ("listening".equals(audioState) || audioState.startsWith("waiting_"))
+                target = R1PrivacyLed.State.LISTENING;
+            else if (audioState.contains("processing") || audioState.contains("uploading")
+                    || audioState.contains("injecting")) target = R1PrivacyLed.State.PROCESSING;
+            else target = R1PrivacyLed.State.PLAYING;
+        }
+        privacyLed.show(target, dnd != null && dnd.active());
+    }
     private JSONObject snapshot() throws org.json.JSONException {
         NativeAudioRuntime current = audio;
         isolation = FactoryAudioIsolation.inspect(this);
@@ -455,6 +507,7 @@ public final class NativeSatelliteService extends Service {
                 .put("audio", current == null ? JSONObject.NULL : current.diagnostics())
                 .put("alarms", alarms.snapshot())
                 .put("do_not_disturb", dnd.snapshot())
+                .put("privacy", privacy.snapshot())
                 .put("health", health == null ? JSONObject.NULL : health.snapshot())
                 .put("hardware", hardware.snapshot());
     }
@@ -462,6 +515,8 @@ public final class NativeSatelliteService extends Service {
         return new JSONObject().put("hardware", hardware.snapshot())
                 .put("system_keys", systemKeys == null ? JSONObject.NULL : systemKeys.snapshot())
                 .put("button_actions", buttonActions == null ? JSONObject.NULL : buttonActions.snapshot())
+                .put("privacy", privacy == null ? JSONObject.NULL : privacy.snapshot())
+                .put("status_led", privacyLed == null ? JSONObject.NULL : privacyLed.snapshot())
                 .put("capabilities", capabilities.snapshot()).put("hotspot", hotspot.snapshot())
                 .put("original_provisioning_bridge", originalProvisioning != null)
                 .put("original_provisioning_page", "http://192.168.43.1:8080/")
@@ -510,7 +565,8 @@ public final class NativeSatelliteService extends Service {
         if (systemKeys != null) systemKeys.stop();
         if (originalProvisioning != null) try { originalProvisioning.serviceDestroyed(); }
         catch (Exception ignored) { }
-        destroyed = true; main.removeCallbacks(renewLock); closeClient(); closeServer(); unpublish();
+        destroyed = true; main.removeCallbacks(renewLock); main.removeCallbacks(refreshIndicators);
+        closeClient(); closeServer(); unpublish();
         unregisterReceiver(network);
         if (health != null) health.cancel();
         // API22 close() alone does not reliably wake a pending LocalServerSocket.accept().

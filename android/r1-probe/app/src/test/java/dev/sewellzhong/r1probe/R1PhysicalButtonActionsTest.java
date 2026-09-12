@@ -30,7 +30,7 @@ public final class R1PhysicalButtonActionsTest {
         }
     }
     private static final class Count {
-        int audio, provisioning;
+        int audio, provisioning, privacy; boolean failPrivacy;
     }
     private static final class Scheduler implements R1PhysicalButtonActions.Scheduler {
         Runnable pending;
@@ -47,7 +47,9 @@ public final class R1PhysicalButtonActionsTest {
     private static R1PhysicalButtonActions actions(Timers timers, Alarms alarms, Count count,
             Scheduler scheduler) {
         return new R1PhysicalButtonActions(timers, alarms, () -> count.audio++,
-                () -> { count.provisioning++; return true; }, scheduler);
+                () -> { count.provisioning++; return true; },
+                () -> { if (count.failPrivacy) throw new IllegalStateException("store_failed");
+                    count.privacy++; return (count.privacy & 1) == 1; }, scheduler);
     }
 
     @Test public void shortPressStopsEveryRingerBeforeCancellingAudio() throws Exception {
@@ -64,12 +66,36 @@ public final class R1PhysicalButtonActionsTest {
         assertEquals(1, state.getLong("stops"));
     }
 
+    @Test public void stoppingTimerDoesNotArmPrivacyGesture() throws Exception {
+        Timers timers = new Timers(); timers.ringing = true;
+        R1PhysicalButtonActions actions = actions(timers, new Alarms(), new Count(), new Scheduler());
+        actions.shortPress();
+        assertFalse(actions.snapshot().getBoolean("privacy_press_pending"));
+    }
+
     @Test public void idleShortPressCancelsCurrentAudio() throws Exception {
         Count count = new Count(); R1PhysicalButtonActions actions = actions(
                 new Timers(), new Alarms(), count, new Scheduler());
         actions.shortPress();
         assertEquals(1, count.audio);
         assertEquals("cancel_audio", actions.snapshot().getString("last_action"));
+    }
+
+    @Test public void idleDoublePressTogglesPrivacyAfterImmediateAudioStop() throws Exception {
+        Count count = new Count(); Scheduler scheduler = new Scheduler();
+        R1PhysicalButtonActions actions = actions(new Timers(), new Alarms(), count, scheduler);
+        actions.shortPress(); actions.shortPress();
+        assertEquals(1, count.audio); assertEquals(1, count.privacy);
+        assertEquals("toggle_privacy_mute", actions.snapshot().getString("last_action"));
+        assertFalse(actions.snapshot().getBoolean("privacy_press_pending"));
+    }
+
+    @Test public void privacyPersistenceFailureIsContainedAndReported() throws Exception {
+        Count count = new Count(); count.failPrivacy = true; Scheduler scheduler = new Scheduler();
+        R1PhysicalButtonActions actions = actions(new Timers(), new Alarms(), count, scheduler);
+        actions.shortPress(); actions.shortPress();
+        assertEquals("failed", actions.snapshot().getString("last_action"));
+        assertEquals("privacy_persistence_failed", actions.snapshot().getString("last_failure"));
     }
 
     @Test public void ringingDoublePressSnoozesWithoutFirstStopping() throws Exception {
@@ -120,6 +146,7 @@ public final class R1PhysicalButtonActionsTest {
         actions.shortPress(); actions.close();
         assertEquals(null, scheduler.pending);
         assertFalse(actions.snapshot().getBoolean("alarm_press_pending"));
+        assertFalse(actions.snapshot().getBoolean("privacy_press_pending"));
         assertTrue(alarms.ringing);
     }
 }

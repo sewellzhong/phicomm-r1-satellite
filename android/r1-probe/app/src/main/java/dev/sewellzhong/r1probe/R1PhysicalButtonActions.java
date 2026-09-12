@@ -14,31 +14,36 @@ final class R1PhysicalButtonActions implements R1SystemKeyMonitor.Listener {
     }
     interface Audio { void cancel(); }
     interface Provisioning { boolean open(); }
+    interface Privacy { boolean toggle(); }
     interface Scheduler {
         Object schedule(Runnable action, long delayMillis);
         void cancel(Object token);
     }
 
     static final long ALARM_DOUBLE_PRESS_MILLIS = 450;
+    static final long PRIVACY_DOUBLE_PRESS_MILLIS = 450;
 
     private final Timers timers;
     private final Alarms alarms;
     private final Audio audio;
     private final Provisioning provisioning;
+    private final Privacy privacy;
     private final Scheduler scheduler;
     private Object pendingAlarmStop;
-    private long stops, snoozes, audioCancels, provisioningOpens, failures;
+    private Object pendingPrivacyPress;
+    private long stops, snoozes, audioCancels, provisioningOpens, privacyToggles, failures;
     private String lastAction = "none", lastFailure;
 
     R1PhysicalButtonActions(Timers timers, Alarms alarms, Audio audio,
-            Provisioning provisioning, Scheduler scheduler) {
+            Provisioning provisioning, Privacy privacy, Scheduler scheduler) {
         if (timers == null || alarms == null || audio == null || provisioning == null
-                || scheduler == null)
+                || privacy == null || scheduler == null)
             throw new IllegalArgumentException("button_dependencies_required");
         this.timers = timers;
         this.alarms = alarms;
         this.audio = audio;
         this.provisioning = provisioning;
+        this.privacy = privacy;
         this.scheduler = scheduler;
     }
 
@@ -55,8 +60,22 @@ final class R1PhysicalButtonActions implements R1SystemKeyMonitor.Listener {
             lastAction = "alarm_press_pending";
             return;
         }
-        stopRingingOrCancelAudio();
+        if (pendingPrivacyPress != null) {
+            scheduler.cancel(pendingPrivacyPress);
+            pendingPrivacyPress = null;
+            try {
+                privacy.toggle();
+                privacyToggles++;
+                lastAction = "toggle_privacy_mute";
+            } catch (RuntimeException error) { failed("privacy_persistence_failed"); }
+            return;
+        }
+        if (!stopRingingOrCancelAudio())
+            pendingPrivacyPress = scheduler.schedule(() -> clearPrivacyPress(),
+                    PRIVACY_DOUBLE_PRESS_MILLIS);
     }
+
+    private synchronized void clearPrivacyPress() { pendingPrivacyPress = null; }
 
     private synchronized void finishAlarmSinglePress() {
         if (pendingAlarmStop == null) return;
@@ -64,11 +83,12 @@ final class R1PhysicalButtonActions implements R1SystemKeyMonitor.Listener {
         stopRingingOnly();
     }
 
-    private void stopRingingOrCancelAudio() {
-        if (stopRingingOnly()) return;
+    private boolean stopRingingOrCancelAudio() {
+        if (stopRingingOnly()) return true;
         audio.cancel();
         audioCancels++;
         lastAction = "cancel_audio";
+        return false;
     }
 
     private boolean stopRingingOnly() {
@@ -105,13 +125,17 @@ final class R1PhysicalButtonActions implements R1SystemKeyMonitor.Listener {
                 .put("stops", stops).put("snoozes", snoozes)
                 .put("audio_cancels", audioCancels).put("provisioning_opens", provisioningOpens)
                 .put("alarm_press_pending", pendingAlarmStop != null)
+                .put("privacy_press_pending", pendingPrivacyPress != null)
+                .put("privacy_toggles", privacyToggles)
                 .put("failures", failures)
                 .put("last_failure", lastFailure == null ? JSONObject.NULL : lastFailure);
     }
 
     synchronized void close() {
         if (pendingAlarmStop != null) scheduler.cancel(pendingAlarmStop);
+        if (pendingPrivacyPress != null) scheduler.cancel(pendingPrivacyPress);
         pendingAlarmStop = null;
+        pendingPrivacyPress = null;
     }
 
     private void failed(String reason) {
