@@ -13,6 +13,8 @@ import dev.sewellzhong.r1probe.esphome.NativeAnnouncementController;
 import dev.sewellzhong.r1probe.esphome.NativeAlarmController;
 import dev.sewellzhong.r1probe.esphome.NativeAlarmProtocol;
 import dev.sewellzhong.r1probe.esphome.NativeAudioCoordinator;
+import dev.sewellzhong.r1probe.esphome.NativeDndController;
+import dev.sewellzhong.r1probe.esphome.NativeDndProtocol;
 import dev.sewellzhong.r1probe.esphome.NativePcmPlayback;
 import dev.sewellzhong.r1probe.esphome.NativeTimerController;
 import dev.sewellzhong.r1probe.esphome.NativeVoiceSession;
@@ -163,11 +165,15 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     @Override public void listEntities(NativeVoiceSession.Sender sender) throws IOException {
         controls.list(sender);
         if (alarmProtocol != null) alarmProtocol.list(sender);
+        if (dndProtocol != null) dndProtocol.list(sender);
     }
 
     private final NativePcmPlayback playback;
     private final NativeAnnouncementController announcements;
     private final NativeAlarmProtocol alarmProtocol;
+    private final NativeAlarmController alarms;
+    private final NativeDndController dnd;
+    private final NativeDndProtocol dndProtocol;
     private volatile boolean wakeEnabled;
     private volatile boolean everOpened;
     private volatile boolean authenticated;
@@ -233,6 +239,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("announcement_failures", announcements.failures())
                 .put("announcement_segments_started", announcements.segmentsStarted())
                 .put("announcement_segments_completed", announcements.segmentsCompleted())
+                .put("announcement_suppressed", announcements.suppressed())
+                .put("do_not_disturb", dnd == null ? org.json.JSONObject.NULL : dnd.snapshot())
                 .put("timers", timers == null ? org.json.JSONObject.NULL : timers.snapshot())
                 .put("tts_stream_start_ms", ttsStreamStartMillis)
                 .put("ha_run_end_ms", haRunEndMillis)
@@ -269,11 +277,18 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
             NativeTimerController timers, NativeAlarmController alarms) {
+        this(context, listen, permission, timers, alarms, null);
+    }
+    NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
+            NativeTimerController timers, NativeAlarmController alarms, NativeDndController dnd) {
         this.context = context.getApplicationContext();
         this.listen = listen;
         this.permission = permission;
         this.timers = timers;
+        this.alarms = alarms;
         alarmProtocol = alarms == null ? null : new NativeAlarmProtocol(alarms);
+        this.dnd = dnd;
+        dndProtocol = dnd == null ? null : new NativeDndProtocol(dnd);
         settings = new NativeSettings(context);
         controls = new NativeControls(context, settings);
         wakeEnabled = settings.wakeEnabled();
@@ -291,7 +306,13 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 promptReference.finish(System.nanoTime()); playbackRequested = false;
             }
         }, this::diagnosticEvent);
-        announcements = new NativeAnnouncementController(playback);
+        announcements = new NativeAnnouncementController(playback, new NativeAnnouncementController.Policy() {
+            @Override public boolean allowed() { return NativeAudioRuntime.this.dnd == null
+                    || NativeAudioRuntime.this.dnd.announcementsAllowed(); }
+            @Override public void suppressed() {
+                if (NativeAudioRuntime.this.dnd != null) NativeAudioRuntime.this.dnd.suppressedAnnouncement();
+            }
+        });
         coordinator = new NativeAudioCoordinator(playback, () -> System.nanoTime() / 1_000_000L,
                 this::diagnosticEvent);
     }
@@ -351,6 +372,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     @Override public void message(int type, byte[] payload) throws IOException {
         if (controls.message(type, payload, sender)) return;
         if (alarmProtocol != null && alarmProtocol.message(type, payload, sender)) return;
+        if (dndProtocol != null && dndProtocol.message(type, payload, sender)) return;
         if (timers != null && timers.message(type, payload)) return;
         if (announcements.message(type, payload, coordinator.ready()
                 && (timers == null || !timers.ringing()))) return;
@@ -382,6 +404,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     @Override public void tick() throws IOException {
         if (sender != null) controls.tick(sender);
         if (timers != null) timers.tick();
+        if (alarms != null) alarms.tick();
+        if (dnd != null && dnd.active() && announcements.active()) announcements.interrupt();
         if (failure != null) throw new IOException(failure);
         long now = System.nanoTime();
         if (listen && now - lastIsolationCheck > 1_000_000_000L) {

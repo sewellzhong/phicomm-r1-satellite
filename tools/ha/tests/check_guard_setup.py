@@ -71,8 +71,12 @@ async def main():
             assert len(natives)==1 and not natives[0].audio_processing.requires_external_vad
             assert guard.audio_processing.requires_external_vad
             assert any(e.domain=='conversation' for e in registry.entities.values() if e.config_entry_id==native_entry.entry_id)
-            assert any(e.domain=='sensor' for e in registry.entities.values() if e.config_entry_id==native_entry.entry_id)
+            sensor_entries=[e for e in registry.entities.values()
+                            if e.domain=='sensor' and e.config_entry_id==native_entry.entry_id]
+            assert len(sensor_entries)==2
+            assert {e.unique_id.rsplit('-',1)[-1] for e in sensor_entries} == {'alarms','disturb'}
             assert hass.services.has_service('r1_input_guard','alarm_put')
+            assert hass.services.has_service('r1_input_guard','dnd_set')
             # HA 2026.8 per-integration device registry: no DeviceInfo for the bridge.
             from homeassistant.helpers import device_registry as dr
             from custom_components.r1_input_guard.interaction import Interaction
@@ -100,6 +104,7 @@ async def main():
             print(json.dumps({'surface':'HA_2026.8.2_container','config_flow':'passed','platform_setup':'passed',
                               'duplicate_guard':'rejected','nested_guard':'rejected','unload':'passed','native_entry_and_conversation_platform':'passed','standard_entry_preserved':'passed',
                               'alarm_sensor_platform':'passed','alarm_entity_actions':'registered',
+                              'dnd_sensor_platform':'passed','dnd_entity_actions':'registered',
                               'real_microphone':False,'production_HA':False}))
         finally:
             await hass.async_stop()

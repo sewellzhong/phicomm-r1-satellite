@@ -135,6 +135,22 @@ public final class NativeAlarmControllerTest {
         assertEquals(1, state.getLong("persistence_failures"));
     }
 
+    @Test public void localPolicyConsumesSuppressedOccurrenceWithoutLatePlayback() throws Exception {
+        final boolean[] allowed = {false}; final int[] suppressed = {0};
+        NativeAlarmController gated = new NativeAlarmController(store, clock, ringer,
+                new NativeAlarmController.Policy() {
+                    @Override public boolean allowed() { return allowed[0]; }
+                    @Override public void suppressed() { suppressed[0]++; }
+                });
+        gated.put("quiet", "安静", "2026-09-12", 7, 1, 0, true, 10, -1);
+        clock.advance(60_000); gated.tick();
+        assertEquals(0, ringer.starts); assertEquals(1, suppressed[0]);
+        assertEquals(1, gated.snapshot().getLong("suppressed"));
+        assertEquals(0, gated.snapshot().getInt("ringing_count"));
+        allowed[0] = true; gated.tick();
+        assertEquals(0, ringer.starts);
+    }
+
     private static long epoch(String zone, int year, int month, int day, int hour, int minute) {
         Calendar value = Calendar.getInstance(TimeZone.getTimeZone(zone)); value.clear(); value.setLenient(false);
         value.set(year, month - 1, day, hour, minute, 0); return value.getTimeInMillis();

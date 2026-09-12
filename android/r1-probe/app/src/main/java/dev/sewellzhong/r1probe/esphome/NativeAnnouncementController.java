@@ -6,7 +6,12 @@ import java.io.IOException;
 
 /** Owns one HA-initiated announcement on the authenticated protocol thread. */
 public final class NativeAnnouncementController {
+    public interface Policy {
+        boolean allowed();
+        void suppressed();
+    }
     private final NativeVoiceSession.Playback playback;
+    private final Policy policy;
     private NativeVoiceSession.Sender sender;
     private String mediaUrl;
     private volatile boolean active;
@@ -16,9 +21,18 @@ public final class NativeAnnouncementController {
     private volatile long failures;
     private volatile long segmentsStarted;
     private volatile long segmentsCompleted;
+    private volatile long suppressed;
 
     public NativeAnnouncementController(NativeVoiceSession.Playback playback) {
-        this.playback = playback;
+        this(playback, new Policy() {
+            @Override public boolean allowed() { return true; }
+            @Override public void suppressed() { }
+        });
+    }
+
+    public NativeAnnouncementController(NativeVoiceSession.Playback playback, Policy policy) {
+        if (policy == null) throw new IllegalArgumentException("announcement_policy_required");
+        this.playback = playback; this.policy = policy;
     }
 
     public void connected(NativeVoiceSession.Sender sender) {
@@ -31,6 +45,7 @@ public final class NativeAnnouncementController {
     public long failures() { return failures; }
     public long segmentsStarted() { return segmentsStarted; }
     public long segmentsCompleted() { return segmentsCompleted; }
+    public long suppressed() { return suppressed; }
 
     /** Returns true only for the announcement message owned by this controller. */
     public boolean message(int type, byte[] payload, boolean voiceIdle) throws IOException {
@@ -38,6 +53,9 @@ public final class NativeAnnouncementController {
         requests++;
         EsphomeApi.VoiceAssistantAnnounceRequest request =
                 EsphomeApi.VoiceAssistantAnnounceRequest.parseFrom(payload);
+        if (!policy.allowed()) {
+            suppressed++; policy.suppressed(); reply(false); return true;
+        }
         if (active || !voiceIdle || playback == null || !playback.terminated()
                 || request.getStartConversation() || request.getMediaId().isEmpty()) {
             reply(false);

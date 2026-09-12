@@ -1,6 +1,7 @@
 """Confirmed full-list view and entity actions for R1-owned local alarms."""
 import voluptuous as vol
 from homeassistant.components.sensor import SensorEntity
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, entity_platform
 from .interaction import bridge
 
@@ -8,7 +9,7 @@ from .interaction import bridge
 async def async_setup_entry(hass, entry, async_add_entities):
     owner = bridge(hass, entry.entry_id)
     if not owner: return
-    async_add_entities([R1Alarms(owner)])
+    async_add_entities([R1Alarms(owner), R1DoNotDisturb(owner)])
     platform = entity_platform.async_get_current_platform()
     platform.async_register_entity_service('alarm_refresh', None, 'async_alarm_refresh')
     platform.async_register_entity_service('alarm_put', {
@@ -35,6 +36,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
     platform.async_register_entity_service('alarm_pending_discard', {
         vol.Optional('id', default=''): cv.string,
     }, 'async_alarm_pending_discard')
+    platform.async_register_entity_service('dnd_refresh', None, 'async_dnd_refresh')
+    platform.async_register_entity_service('dnd_set', {
+        vol.Required('manual'): cv.boolean,
+        vol.Required('schedule_enabled'): cv.boolean,
+        vol.Required('start_hour'): vol.All(vol.Coerce(int), vol.Range(min=0, max=23)),
+        vol.Required('start_minute'): vol.All(vol.Coerce(int), vol.Range(min=0, max=59)),
+        vol.Required('end_hour'): vol.All(vol.Coerce(int), vol.Range(min=0, max=23)),
+        vol.Required('end_minute'): vol.All(vol.Coerce(int), vol.Range(min=0, max=59)),
+        vol.Required('alarms_allowed'): cv.boolean,
+        vol.Optional('expected_version'): vol.All(vol.Coerce(int), vol.Range(min=0)),
+    }, 'async_dnd_set')
 
 
 class R1Alarms(SensorEntity):
@@ -86,3 +98,44 @@ class R1Alarms(SensorEntity):
     async def async_alarm_stop(self, **values): await self.owner.alarm_request('stop', **values)
     async def async_alarm_snooze(self, **values): await self.owner.alarm_request('snooze', **values)
     async def async_alarm_pending_discard(self, **values): await self.owner.discard_alarm_pending(**values)
+
+
+class R1DoNotDisturb(SensorEntity):
+    _attr_name = '免打扰'
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_icon = 'mdi:minus-circle-off-outline'
+
+    def __init__(self, owner):
+        self.owner = owner
+        self._attr_unique_id = owner.entry.entry_id + '-do-not-disturb'
+        self._attr_device_info = owner.device_info
+
+    @property
+    def available(self): return self.owner.dnd_sync_status == 'synced'
+
+    @property
+    def native_value(self):
+        state = self.owner.dnd_state
+        return 'on' if state and state['active'] else 'off' if state else None
+
+    @property
+    def extra_state_attributes(self):
+        state = dict(self.owner.dnd_state or {})
+        state.pop('request_id', None); state.pop('operation', None)
+        state['sync_status'] = self.owner.dnd_sync_status
+        state['last_error'] = self.owner.dnd_last_error
+        return state
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        self.owner.listeners.add(self.async_write_ha_state)
+        self.async_on_remove(lambda: self.owner.listeners.discard(self.async_write_ha_state))
+
+    async def async_dnd_refresh(self): await self.owner.dnd_request('status')
+
+    async def async_dnd_set(self, **values):
+        if 'expected_version' not in values:
+            if self.owner.dnd_state is None: raise HomeAssistantError('r1_dnd_state_unavailable')
+            values['expected_version'] = self.owner.dnd_state['version']
+        await self.owner.dnd_request('set', **values)

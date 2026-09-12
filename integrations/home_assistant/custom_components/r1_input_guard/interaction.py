@@ -38,6 +38,10 @@ class Interaction:
         self.alarm_last_error = None
         self._alarm_lock = asyncio.Lock()
         self.alarm_pending = AlarmPending(hass, entry.entry_id)
+        self.dnd_state = None
+        self.dnd_sync_status = 'connecting'
+        self.dnd_last_error = None
+        self._dnd_lock = asyncio.Lock()
         self.resolve()
         self.cancel = async_track_time_interval(hass, self.refresh, timedelta(seconds=5))
         self.task = entry.async_create_background_task(hass, self._initialize(), 'r1-interaction-config')
@@ -136,6 +140,75 @@ class Interaction:
         if not name or not re.fullmatch(r'[a-z][a-z0-9-]{0,30}', name): return None
         service = name.replace('-', '_') + '_alarm_sync'
         return service if self.hass.services.has_service('esphome', service) else None
+
+    def dnd_service(self):
+        entries = [item for item in self.hass.config_entries.async_entries('esphome')
+                   if (item.unique_id or '').lower() == self.mac]
+        if len(entries) != 1: return None
+        info = getattr(getattr(entries[0], 'runtime_data', None), 'device_info', None)
+        name = getattr(info, 'name', None)
+        if not name or not re.fullmatch(r'[a-z][a-z0-9-]{0,30}', name): return None
+        service = name.replace('-', '_') + '_do_not_disturb'
+        return service if self.hass.services.has_service('esphome', service) else None
+
+    async def dnd_request(self, operation, *, context=None, **values):
+        if operation not in ('status', 'set'):
+            raise HomeAssistantError('r1_dnd_operation_invalid')
+        async with self._dnd_lock:
+            try:
+                service = self.dnd_service()
+                if service is None: raise HomeAssistantError('r1_dnd_unavailable')
+                request_id = uuid4().hex
+                request = {'request_id': request_id, 'operation': operation, **values}
+                encoded = json.dumps(request, ensure_ascii=False, separators=(',', ':'))
+                if len(encoded.encode()) > 2048: raise HomeAssistantError('r1_dnd_request_too_large')
+                response = await self.hass.services.async_call('esphome', service,
+                    {'request': encoded}, blocking=True, return_response=True, context=context)
+                state = self._validated_dnd_state(response, request_id, operation)
+            except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError) as error:
+                cause = error; transport = False
+                while cause is not None:
+                    if isinstance(cause, (TimeoutError, ConnectionError, APIConnectionError)):
+                        transport = True; break
+                    cause = cause.__cause__
+                self.dnd_sync_status = 'offline'
+                self.dnd_last_error = 'transport_failed' if transport else 'request_failed'
+                for listener in tuple(self.listeners): listener()
+                raise HomeAssistantError('r1_dnd_not_confirmed')
+            self.dnd_state = state; self.dnd_sync_status = 'synced'; self.dnd_last_error = None
+            for listener in tuple(self.listeners): listener()
+            return state
+
+    @staticmethod
+    def _validated_dnd_state(value, request_id, operation):
+        if not isinstance(value, dict) or value.get('schema') != 1 \
+                or value.get('request_id') != request_id or value.get('operation') != operation:
+            raise HomeAssistantError('r1_dnd_response_invalid')
+        integers = ('version', 'start_hour', 'start_minute', 'end_hour', 'end_minute',
+                    'suppressed_announcements', 'suppressed_alarms', 'persistence_failures')
+        if any(type(value.get(key)) is not int or value[key] < 0 for key in integers):
+            raise HomeAssistantError('r1_dnd_response_invalid')
+        if value['start_hour'] > 23 or value['end_hour'] > 23 \
+                or value['start_minute'] > 59 or value['end_minute'] > 59 \
+                or (value['start_hour'], value['start_minute']) == (value['end_hour'], value['end_minute']):
+            raise HomeAssistantError('r1_dnd_response_invalid')
+        booleans = ('manual', 'schedule_enabled', 'alarms_allowed', 'active',
+                    'clock_trusted', 'dim_light_requested', 'restore_failed')
+        if any(type(value.get(key)) is not bool for key in booleans):
+            raise HomeAssistantError('r1_dnd_response_invalid')
+        if value.get('source') not in ('none', 'manual', 'schedule', 'clock_untrusted') \
+                or not isinstance(value.get('time_zone'), str) or len(value['time_zone']) > 64:
+            raise HomeAssistantError('r1_dnd_response_invalid')
+        if value['dim_light_requested'] != value['active'] \
+                or (value['source'] == 'none') == value['active'] \
+                or value['manual'] and value['source'] != 'manual' \
+                or value['source'] == 'manual' and not value['manual'] \
+                or value['source'] == 'schedule' and (not value['schedule_enabled'] or not value['clock_trusted']) \
+                or value['source'] == 'clock_untrusted' and (not value['schedule_enabled'] or value['clock_trusted']):
+            raise HomeAssistantError('r1_dnd_response_invalid')
+        try: alarm_time_zone(value['time_zone'])
+        except (ValueError, ZoneInfoNotFoundError): raise HomeAssistantError('r1_dnd_response_invalid')
+        return value
 
     async def alarm_request(self, operation, *, context=None, **values):
         if operation not in ('status', 'put', 'delete', 'enable', 'stop', 'snooze'):
@@ -382,6 +455,8 @@ class Interaction:
             try:
                 await self.alarm_request('status')
                 await self.replay_alarm_pending()
+            except HomeAssistantError: pass
+            try: await self.dnd_request('status')
             except HomeAssistantError: pass
             for listener in tuple(self.listeners): listener()
         except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError):

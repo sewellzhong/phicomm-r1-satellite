@@ -110,4 +110,18 @@ public final class NativeAnnouncementControllerTest {
         controller.tick();
         assertFalse(controller.active()); assertEquals(1, sent.size()); assertFalse(success(0));
     }
+
+    @Test public void dndPolicyRejectsBeforeAnyMediaStarts() throws Exception {
+        final int[] suppressed = {0};
+        NativeAnnouncementController gated = new NativeAnnouncementController(player,
+                new NativeAnnouncementController.Policy() {
+                    @Override public boolean allowed() { return false; }
+                    @Override public void suppressed() { suppressed[0]++; }
+                });
+        gated.connected((id, message) -> sent.add(message));
+        gated.message(MessageIds.VoiceAssistantAnnounceRequest,
+                request("https://ha/private.wav", "https://ha/cue.wav", false), true);
+        assertTrue(player.urls.isEmpty()); assertEquals(1, sent.size()); assertFalse(success(0));
+        assertEquals(1, gated.suppressed()); assertEquals(1, suppressed[0]);
+    }
 }

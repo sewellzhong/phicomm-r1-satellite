@@ -19,6 +19,7 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
 import dev.sewellzhong.r1probe.esphome.NativeAlarmController;
+import dev.sewellzhong.r1probe.esphome.NativeDndController;
 import dev.sewellzhong.r1probe.esphome.NativeTimerController;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -41,6 +42,7 @@ public final class NativeSatelliteService extends Service {
     private R1SystemKeyMonitor systemKeys;
     private NativeTimerController timers;
     private NativeAlarmController alarms;
+    private NativeDndController dnd;
     private NativeTimerAlarm timerAlarm;
     private volatile boolean destroyed;
     private volatile Socket client;
@@ -83,6 +85,12 @@ public final class NativeSatelliteService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         settings = new NativeSettings(this);
+        NativeDndController.Clock civilClock = new NativeDndController.Clock() {
+            @Override public long wallMillis() { return System.currentTimeMillis(); }
+            @Override public boolean wallTrusted() { return wallMillis() >= 1577836800000L; }
+            @Override public String timeZoneId() { return java.util.TimeZone.getDefault().getID(); }
+        };
+        dnd = new NativeDndController(new NativeDndStore(this), civilClock);
         timerAlarm = new NativeTimerAlarm(this, settings, new NativeTimerAlarm.Gate() {
             @Override public void requestRelease() {
                 NativeAudioRuntime current = audio;
@@ -107,6 +115,9 @@ public final class NativeSatelliteService extends Service {
             @Override public void stop() { timerAlarm.stopAlarm(); }
             @Override public boolean active() { return timerAlarm.alarmActive(); }
             @Override public String failure() { return timerAlarm.failure(); }
+        }, new NativeAlarmController.Policy() {
+            @Override public boolean allowed() { return dnd.alarmsAllowed(); }
+            @Override public void suppressed() { dnd.suppressedAlarm(); }
         });
         diagnostic = new AudioDiagnostic(getFilesDir());
         hardware = new HardwareInputMonitor(this, settings);
@@ -194,7 +205,7 @@ public final class NativeSatelliteService extends Service {
                             if (destroyed || !settings.enabled()) { closeClient(); break; }
                             boolean permitted = audioPermitted();
                             NativeAudioRuntime current = new NativeAudioRuntime(this,
-                                    settings.listening() && permitted, this::audioPermitted, timers, alarms);
+                                    settings.listening() && permitted, this::audioPermitted, timers, alarms, dnd);
                             current.diagnostic(diagnostic);
                             audio = current;
                             byte[] key = settings.key();
@@ -363,7 +374,7 @@ public final class NativeSatelliteService extends Service {
                             if (originalProvisioning == null) throw new IllegalStateException("message_dispatch_unavailable");
                             actionResponse = originalProvisioning.probeHandoff();
                             break;
-                        case "status": case "pairing": break;
+                        case "status": case "pairing": case "dnd-status": break;
                         default: throw new IllegalArgumentException("unsupported_action");
                     }
                     response = action.startsWith("diagnostic-") && !"diagnostic-window".equals(action)
@@ -376,6 +387,7 @@ public final class NativeSatelliteService extends Service {
                     if (action.equals("timer-stop") || action.equals("timer-status"))
                         response = timers.snapshot();
                     if (action.startsWith("alarm-")) response = alarms.snapshot();
+                    if (action.equals("dnd-status")) response = dnd.snapshot();
                     if (actionResponse != null) {
                         java.util.Iterator<String> keys = actionResponse.keys();
                         while (keys.hasNext()) { String key = keys.next(); response.put(key, actionResponse.get(key)); }
@@ -422,6 +434,7 @@ public final class NativeSatelliteService extends Service {
                 .put("port", 6053).put("audio_opened", current != null && current.audioOpened())
                 .put("audio", current == null ? JSONObject.NULL : current.diagnostics())
                 .put("alarms", alarms.snapshot())
+                .put("do_not_disturb", dnd.snapshot())
                 .put("health", health == null ? JSONObject.NULL : health.snapshot())
                 .put("hardware", hardware.snapshot());
     }
@@ -445,7 +458,7 @@ public final class NativeSatelliteService extends Service {
         info.setAttribute("version", "2026.8.0"); info.setAttribute("mac", settings.mac().replace(":", "").toLowerCase(java.util.Locale.ROOT));
         info.setAttribute("platform", "R1"); info.setAttribute("network", "wifi");
         info.setAttribute("api_encryption", "Noise_NNpsk0_25519_ChaChaPoly_SHA256");
-        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.07-alarm-sync");
+        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.10-dnd");
         registration = new NsdManager.RegistrationListener() {
             @Override public void onServiceRegistered(NsdServiceInfo serviceInfo) { }
             @Override public void onRegistrationFailed(NsdServiceInfo serviceInfo, int code) { error = "discovery_registration_failed"; }

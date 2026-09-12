@@ -26,6 +26,10 @@ public final class NativeAlarmController {
         boolean active();
         String failure();
     }
+    public interface Policy {
+        boolean allowed();
+        void suppressed();
+    }
 
     private static final int SCHEMA = 1;
     private static final int MAX_ALARMS = 32;
@@ -50,19 +54,28 @@ public final class NativeAlarmController {
     private final Store store;
     private final Clock clock;
     private final Ringer ringer;
+    private final Policy policy;
     private final LinkedHashMap<String, AlarmValue> alarms = new LinkedHashMap<>();
     private final LinkedHashSet<String> ringing = new LinkedHashSet<>();
     private long version;
     private long fires, stops, snoozes, missed, invalidRequests, persistenceFailures;
-    private long clockWaits, ringerFailures, nextRingerAttempt;
+    private long clockWaits, ringerFailures, suppressed, nextRingerAttempt;
     private boolean clockPending;
     private String scheduledZone;
     private String lastRingerFailure;
 
     public NativeAlarmController(Store store, Clock clock, Ringer ringer) {
+        this(store, clock, ringer, new Policy() {
+            @Override public boolean allowed() { return true; }
+            @Override public void suppressed() { }
+        });
+    }
+
+    public NativeAlarmController(Store store, Clock clock, Ringer ringer, Policy policy) {
         if (store == null || clock == null || ringer == null)
             throw new IllegalArgumentException("alarm_dependencies_required");
-        this.store = store; this.clock = clock; this.ringer = ringer;
+        if (policy == null) throw new IllegalArgumentException("alarm_policy_required");
+        this.store = store; this.clock = clock; this.ringer = ringer; this.policy = policy;
         scheduledZone = safeZone(clock.timeZoneId());
         restore(store.load());
     }
@@ -187,7 +200,9 @@ public final class NativeAlarmController {
             if (due <= 0 || now < due || ringing.contains(value.id)) continue;
             boolean fire = now - due <= LATE_GRACE_MILLIS && due != value.lastOccurrenceWallMillis;
             if (fire) {
-                ringing.add(value.id); value.lastOccurrenceWallMillis = due; fires++;
+                value.lastOccurrenceWallMillis = due;
+                if (policy.allowed()) { ringing.add(value.id); fires++; }
+                else { suppressed++; policy.suppressed(); }
             } else missed++;
             if (value.snoozeWallMillis > 0) value.snoozeWallMillis = 0;
             else if (value.date.isEmpty()) value.nextWallMillis = nextOccurrence(value,
@@ -217,7 +232,7 @@ public final class NativeAlarmController {
                 .put("alarms", values).put("fires", fires).put("stops", stops).put("snoozes", snoozes)
                 .put("missed", missed).put("invalid_requests", invalidRequests)
                 .put("persistence_failures", persistenceFailures).put("clock_waits", clockWaits)
-                .put("ringer_failures", ringerFailures);
+                .put("ringer_failures", ringerFailures).put("suppressed", suppressed);
     }
 
     public synchronized void close() { ringing.clear(); ringer.stop(); }
@@ -264,7 +279,7 @@ public final class NativeAlarmController {
         try {
             JSONObject root = new JSONObject().put("schema", SCHEMA).put("version", version)
                     .put("time_zone", scheduledZone).put("fires", fires).put("stops", stops)
-                    .put("snoozes", snoozes).put("missed", missed);
+                    .put("snoozes", snoozes).put("missed", missed).put("suppressed", suppressed);
             JSONArray values = new JSONArray();
             for (AlarmValue value : alarms.values()) values.put(new JSONObject()
                     .put("id", value.id).put("name", value.name).put("date", value.date)
@@ -291,13 +306,14 @@ public final class NativeAlarmController {
 
     private void restore(String encoded) {
         alarms.clear(); ringing.clear(); version = 0;
-        fires = stops = snoozes = missed = 0;
+        fires = stops = snoozes = missed = suppressed = 0;
         if (encoded == null || encoded.isEmpty()) return;
         try {
             JSONObject root = new JSONObject(encoded);
             if (root.getInt("schema") != SCHEMA) throw new JSONException("schema");
             version = root.optLong("version", 0); scheduledZone = safeZone(root.optString("time_zone", scheduledZone));
-            fires = root.optLong("fires"); stops = root.optLong("stops"); snoozes = root.optLong("snoozes"); missed = root.optLong("missed");
+            fires = root.optLong("fires"); stops = root.optLong("stops"); snoozes = root.optLong("snoozes");
+            missed = root.optLong("missed"); suppressed = Math.max(0, root.optLong("suppressed"));
             JSONArray values = root.getJSONArray("alarms");
             if (values.length() > MAX_ALARMS) throw new JSONException("capacity");
             for (int i = 0; i < values.length(); i++) {
