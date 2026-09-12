@@ -20,6 +20,14 @@ U7 已取得 3448 上生产包 v102 的只读身份与实际 APK SHA-256，但�
 - 使用私有提示素材在 API 22/armeabi-v7a 配置构建生产包 v118 成功。仓库外候选为 `local-recovery/r1-sample01/2026-09-13-v118-update-backend-evidence/candidate-v118.apk`，大小 23,945,001 字节，SHA-256 为 `d9262dbd730fea4134bc08a1b7c9d5fc38823982888b13d6dabdc8e3381ad890`；包名、版本 118 和单一签名摘要均已用构建工具回读。该私有 APK 不提交仓库。
 - 以现有 `2026-09-12-v102-http-wav-deployment/previous-satellite.apk` 尝试封存时按预期以 `rollback_version_not_current` 停止，因为该文件实际是 v101；没有生成计划、没有调用 ADB，也没有更改 R1。这证明旧部署目录名称不能替代内容身份门禁。
 
+## 受控实机只读补充结果
+
+2026-09-13 用户明确要求继续下一步后，唯一在线设备仍为 serial `CBEAU1116K01314`。重新运行 U7 采集器得到 0600 本地证据 `package-manager-read-only-v5.json`，状态仍为 `pass_with_access_limits`：设备、3448/API 22、Enforcing、生产包 v102、UID 10010、路径及设备端 BusyBox 哈希均未漂移。
+
+随后只读导出固定路径 `/data/app/dev.sewellzhong.r1probe-1/base.apk` 到仓库外 `local-recovery/r1-sample01/2026-09-13-v102-update-rollback-baseline/current-v102-base.apk`。文件为 23,641,159 字节、模式 0600；主机 SHA-256 为 `3ab44785ce54e2a2830de1f2d5d4d1d9198c867e1c8ec0588cf9e21a7b98f0f4`，与设备端及 U7 证据完全一致。`aapt` 回读包名 `dev.sewellzhong.r1probe`、版本 102、版本名 `1.02-http-wav-negotiation`、min/target SDK 22；`apksigner` 验证单一签名 SHA-256 为 `0be7a3643442658354c185ec53cb50e73bc1516a56f2760ca46f2c932c1d2639`，与 v118 候选一致。
+
+门禁据此成功生成 0600、不覆盖的 `mutation-plan-v1.json`：计划 ID `81c96655ceed62c50faf32870f40fb4802cff980feec47e178aeed8694523768`，确认文本绑定 `r1-sample01:3448:v102->v118->v102:81c96655ceed62c5`。生成后再次只读回读设备，仍为 3448、Enforcing、v102 和相同 APK 哈希。本轮只执行读取与主机文件写入，没有推送、安装、降级、重启、提权或策略修改；设备继续运行 v102。
+
 ## 未完成项与下一入口
 
-当前缺少与 U7 实机证据完全匹配的 v102 回滚 APK（版本 102、SHA-256 `3ab44785ce54e2a2830de1f2d5d4d1d9198c867e1c8ec0588cf9e21a7b98f0f4`）。下一次受控实机窗口只能先只读导出当前 `base.apk` 到仓库外新路径，在主机复算哈希、用 `aapt`/`apksigner` 复核版本/包名/签名，并再次确认设备仍是相同 serial、3448、Enforcing 和 v102；随后才能生成有效计划。真实执行器仍须单独实现并消费完整确认令牌，固定记录升级/显式降级返回值、前后身份/哈希和 AVC。未满足这些条件前不得安装 v118，也不得以 v101 作为回滚包。
+精确 v102 回滚基线和有效计划已经齐备，但确认文本尚未被任何代码消费。下一步实现独立、有界、默认拒绝运行的实机执行器：重新校验完整计划及所有输入哈希，要求调用者逐字提供确认文本，固定暂存路径和 `app_process` PackageManager argv，分别记录升级与显式降级的原始返回、超时、前后包身份/哈希和 AVC，并以 `finally` 尽力清理暂存文件。执行器主机测试通过后才评估是否消费该计划；本记录不授权或宣称 v118 安装、真实降级、OTA或自动回滚已经完成。
