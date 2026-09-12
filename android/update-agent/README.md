@@ -71,6 +71,14 @@ matching signer before sealing an owner-only, non-overwriting plan with an
 explicit confirmation token. It contains no adb invocation and cannot install
 or downgrade a package.
 
+`tools/update/execute-r1-package-manager-mutation.py` is the separately gated
+device-evidence runner. It requires the exact sealed confirmation, serial, and
+plan-derived one-shot report path; revalidates every local and live identity;
+stages only hash-derived fixed names; and accepts a package-manager return only
+with an independent installed APK readback. A failed operation first checks for
+the exact rollback state and permits at most one emergency downgrade attempt.
+Host tests exercise this contract, but the real sealed plan remains unconsumed.
+
 This directory still does **not** ship a device root daemon executable, a real
 Android PackageManager implementation, init service, or deployable SELinux
 policy. The read-only collector confirmed the v102 package baseline on the R1,
