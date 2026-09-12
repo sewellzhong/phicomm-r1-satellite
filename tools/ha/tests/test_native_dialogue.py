@@ -2,12 +2,14 @@
 import asyncio
 import struct
 import math
+from contextlib import contextmanager
 from dataclasses import replace
 from types import SimpleNamespace, MethodType
 from unittest.mock import AsyncMock, patch
 import unittest
 from homeassistant.core import Context
 from homeassistant.components import stt, conversation
+from homeassistant.components.conversation.chat_log import current_chat_log
 from homeassistant.components.assist_pipeline.pipeline import PipelineInput, PipelineRun, PipelineStage
 from homeassistant.helpers import intent
 from custom_components.r1_input_guard.endpoint import CommandStream
@@ -195,5 +197,47 @@ class ConversationTest(unittest.IsolatedAsyncioTestCase):
         self.delegate.side_effect=asyncio.CancelledError
         with self.assertRaises(asyncio.CancelledError):await self.agent.async_process(self.user())
         self.assertFalse(self.agent._sessions);self.assertFalse(self.agent._busy)
+
+    async def test_streaming_delegate_forwards_deltas_with_isolated_inner_id(self):
+        deltas=[];nested=[];calls=[]
+        self.assertGreaterEqual(self.agent.STREAMING_DELEGATE_TIMEOUT,60)
+        class Target:
+            supports_streaming=True
+            def async_set_context(self,context): calls.append(('context',context))
+            async def internal_async_process(self,user_input):
+                calls.append(('start',user_input.conversation_id))
+                nested[-1].delta_listener(nested[-1],{'role':'assistant','content':'第一段，'})
+                calls.append(('delta',None))
+                await asyncio.sleep(0)
+                nested[-1].delta_listener(nested[-1],{'content':'第二段。'})
+                response=intent.IntentResponse(language='zh-CN');response.async_set_speech('第一段，第二段。')
+                return conversation.ConversationResult(response=response,
+                    conversation_id=user_input.conversation_id,continue_conversation=True)
+        @contextmanager
+        def session(_hass,conversation_id):
+            yield SimpleNamespace(conversation_id=conversation_id)
+        @contextmanager
+        def chat_log(_hass,_session,_input,chat_log_delta_listener=None):
+            item=SimpleNamespace(delta_listener=chat_log_delta_listener);nested.append(item);yield item
+        outer=SimpleNamespace(delta_listener=lambda _log,delta:deltas.append(delta.copy()))
+        token=current_chat_log.set(outer)
+        try:
+            with patch('custom_components.r1_input_guard.conversation.conversation.async_get_agent',return_value=Target()), \
+                    patch('custom_components.r1_input_guard.conversation.chat_session.async_get_chat_session',side_effect=session), \
+                    patch('custom_components.r1_input_guard.conversation.conversation.async_get_chat_log',side_effect=chat_log):
+                self.assertTrue(self.agent.supports_streaming)
+                result=await self.agent.async_process(self.user())
+        finally:
+            current_chat_log.reset(token)
+        self.assertEqual(['第一段，','第二段。'],[delta['content'] for delta in deltas])
+        self.assertEqual('outer',result.conversation_id)
+        self.assertNotEqual('outer',calls[1][1])
+        self.assertEqual(calls[1][1],self.agent._sessions[next(iter(self.agent._sessions))][0])
+        self.delegate.assert_not_awaited()
+
+    async def test_nonstreaming_delegate_does_not_claim_streaming(self):
+        with patch('custom_components.r1_input_guard.conversation.conversation.async_get_agent',
+                   return_value=SimpleNamespace(supports_streaming=False)):
+            self.assertFalse(self.agent.supports_streaming)
 
 if __name__=='__main__':unittest.main()

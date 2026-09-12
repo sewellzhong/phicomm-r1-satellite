@@ -5,7 +5,9 @@ import time
 import unicodedata
 from uuid import uuid4
 from homeassistant.components import conversation
+from homeassistant.components.conversation.chat_log import current_chat_log
 from homeassistant.helpers import entity_registry as er, intent
+from homeassistant.helpers import chat_session
 from homeassistant.exceptions import HomeAssistantError
 
 _END = {"结束对话", "取消本次对话", "取消这次对话", "不用回答了"}
@@ -20,10 +22,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class NativeConversation(conversation.ConversationEntity):
     _attr_name = "R1 原生会话"
-    _attr_supports_streaming = False
     _attr_supported_features = conversation.ConversationEntityFeature.CONTROL
     TTL = 900
     MAX_SESSIONS = 256
+    DELEGATE_TIMEOUT = 60
+    STREAMING_DELEGATE_TIMEOUT = 300
 
     def __init__(self, entry):
         self._attr_unique_id = entry.entry_id + "-conversation"
@@ -39,6 +42,60 @@ class NativeConversation(conversation.ConversationEntity):
     @property
     def supported_languages(self):
         return ["zh", "zh-CN", "zh-HK", "zh-TW"]
+
+    def _registered_target(self):
+        registered = er.async_get(self.hass).async_get(self._target_id)
+        if registered is None or registered.platform != "conversation_router" or registered.disabled:
+            raise HomeAssistantError("r1_conversation_source_unavailable")
+        return registered
+
+    def _streaming_target(self, registered=None):
+        if registered is None:
+            registered = self._registered_target()
+        target = conversation.async_get_agent(self.hass, registered.entity_id)
+        if (target is self or target is None or not getattr(target, "supports_streaming", False)
+                or not hasattr(target, "internal_async_process")):
+            return None
+        return target
+
+    @property
+    def supports_streaming(self):
+        """Advertise streaming only while the configured fixed-version delegate can stream."""
+        try:
+            return self._streaming_target() is not None
+        except (HomeAssistantError, AttributeError, KeyError):
+            return False
+
+    async def _delegate(self, user_input, registered, inner):
+        outer_log = current_chat_log.get()
+        target = self._streaming_target(registered) if outer_log is not None else None
+        if target is None:
+            async with asyncio.timeout(self.DELEGATE_TIMEOUT):
+                return await conversation.async_converse(
+                    hass=self.hass, text=user_input.text, conversation_id=inner,
+                    context=user_input.context, language=user_input.language,
+                    agent_id=registered.entity_id, device_id=user_input.device_id,
+                    satellite_id=user_input.satellite_id,
+                    extra_system_prompt=getattr(user_input, "extra_system_prompt", None),
+                )
+
+        forwarded = conversation.ConversationInput(
+            text=user_input.text, context=user_input.context, conversation_id=inner,
+            device_id=user_input.device_id, satellite_id=user_input.satellite_id,
+            language=user_input.language, agent_id=registered.entity_id,
+            extra_system_prompt=getattr(user_input, "extra_system_prompt", None),
+        )
+        # The outer Assist pipeline owns the listener that feeds incremental text to TTS.
+        # Give the isolated inner chat log that listener while keeping its source-bound ID;
+        # the delegate's public internal entry point then reuses this active inner log.
+        async with asyncio.timeout(self.STREAMING_DELEGATE_TIMEOUT):
+            with chat_session.async_get_chat_session(self.hass, inner) as session, \
+                    conversation.async_get_chat_log(
+                        self.hass, session, forwarded,
+                        chat_log_delta_listener=getattr(outer_log, "delta_listener", None),
+                    ):
+                target.async_set_context(user_input.context)
+                return await target.internal_async_process(forwarded)
 
     async def async_process(self, user_input):
         if self._unloaded:
@@ -131,20 +188,12 @@ class NativeConversation(conversation.ConversationEntity):
             finally:
                 self._busy.discard(key)
         # An unrelated valid topic invalidates relative setting shorthand.
-        registered = er.async_get(self.hass).async_get(self._target_id)
-        if registered is None or registered.platform != "conversation_router" or registered.disabled:
-            raise HomeAssistantError("r1_conversation_source_unavailable")
+        registered = self._registered_target()
         inner, _ = self._sessions.pop(key, (uuid4().hex, now))
         self._sessions[key] = (inner, now)
         self._busy.add(key)
         try:
-            async with asyncio.timeout(60):
-                result = await conversation.async_converse(
-                    hass=self.hass, text=user_input.text, conversation_id=inner,
-                    context=user_input.context, language=user_input.language,
-                    agent_id=registered.entity_id, device_id=user_input.device_id,
-                    satellite_id=user_input.satellite_id,
-                )
+            result = await self._delegate(user_input, registered, inner)
             if self._unloaded:
                 raise HomeAssistantError("r1_conversation_unloaded")
             self._sessions[key] = (result.conversation_id or inner, now)  # Match the hub: TTL since last input.
