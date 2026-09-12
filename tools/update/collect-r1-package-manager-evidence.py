@@ -72,7 +72,7 @@ def parse_pm_path(value):
     return path
 
 
-def parse_package_dump(value, apk_path):
+def parse_package_dump(value, apk_path=None):
     package_marker = f"Package [{PACKAGE_NAME}]"
     if package_marker not in value:
         raise EvidenceError("package_dump_identity_missing")
@@ -85,11 +85,16 @@ def parse_package_dump(value, apk_path):
         return unique[0]
 
     version = one(r"^\s*versionCode=([0-9]+)(?:\s|$)", "version")
-    user_id = one(r"^\s*userId=([0-9]+)\s*$", "uid")
+    user_id = one(r"^\s*userId=([0-9]+)(?:\s|$)", "uid")
     code_path = one(r"^\s*codePath=(/[A-Za-z0-9_./=+-]+)\s*$", "code_path")
     if not INTEGER_RE.fullmatch(version) or not INTEGER_RE.fullmatch(user_id):
         raise EvidenceError("package_dump_integer_invalid")
-    if not APK_PATH_RE.fullmatch(apk_path) or not (
+    if apk_path is None:
+        splits = one(r"^\s*splits=\[([^]]+)]\s*$", "splits")
+        if splits != "base" or code_path.endswith(".apk"):
+            raise EvidenceError("package_dump_base_apk_not_derivable")
+        apk_path = f"{code_path.rstrip('/')}/base.apk"
+    if not APK_PATH_RE.fullmatch(apk_path) or ".." in Path(apk_path).parts or not (
         apk_path == code_path or apk_path.startswith(code_path.rstrip("/") + "/")
     ):
         raise EvidenceError("package_path_dump_mismatch")
@@ -110,6 +115,12 @@ def parse_sha256(value, apk_path):
     return fields[0]
 
 
+def parse_regular_file_listing(value):
+    lines = [line.strip() for line in value.splitlines() if line.strip()]
+    if len(lines) != 1 or not lines[0].startswith("-"):
+        raise EvidenceError("installed_apk_not_regular_file")
+
+
 def filtered_avc(record):
     if record["exit_code"] != 0:
         return {
@@ -126,6 +137,21 @@ def filtered_avc(record):
         "lines": matches[-MAX_AVC_LINES:],
         "truncated": len(matches) > MAX_AVC_LINES,
     }
+
+
+def collect_optional_adb(adb, serial, arguments, runner, timeout):
+    try:
+        return run_adb(
+            adb, serial, arguments, runner=runner, timeout=timeout, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "arguments": list(arguments),
+            "exit_code": 124,
+            "stdout": "",
+            "stderr": f"timed out after {timeout} seconds",
+            "timed_out": True,
+        }
 
 
 def collect_evidence(adb, serial, output, confirm_device, runner=subprocess.run):
@@ -178,30 +204,62 @@ def collect_evidence(adb, serial, output, confirm_device, runner=subprocess.run)
             raise EvidenceError("selinux_not_enforcing")
 
         pm_record = run_adb(
-            adb, serial, ["shell", "pm", "path", PACKAGE_NAME], runner=runner
+            adb, serial, ["shell", "pm", "path", PACKAGE_NAME], runner=runner,
+            check=False,
         )
-        apk_path = parse_pm_path(pm_record["stdout"])
+        try:
+            apk_path = parse_pm_path(pm_record["stdout"])
+            apk_path_source = "pm_path"
+        except EvidenceError:
+            apk_path = None
+            apk_path_source = "dumpsys_base_split"
         dump_record = run_adb(
             adb, serial, ["shell", "dumpsys", "package", PACKAGE_NAME], runner=runner
         )
         result["installed_package"] = parse_package_dump(dump_record["stdout"], apk_path)
+        apk_path = result["installed_package"]["apk_path"]
+        result["installed_package"]["apk_path_source"] = apk_path_source
+        if apk_path_source != "pm_path":
+            listing_record = run_adb(
+                adb, serial, ["shell", "ls", "-l", apk_path], runner=runner,
+                check=False,
+            )
+            parse_regular_file_listing(listing_record["stdout"])
+            result.setdefault("access_limits", []).append({
+                "item": "pm_path",
+                "exit_code": pm_record["exit_code"],
+                "stdout": pm_record["stdout"][:1000],
+                "stderr": pm_record["stderr"][:1000],
+                "fallback": "dumpsys_base_split_and_ls",
+            })
 
         digest_record = run_adb(
             adb, serial, ["shell", "sha256sum", apk_path], runner=runner, check=False
         )
-        if digest_record["exit_code"] == 0:
-            result["installed_package"]["apk_sha256"] = parse_sha256(
-                digest_record["stdout"], apk_path
+        try:
+            digest = parse_sha256(digest_record["stdout"], apk_path)
+            digest_source = "device_sha256sum"
+        except EvidenceError:
+            busybox_digest_record = run_adb(
+                adb, serial, ["shell", "busybox", "sha256sum", apk_path],
+                runner=runner, check=False,
             )
-            result["installed_package"]["apk_sha256_source"] = "device_sha256sum"
-        else:
+            try:
+                digest = parse_sha256(busybox_digest_record["stdout"], apk_path)
+                digest_source = "device_busybox_sha256sum"
+            except EvidenceError:
+                digest = None
+                digest_source = "unavailable"
+        result["installed_package"]["apk_sha256"] = digest
+        result["installed_package"]["apk_sha256_source"] = digest_source
+        if digest is None:
             result["installed_package"]["apk_sha256"] = None
-            result["installed_package"]["apk_sha256_source"] = "unavailable"
-            result["access_limits"] = [{
+            result.setdefault("access_limits", []).append({
                 "item": "installed_apk_sha256",
                 "exit_code": digest_record["exit_code"],
+                "stdout": digest_record["stdout"][:1000],
                 "stderr": digest_record["stderr"][:1000],
-            }]
+            })
 
         help_record = run_adb(
             adb, serial, ["shell", "pm", "help"], runner=runner, check=False
@@ -214,11 +272,19 @@ def collect_evidence(adb, serial, output, confirm_device, runner=subprocess.run)
             "pm_help_has_downgrade_flag": "-d" in help_record["stdout"],
         }
 
-        dmesg = run_adb(adb, serial, ["shell", "dmesg"], runner=runner, check=False)
-        logcat = run_adb(
-            adb, serial, ["shell", "logcat", "-d", "-v", "brief"],
-            runner=runner, timeout=30, check=False,
+        dmesg = collect_optional_adb(
+            adb, serial, ["shell", "dmesg"], runner=runner, timeout=15,
         )
+        logcat = collect_optional_adb(
+            adb, serial, ["shell", "logcat", "-d", "-v", "brief"],
+            runner=runner, timeout=30,
+        )
+        for source, record in (("dmesg", dmesg), ("logcat", logcat)):
+            if record.get("timed_out"):
+                result.setdefault("access_limits", []).append({
+                    "item": f"avc_{source}",
+                    "timeout_seconds": 15 if source == "dmesg" else 30,
+                })
         result["avc"] = {"dmesg": filtered_avc(dmesg), "logcat": filtered_avc(logcat)}
         result["status"] = "pass_with_access_limits" if result.get("access_limits") else "pass"
     except Exception as error:

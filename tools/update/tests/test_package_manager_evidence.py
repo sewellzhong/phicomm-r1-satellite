@@ -3,6 +3,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -56,9 +57,10 @@ class PackageManagerEvidenceTest(unittest.TestCase):
         if args == ["shell", "dumpsys", "package", collector.PACKAGE_NAME]:
             return Completed(
                 f"Package [{collector.PACKAGE_NAME}] (fixture):\n"
-                "  userId=10123\n"
+                "  userId=10123 gids=[3003, 3002]\n"
                 "  versionCode=118 targetSdk=22\n"
                 "  codePath=/data/app/dev.sewellzhong.r1probe-1\n"
+                "  splits=[base]\n"
             )
         if args == ["shell", "sha256sum", self.apk_path]:
             return Completed(f"{'a' * 64}  {self.apk_path}\n")
@@ -128,7 +130,7 @@ class PackageManagerEvidenceTest(unittest.TestCase):
             if argv[3:5] == ["shell", "dumpsys"]:
                 return Completed(
                     f"Package [{collector.PACKAGE_NAME}] (fixture):\n"
-                    "  userId=10123\n  versionCode=118 targetSdk=22\n"
+                    "  userId=10123 gids=[3003, 3002]\n  versionCode=118 targetSdk=22\n"
                     "  codePath=/data/app/another-package-1\n"
                 )
             return result
@@ -138,14 +140,61 @@ class PackageManagerEvidenceTest(unittest.TestCase):
 
     def test_hash_access_limit_is_recorded_without_claiming_hash(self):
         def unavailable(argv, **kwargs):
-            result = self.runner(argv, **kwargs)
             if argv[3:5] == ["shell", "sha256sum"]:
-                return Completed("", 127, "sha256sum: not found\n")
-            return result
+                return Completed("/system/bin/sh: sha256sum: not found\n")
+            if argv[3:6] == ["shell", "busybox", "sha256sum"]:
+                return Completed("/system/bin/sh: busybox: not found\n")
+            return self.runner(argv, **kwargs)
 
         result = self.collect(runner=unavailable)
         self.assertEqual("pass_with_access_limits", result["status"])
         self.assertIsNone(result["installed_package"]["apk_sha256"])
+
+    def test_3448_pm_closed_uses_guarded_dumpsys_and_busybox_fallback(self):
+        def legacy_3448(argv, **kwargs):
+            args = argv[3:]
+            if args == ["shell", "pm", "path", collector.PACKAGE_NAME]:
+                return Completed("", 1, "error: closed\n")
+            if args == ["shell", "ls", "-l", self.apk_path]:
+                return Completed("-rw-r--r-- system system 23641159 base.apk\n")
+            if args == ["shell", "sha256sum", self.apk_path]:
+                return Completed("/system/bin/sh: sha256sum: not found\n")
+            if args == ["shell", "busybox", "sha256sum", self.apk_path]:
+                return Completed(f"{'b' * 64}  {self.apk_path}\n")
+            return self.runner(argv, **kwargs)
+
+        result = self.collect(runner=legacy_3448)
+        package = result["installed_package"]
+        self.assertEqual("pass_with_access_limits", result["status"])
+        self.assertEqual("dumpsys_base_split", package["apk_path_source"])
+        self.assertEqual("device_busybox_sha256sum", package["apk_sha256_source"])
+        self.assertEqual("b" * 64, package["apk_sha256"])
+        self.assertEqual("pm_path", result["access_limits"][0]["item"])
+
+    def test_pm_closed_fallback_requires_regular_base_apk(self):
+        def missing_base(argv, **kwargs):
+            args = argv[3:]
+            if args == ["shell", "pm", "path", collector.PACKAGE_NAME]:
+                return Completed("", 1, "error: closed\n")
+            if args == ["shell", "ls", "-l", self.apk_path]:
+                return Completed(f"{self.apk_path}: No such file or directory\n")
+            return self.runner(argv, **kwargs)
+
+        with self.assertRaisesRegex(collector.EvidenceError, "not_regular_file"):
+            self.collect(runner=missing_base)
+
+    def test_optional_logcat_timeout_is_recorded_as_access_limit(self):
+        def logcat_timeout(argv, **kwargs):
+            if argv[3:] == ["shell", "logcat", "-d", "-v", "brief"]:
+                raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+            return self.runner(argv, **kwargs)
+
+        result = self.collect(runner=logcat_timeout)
+        self.assertEqual("pass_with_access_limits", result["status"])
+        self.assertFalse(result["avc"]["logcat"]["available"])
+        self.assertIn(
+            "avc_logcat", {limit["item"] for limit in result["access_limits"]},
+        )
 
     def test_existing_evidence_is_not_overwritten(self):
         output = self.root / "out.json"
