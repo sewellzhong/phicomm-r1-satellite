@@ -1,0 +1,29 @@
+# Linux x86_64 / CPython 3.12 host interoperability dependencies.
+# Update versions and wheel hashes together; prepare-deps.py installs with
+# --require-hashes and --only-binary=:all:.
+aioesphomeapi==45.6.1 \
+    --hash=sha256:a486b080d27de593296c4e56906dfb61db15857c8e9b06b95ddeb78181bd87f0
+aiohappyeyeballs==2.7.1 \
+    --hash=sha256:9243213661e29250eb41368e5daa826fc017156c3b8a11440826b2e3ed376472
+async-interrupt==1.2.2 \
+    --hash=sha256:0a8deb884acfb5fe55188a693ae8a4381bbbd2cb6e670dac83869489513eec2c
+cffi==2.1.1 \
+    --hash=sha256:c1453022f490d2459a11819d83ad1d586e9ff65a12ac3e705ffebd46d3685dcf
+chacha20poly1305-reuseable==0.13.2 \
+    --hash=sha256:c7dba7c3604a9fa51bcfef9e4bfdaa3bfaadd88b6c5436a27be1c7e9c4081048
+cryptography==50.0.1 \
+    --hash=sha256:51afcfceb15597cf2635068e4ac9a56b2abde622edde17f37d85fd7b5306497a
+ifaddr==0.2.0 \
+    --hash=sha256:085e0305cfe6f16ab12d72e2024030f5d52674afad6911bb1eee207177b8a748
+noiseprotocol==0.3.1 \
+    --hash=sha256:2e1a603a38439636cf0ffd8b3e8b12cee27d368a28b41be7dbe568b2abb23111
+protobuf==7.36.1 \
+    --hash=sha256:97198b77e369a0abd8e262b8f6c7266c55ddb796a3a12c76d7b8881188ed83aa
+pycparser==3.0 \
+    --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
+tzdata==2026.3 \
+    --hash=sha256:dc096730c87af6cab1b171c9d532be840741ff5d459015e7f6947bd7d7e54931
+tzlocal==5.4.4 \
+    --hash=sha256:aae09f0126a8a86fa736be266eb4a471380d26a0de3bc14844e7821fee3e2a15
+zeroconf==0.151.3 \
+    --hash=sha256:bbd2b73902a44426080190d653fa35638a93b6c6725c2be76888b4b614bc0b48

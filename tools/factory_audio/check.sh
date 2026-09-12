@@ -4,7 +4,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD_DIR="$ROOT_DIR/local-deps/build/factory-audio-agent-host"
 PYTHON_BIN="$ROOT_DIR/local-deps/esphome-interop-venv/bin/python"
 if [[ ! -x "$PYTHON_BIN" ]]; then
-  echo 'Run python3 tools/dev/prepare.py before the factory-audio checks' >&2
+  echo 'Prepared host Python environment is missing; run python3 tools/dev/prepare.py' >&2
+  exit 1
+fi
+if ! "$PYTHON_BIN" -c 'import aioesphomeapi, google.protobuf, noise.connection' >/dev/null 2>&1; then
+  echo 'Prepared host Python environment is invalid; rerun python3 tools/dev/prepare.py' >&2
   exit 1
 fi
 cmake --fresh -S "$ROOT_DIR/android/factory-audio-agent" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
