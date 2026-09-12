@@ -1,5 +1,6 @@
 """Native endpoint/session tests in HA 2026.8.2; no real model or device calls."""
 import asyncio
+import hashlib
 import struct
 import math
 from contextlib import contextmanager
@@ -366,6 +367,166 @@ class ConversationTest(unittest.IsolatedAsyncioTestCase):
         run.end.assert_awaited_once()
         self.assertTrue(any(event.data.get('tts_start_streaming') is True
                             for event in events if event.type.value=='intent-progress'))
+
+    async def test_real_assist_pipeline_preserves_over_sixty_seconds_of_streamed_audio(self):
+        """Long deterministic PCM chunks remain ordered, unique, and fully drained."""
+        nested=[];played=[]
+        first_audio=asyncio.Event();release=asyncio.Event();reply_done=asyncio.Event()
+        texts=[
+            '第一段长回答已经开始播放，后续内容仍在生成。' * 4,
+            '第二段长回答继续播放，并在完整生成后正常结束。' * 4,
+            '第三段用于确认顺序完整、没有丢句或重复播放。' * 4,
+        ]
+        durations=[21,21,21]
+
+        class Target:
+            supports_streaming=True
+            def async_set_context(self,_context): pass
+            async def internal_async_process(self,user_input):
+                nested[-1].delta_listener(nested[-1],{'role':'assistant','content':texts[0]})
+                await release.wait()
+                for text in texts[1:]:
+                    nested[-1].delta_listener(nested[-1],{'content':text})
+                    await asyncio.sleep(0)
+                response=intent.IntentResponse(language='zh-CN')
+                response.async_set_speech(''.join(texts));reply_done.set()
+                return conversation.ConversationResult(response=response,
+                    conversation_id=user_input.conversation_id,continue_conversation=True)
+
+        class StreamingTts:
+            supports_streaming_input=True
+            engine='tts.r1';media_source_id='media-source://r1/long';token='test'
+            url='/api/tts_proxy/long';content_type='audio/wav';task=None
+            def async_set_message_stream(self,message_stream):
+                async def synthesize_and_play():
+                    index=0
+                    async for text in message_stream:
+                        # One deterministic S16LE/16 kHz mono payload per text segment.
+                        duration=durations[index]
+                        sample=struct.pack('<h',index+1)
+                        pcm=sample*(16000*duration)
+                        played.append((text,duration,len(pcm),hashlib.sha256(pcm).hexdigest()))
+                        index+=1;first_audio.set()
+                self.task=asyncio.create_task(synthesize_and_play())
+            def async_set_message(self,_message):
+                raise AssertionError('long streamed response must not use full-text TTS')
+
+        @contextmanager
+        def session(_hass,conversation_id): yield SimpleNamespace(conversation_id=conversation_id)
+        @contextmanager
+        def chat_log(_hass,_session,_input,chat_log_delta_listener=None):
+            item=SimpleNamespace(delta_listener=chat_log_delta_listener)
+            token=current_chat_log.set(item)
+            if chat_log_delta_listener is not None: nested.append(item)
+            try: yield item
+            finally: current_chat_log.reset(token)
+
+        stream=StreamingTts()
+        run=SimpleNamespace(intent_agent=SimpleNamespace(id='conversation.native'),tts_stream=stream,
+            pipeline=SimpleNamespace(conversation_language='zh-CN',prefer_local_intents=False,
+                                     tts_language='zh-CN',tts_voice=None),
+            context=Context(user_id='user1'),
+            hass=SimpleNamespace(states=SimpleNamespace(get=lambda _entity_id:None)),
+            start_stage=PipelineStage.INTENT,end_stage=PipelineStage.TTS,
+            _device_id='r1',_satellite_id='assist_satellite.r1',_conversation_data=SimpleNamespace(),
+            _intent_agent_only=True,_streamed_response_text=False,process_event=lambda _event:None,
+            _get_all_targets_in_satellite_area=lambda *_:False,start=lambda **_kwargs:None,end=AsyncMock())
+        run.recognize_intent=MethodType(PipelineRun.recognize_intent,run)
+        run.text_to_speech=MethodType(PipelineRun.text_to_speech,run)
+        async def dispatch(**kwargs):
+            return await self.agent.async_process(conversation.ConversationInput(
+                text=kwargs['text'],context=kwargs['context'],conversation_id=kwargs['conversation_id'],
+                device_id=kwargs['device_id'],satellite_id=kwargs['satellite_id'],language=kwargs['language'],
+                agent_id=kwargs['agent_id'],extra_system_prompt=kwargs['extra_system_prompt']))
+
+        with patch('custom_components.r1_input_guard.conversation.conversation.async_get_agent',return_value=Target()), \
+                patch('homeassistant.components.assist_pipeline.pipeline.chat_session.async_get_chat_session',side_effect=session), \
+                patch('homeassistant.components.assist_pipeline.pipeline.conversation.async_get_chat_log',side_effect=chat_log), \
+                patch('homeassistant.components.assist_pipeline.pipeline.conversation.async_converse',new=dispatch):
+            task=asyncio.create_task(PipelineInput(run=run,
+                session=SimpleNamespace(conversation_id='outer'),intent_input='请给出超过一分钟的回答',
+                device_id='r1',satellite_id='assist_satellite.r1').execute())
+            await asyncio.wait_for(first_audio.wait(),1)
+            self.assertFalse(reply_done.is_set());self.assertEqual([texts[0]],[row[0] for row in played])
+            release.set();await asyncio.wait_for(task,1);await asyncio.wait_for(stream.task,1)
+
+        self.assertEqual(texts,[row[0] for row in played])
+        self.assertEqual(63,sum(row[1] for row in played))
+        self.assertEqual([16000*21*2]*3,[row[2] for row in played])
+        self.assertEqual(3,len({row[3] for row in played}))
+        run.end.assert_awaited_once()
+
+    async def test_tool_success_text_is_streamed_only_after_explicit_result(self):
+        """The pipeline harness makes the external tool-result ordering contract observable."""
+        nested=[];played=[]
+        progress_audio=asyncio.Event();tool_result=asyncio.Event()
+        progress=('正在执行设备操作，请稍候。' * 5)
+        success='设备返回执行成功，操作已经完成。'
+
+        class Target:
+            supports_streaming=True
+            def async_set_context(self,_context): pass
+            async def internal_async_process(self,user_input):
+                nested[-1].delta_listener(nested[-1],{'role':'assistant','content':progress})
+                await tool_result.wait()
+                nested[-1].delta_listener(nested[-1],{'content':success})
+                response=intent.IntentResponse(language='zh-CN')
+                response.async_set_speech(progress+success)
+                return conversation.ConversationResult(response=response,
+                    conversation_id=user_input.conversation_id,continue_conversation=True)
+
+        class StreamingTts:
+            supports_streaming_input=True
+            engine='tts.r1';media_source_id='media-source://r1/tool';token='test'
+            url='/api/tts_proxy/tool';content_type='audio/wav';task=None
+            def async_set_message_stream(self,message_stream):
+                async def play():
+                    async for text in message_stream:
+                        played.append(text);progress_audio.set()
+                self.task=asyncio.create_task(play())
+            def async_set_message(self,_message):
+                raise AssertionError('tool contract must remain on streaming TTS')
+
+        @contextmanager
+        def session(_hass,conversation_id): yield SimpleNamespace(conversation_id=conversation_id)
+        @contextmanager
+        def chat_log(_hass,_session,_input,chat_log_delta_listener=None):
+            item=SimpleNamespace(delta_listener=chat_log_delta_listener)
+            token=current_chat_log.set(item)
+            if chat_log_delta_listener is not None: nested.append(item)
+            try: yield item
+            finally: current_chat_log.reset(token)
+
+        stream=StreamingTts()
+        run=SimpleNamespace(intent_agent=SimpleNamespace(id='conversation.native'),tts_stream=stream,
+            pipeline=SimpleNamespace(conversation_language='zh-CN',prefer_local_intents=False,
+                                     tts_language='zh-CN',tts_voice=None),
+            context=Context(user_id='user1'),hass=SimpleNamespace(states=SimpleNamespace(get=lambda _id:None)),
+            start_stage=PipelineStage.INTENT,end_stage=PipelineStage.TTS,
+            _device_id='r1',_satellite_id='assist_satellite.r1',_conversation_data=SimpleNamespace(),
+            _intent_agent_only=True,_streamed_response_text=False,process_event=lambda _event:None,
+            _get_all_targets_in_satellite_area=lambda *_:False,start=lambda **_kwargs:None,end=AsyncMock())
+        run.recognize_intent=MethodType(PipelineRun.recognize_intent,run)
+        run.text_to_speech=MethodType(PipelineRun.text_to_speech,run)
+        async def dispatch(**kwargs):
+            return await self.agent.async_process(conversation.ConversationInput(
+                text=kwargs['text'],context=kwargs['context'],conversation_id=kwargs['conversation_id'],
+                device_id=kwargs['device_id'],satellite_id=kwargs['satellite_id'],language=kwargs['language'],
+                agent_id=kwargs['agent_id'],extra_system_prompt=kwargs['extra_system_prompt']))
+
+        with patch('custom_components.r1_input_guard.conversation.conversation.async_get_agent',return_value=Target()), \
+                patch('homeassistant.components.assist_pipeline.pipeline.chat_session.async_get_chat_session',side_effect=session), \
+                patch('homeassistant.components.assist_pipeline.pipeline.conversation.async_get_chat_log',side_effect=chat_log), \
+                patch('homeassistant.components.assist_pipeline.pipeline.conversation.async_converse',new=dispatch):
+            task=asyncio.create_task(PipelineInput(run=run,
+                session=SimpleNamespace(conversation_id='outer'),intent_input='执行设备操作',
+                device_id='r1',satellite_id='assist_satellite.r1').execute())
+            await asyncio.wait_for(progress_audio.wait(),1)
+            self.assertEqual([progress],played);self.assertFalse(task.done())
+            tool_result.set();await asyncio.wait_for(task,1);await asyncio.wait_for(stream.task,1)
+
+        self.assertEqual([progress,success],played)
+        run.end.assert_awaited_once()
 
     async def test_real_assist_pipeline_cancel_blocks_late_audio_write(self):
         """A retained inner chat log cannot write more TTS/playback data after cancel."""
