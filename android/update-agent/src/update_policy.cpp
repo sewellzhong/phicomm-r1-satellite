@@ -83,6 +83,24 @@ bool Policy::begin_install(uint64_t now, std::string* error) {
   return true;
 }
 
+bool Policy::abort_staged(std::string* error) {
+  if (state_.phase != Phase::kStaged) return reject("update_not_staged", error);
+  state_.phase = Phase::kIdle;
+  state_.last_result = "staging_failed";
+  return true;
+}
+
+bool Policy::installation_failed(std::string* error) {
+  if (state_.phase != Phase::kInstalling) return reject("update_not_installing", error);
+  return request_rollback("update_package_install_failed", error);
+}
+
+bool Policy::health_probe_failed(std::string* error) {
+  if (state_.phase != Phase::kAwaitingHealth)
+    return reject("update_not_awaiting_health", error);
+  return request_rollback("update_health_probe_failed", error);
+}
+
 bool Policy::matches_candidate(const Candidate& candidate, const Installed& installed) {
   return installed.package_name == candidate.package_name
       && installed.version == candidate.to_version

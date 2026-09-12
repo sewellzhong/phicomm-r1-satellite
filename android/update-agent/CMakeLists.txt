@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 project(r1_update_agent LANGUAGES CXX)
 
 add_library(r1-update-policy STATIC
+  src/package_orchestrator.cpp
   src/update_policy.cpp
   src/update_runtime.cpp
 )
@@ -20,6 +21,11 @@ if(NOT ANDROID)
   target_link_libraries(r1-update-runtime-test PRIVATE r1-update-policy)
   target_compile_options(r1-update-runtime-test PRIVATE -Wall -Wextra -Werror)
   add_test(NAME r1-update-runtime-test COMMAND r1-update-runtime-test)
+
+  add_executable(r1-update-orchestrator-test tests/package_orchestrator_test.cpp)
+  target_link_libraries(r1-update-orchestrator-test PRIVATE r1-update-policy)
+  target_compile_options(r1-update-orchestrator-test PRIVATE -Wall -Wextra -Werror)
+  add_test(NAME r1-update-orchestrator-test COMMAND r1-update-orchestrator-test)
 endif()
 
 if(ANDROID)

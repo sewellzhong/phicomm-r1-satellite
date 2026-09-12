@@ -344,6 +344,31 @@ bool TransactionController::begin_install(uint64_t now, std::string* error) {
   return persist(error);
 }
 
+bool TransactionController::abort_staged(std::string* error) {
+  if (!policy_.abort_staged(error)) return false;
+  return persist(error);
+}
+
+bool TransactionController::installation_failed(std::string* error) {
+  bool accepted = policy_.installation_failed(error);
+  std::string policy_error = error == nullptr ? "" : *error;
+  if (!persist(error)) return false;
+  if (!accepted && policy_.state().phase != Phase::kRollingBack)
+    return false;
+  if (error != nullptr) *error = policy_error;
+  return true;
+}
+
+bool TransactionController::health_probe_failed(std::string* error) {
+  bool accepted = policy_.health_probe_failed(error);
+  std::string policy_error = error == nullptr ? "" : *error;
+  if (!persist(error)) return false;
+  if (!accepted && policy_.state().phase != Phase::kRollingBack)
+    return false;
+  if (error != nullptr) *error = policy_error;
+  return true;
+}
+
 bool TransactionController::installed(const Installed& installed_value, std::string* error) {
   bool accepted = policy_.installed(installed_value, error);
   std::string policy_error = error == nullptr ? "" : *error;
