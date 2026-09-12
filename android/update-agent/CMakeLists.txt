@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.18)
 project(r1_update_agent LANGUAGES CXX)
 
-add_library(r1-update-policy STATIC src/update_policy.cpp)
+add_library(r1-update-policy STATIC
+  src/update_policy.cpp
+  src/update_runtime.cpp
+)
 target_include_directories(r1-update-policy PUBLIC src)
 target_compile_features(r1-update-policy PUBLIC cxx_std_17)
 target_compile_options(r1-update-policy PRIVATE -Wall -Wextra -Werror)
@@ -12,6 +15,11 @@ if(NOT ANDROID)
   target_link_libraries(r1-update-policy-test PRIVATE r1-update-policy)
   target_compile_options(r1-update-policy-test PRIVATE -Wall -Wextra -Werror)
   add_test(NAME r1-update-policy-test COMMAND r1-update-policy-test)
+
+  add_executable(r1-update-runtime-test tests/update_runtime_test.cpp)
+  target_link_libraries(r1-update-runtime-test PRIVATE r1-update-policy)
+  target_compile_options(r1-update-runtime-test PRIVATE -Wall -Wextra -Werror)
+  add_test(NAME r1-update-runtime-test COMMAND r1-update-runtime-test)
 endif()
 
 if(ANDROID)

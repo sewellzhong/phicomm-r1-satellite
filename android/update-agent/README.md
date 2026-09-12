@@ -14,8 +14,18 @@ supervisor restart during installation, reboot before health, identity drift,
 or partial health all enter rollback. A rollback is complete only after the old
 version and signer are read back.
 
-This commit does **not** yet ship a root daemon, package-manager transport, or a
-deployable SELinux policy. Those pieces require a separate init service with an
-exact peer UID, a private root-owned backup directory, no network or block
-access, and real firmware-3448 AVC/package-manager evidence. Until then, the
-state machine is host-validated groundwork and is not an OTA or R1 result.
+The host runtime now adds an exact-UID admission primitive, an owner-only
+transaction store using fsync plus atomic rename, crash recovery into rollback,
+and bounded APK staging from a regular-file descriptor. APK names are derived
+from the validated operation id; callers cannot ask the supervisor to open a
+path. Staged bytes are published without replacing an existing archive only
+after exact size and SHA-256 verification. The transaction controller persists
+`installing` before a caller is allowed to invoke package replacement and
+persists rollback decisions before downgrade.
+
+This directory still does **not** ship a listening root daemon, a
+PackageManager backend, satellite-side request/health client, init service, or
+deployable SELinux policy. Those pieces require a private local socket with
+SO_PEERCRED wired to the exact app UID, a root-owned backup directory, no
+network or block access, and real firmware-3448 AVC/package-manager evidence.
+Until then, this is host-validated groundwork and is not an OTA or R1 result.
