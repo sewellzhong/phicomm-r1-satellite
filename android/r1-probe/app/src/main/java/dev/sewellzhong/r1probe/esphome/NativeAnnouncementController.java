@@ -14,6 +14,8 @@ public final class NativeAnnouncementController {
     private volatile long requests;
     private volatile long completed;
     private volatile long failures;
+    private volatile long segmentsStarted;
+    private volatile long segmentsCompleted;
 
     public NativeAnnouncementController(NativeVoiceSession.Playback playback) {
         this.playback = playback;
@@ -27,6 +29,8 @@ public final class NativeAnnouncementController {
     public long requests() { return requests; }
     public long completed() { return completed; }
     public long failures() { return failures; }
+    public long segmentsStarted() { return segmentsStarted; }
+    public long segmentsCompleted() { return segmentsCompleted; }
 
     /** Returns true only for the announcement message owned by this controller. */
     public boolean message(int type, byte[] payload, boolean voiceIdle) throws IOException {
@@ -44,6 +48,7 @@ public final class NativeAnnouncementController {
                 ? takeMediaUrl() : request.getPreannounceMediaId();
         try {
             if (!playback.startUrl(first)) throw new IOException("announcement_start_rejected");
+            segmentsStarted++;
             active = true;
         } catch (IOException | RuntimeException error) {
             mediaUrl = null;
@@ -67,6 +72,7 @@ public final class NativeAnnouncementController {
             return;
         }
         if (!playback.complete() || !playback.terminated()) return;
+        segmentsCompleted++;
         String next = takeMediaUrl();
         if (next == null) {
             finish(true);
@@ -74,6 +80,7 @@ public final class NativeAnnouncementController {
         }
         try {
             if (!playback.startUrl(next)) throw new IOException("announcement_start_rejected");
+            segmentsStarted++;
         } catch (IOException | RuntimeException error) {
             playback.stop();
             finish(false);

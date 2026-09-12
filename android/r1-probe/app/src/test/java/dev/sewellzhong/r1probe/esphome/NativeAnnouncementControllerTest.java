@@ -45,14 +45,20 @@ public final class NativeAnnouncementControllerTest {
         assertTrue(controller.message(MessageIds.VoiceAssistantAnnounceRequest,
                 request("https://ha/media.wav", "https://ha/cue.wav", false), true));
         assertEquals(java.util.Arrays.asList("https://ha/cue.wav"), player.urls);
+        assertEquals(1, controller.segmentsStarted());
+        assertEquals(0, controller.segmentsCompleted());
         assertTrue(controller.active()); assertTrue(sent.isEmpty());
         player.drain(); controller.tick();
         assertEquals(java.util.Arrays.asList("https://ha/cue.wav", "https://ha/media.wav"), player.urls);
+        assertEquals(2, controller.segmentsStarted());
+        assertEquals(1, controller.segmentsCompleted());
         assertTrue(sent.isEmpty());
         player.drain(); controller.tick();
         assertFalse(controller.active()); assertEquals(1, sent.size()); assertTrue(success(0));
         assertEquals(1, controller.requests()); assertEquals(1, controller.completed());
         assertEquals(0, controller.failures());
+        assertEquals(2, controller.segmentsStarted());
+        assertEquals(2, controller.segmentsCompleted());
     }
 
     @Test public void busyInvalidAndStartConversationFailClosed() throws Exception {
@@ -82,6 +88,8 @@ public final class NativeAnnouncementControllerTest {
         controller.tick();
         assertEquals(2, sent.size()); assertFalse(success(1));
         assertEquals(2, controller.failures());
+        assertEquals(1, controller.segmentsStarted());
+        assertEquals(0, controller.segmentsCompleted());
     }
 
     @Test public void unrelatedMessagesAreNotConsumedAndCloseStopsWithoutReply() throws Exception {

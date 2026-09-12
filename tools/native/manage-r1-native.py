@@ -13,6 +13,11 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = "dev.sewellzhong.r1probe"
 SERVICE = PACKAGE + "/.NativeSatelliteService"
+ADMIN_ACTIONS = ["initialize", "start", "stop", "status", "rotate", "pair", "audio-check",
+    "diagnostic-window", "diagnostic-start", "diagnostic-arm", "diagnostic-stop", "diagnostic-status", "diagnostic-export", "diagnostic-clear",
+    "capability-status", "hardware-reset", "timer-status", "timer-stop", "bluetooth-discoverable", "bluetooth-close", "ble-window", "ble-close", "hotspot-window", "hotspot-close",
+    "original-provisioning-open", "original-provisioning-close", "provisioning-recover",
+    "provisioning-handoff-probe"]
 
 class Device:
     def __init__(self, serial):
@@ -98,11 +103,7 @@ def export_diagnostic(device, destination):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["initialize", "start", "stop", "status", "rotate", "pair", "audio-check",
-        "diagnostic-window", "diagnostic-start", "diagnostic-arm", "diagnostic-stop", "diagnostic-status", "diagnostic-export", "diagnostic-clear",
-        "capability-status", "hardware-reset", "bluetooth-discoverable", "bluetooth-close", "ble-window", "ble-close", "hotspot-window", "hotspot-close",
-        "original-provisioning-open", "original-provisioning-close", "provisioning-recover",
-        "provisioning-handoff-probe"])
+    parser.add_argument("action", choices=ADMIN_ACTIONS)
     parser.add_argument("serial")
     parser.add_argument("--seconds", type=int, default=30, choices=range(1,121))
     parser.add_argument("--output", type=Path)

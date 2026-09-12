@@ -225,6 +225,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("announcement_requests", announcements.requests())
                 .put("announcement_completed", announcements.completed())
                 .put("announcement_failures", announcements.failures())
+                .put("announcement_segments_started", announcements.segmentsStarted())
+                .put("announcement_segments_completed", announcements.segmentsCompleted())
                 .put("timers", timers == null ? org.json.JSONObject.NULL : timers.snapshot())
                 .put("tts_stream_start_ms", ttsStreamStartMillis)
                 .put("ha_run_end_ms", haRunEndMillis)
