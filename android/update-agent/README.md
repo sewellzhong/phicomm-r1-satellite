@@ -49,8 +49,16 @@ same-boot marker and starts a bounded health reporter. It probes all four gates
 and sends nothing until all are true; a reboot clears the marker instead of
 converting a post-reboot start into health.
 
-This directory still does **not** ship a long-running root daemon executable, a
-real Android PackageManager implementation, init service, or deployable SELinux
+`run_update_supervisor` now supplies the long-running accept/tick/recovery loop
+around an already secured listener. It isolates malformed clients, polls health
+deadlines, and persists the kernel boot UUID before package replacement so a
+recovered health window can reject another boot. Transaction v2 adds that boot
+identity while retaining fail-closed v1 reads. A host-only executable and fake
+package backend exercise malformed-client isolation followed by cross-process
+apply and health confirmation; they are test artifacts, not a device backend.
+
+This directory still does **not** ship a device root daemon executable, a real
+Android PackageManager implementation, init service, or deployable SELinux
 policy. There is no authenticated remote candidate delivery path yet; the
 app-private inbox is a maintenance boundary, not OTA download support. Device
 deployment still requires a root-owned non-writable socket parent, no network
