@@ -117,7 +117,7 @@ public final class NativeApiConnection {
                     send(MessageIds.DeviceInfoResponse,EsphomeApi.DeviceInfoResponse.newBuilder().setName(name)
                             .setFriendlyName(satellite ? "R1 原生语音" : "R1 Native Foundation").setMacAddress(mac).setManufacturer("Phicomm")
                             .setModel("R1 API22").setEsphomeVersion("2026.8.0").setProjectName("sewellzhong.r1-satellite")
-                            .setProjectVersion(satellite ? "1.11-media" : "0.43-foundation")
+                            .setProjectVersion(satellite ? "1.17-system-management" : "0.43-foundation")
                             .setVoiceAssistantFeatureFlags(satellite ? SATELLITE_FEATURES : 0).build());
                 } else if(type==MessageIds.DeviceCapabilitiesRequest) {
                     send(MessageIds.DeviceCapabilitiesResponse,satellite ? EsphomeApi.DeviceCapabilitiesResponse.newBuilder()

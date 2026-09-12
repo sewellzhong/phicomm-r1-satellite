@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -21,6 +22,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Granted only to the platform-signed privileged candidate. -->
+    <uses-permission android:name="android.permission.REBOOT"
+        tools:ignore="ProtectedPermissions" />
     <!-- R1 firmware 3448 exposes its primary storage as a physical FAT volume;
          app-specific external files still require the legacy sdcard_rw group. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />

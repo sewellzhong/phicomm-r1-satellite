@@ -73,8 +73,12 @@ async def main():
             assert any(e.domain=='conversation' for e in registry.entities.values() if e.config_entry_id==native_entry.entry_id)
             sensor_entries=[e for e in registry.entities.values()
                             if e.domain=='sensor' and e.config_entry_id==native_entry.entry_id]
-            assert len(sensor_entries)==2
-            assert {e.unique_id.rsplit('-',1)[-1] for e in sensor_entries} == {'alarms','disturb'}
+            assert len(sensor_entries)==3
+            assert {e.unique_id.rsplit('-',1)[-1] for e in sensor_entries} == {'alarms','disturb','status'}
+            button_entries=[e for e in registry.entities.values()
+                            if e.domain=='button' and e.config_entry_id==native_entry.entry_id]
+            assert len(button_entries)==2
+            assert {e.unique_id.rsplit('-',1)[-1] for e in button_entries} == {'service','device'}
             assert hass.services.has_service('r1_input_guard','alarm_put')
             assert hass.services.has_service('r1_input_guard','dnd_set')
             # HA 2026.8 per-integration device registry: no DeviceInfo for the bridge.
@@ -118,6 +122,7 @@ async def main():
                               'duplicate_guard':'rejected','nested_guard':'rejected','unload':'passed','native_entry_and_conversation_platform':'passed','standard_entry_preserved':'passed',
                               'alarm_sensor_platform':'passed','alarm_entity_actions':'registered',
                               'dnd_sensor_platform':'passed','dnd_entity_actions':'registered',
+                              'system_sensor_platform':'passed','system_restart_buttons':'registered',
                               'device_registry_name_area':'passed','device_identity_preserved':True,
                               'real_microphone':False,'production_HA':False}))
         finally:

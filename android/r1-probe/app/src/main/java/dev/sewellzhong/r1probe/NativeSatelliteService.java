@@ -1,8 +1,10 @@
 package dev.sewellzhong.r1probe;
 
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -12,16 +14,22 @@ import android.net.ConnectivityManager;
 import android.net.Credentials;
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
+import android.net.NetworkInfo;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
 import dev.sewellzhong.r1probe.esphome.NativeAlarmController;
 import dev.sewellzhong.r1probe.esphome.NativeDndController;
+import dev.sewellzhong.r1probe.esphome.NativeSystemManager;
 import dev.sewellzhong.r1probe.esphome.NativeTimerController;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -29,6 +37,7 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.UUID;
 import org.json.JSONObject;
 
 /** Single authenticated HA owner, persistent opt-in, and shell-only local administration. */
@@ -47,6 +56,8 @@ public final class NativeSatelliteService extends Service {
     private NativeAlarmController alarms;
     private NativeDndController dnd;
     private NativeTimerAlarm timerAlarm;
+    private NativeSystemManager systemManager;
+    private long serviceStartedElapsed;
     private volatile boolean destroyed;
     private volatile Socket client;
     private volatile LocalSocket adminClient;
@@ -94,7 +105,30 @@ public final class NativeSatelliteService extends Service {
 
     @Override public void onCreate() {
         super.onCreate();
+        serviceStartedElapsed = android.os.SystemClock.elapsedRealtime();
         settings = new NativeSettings(this);
+        final android.content.SharedPreferences systemStore = getSharedPreferences(
+                "r1-system-management", Context.MODE_PRIVATE);
+        systemManager = new NativeSystemManager(new NativeSystemManager.Store() {
+            @Override public String load() { return systemStore.getString("lifecycle", ""); }
+            @Override public void save(String value) {
+                if (!systemStore.edit().putString("lifecycle", value).commit())
+                    throw new IllegalStateException("system_persistence_failed");
+            }
+        }, this::systemSnapshot, new NativeSystemManager.Actions() {
+            @Override public void dispatch(String operation, NativeSystemManager.Failure failure) {
+                main.postDelayed(() -> {
+                    try {
+                        if ("restart_service".equals(operation)) restartSatelliteService();
+                        else if ("reboot_device".equals(operation)) rebootDevice();
+                        else throw new IllegalArgumentException("system_operation_invalid");
+                    } catch (Exception | LinkageError error) {
+                        failure.failed("reboot_device".equals(operation)
+                                ? "system_reboot_permission_denied" : "system_service_restart_failed");
+                    }
+                }, 300L);
+            }
+        }, UUID.randomUUID().toString(), bootIdentity());
         privacyLed = new R1PrivacyLed();
         privacy = new R1PrivacyController(new R1PrivacyController.Store() {
             @Override public boolean muted() { return settings.privacyMuted(); }
@@ -255,7 +289,7 @@ public final class NativeSatelliteService extends Service {
                             boolean permitted = audioPermitted();
                             NativeAudioRuntime current = new NativeAudioRuntime(this,
                                     settings.listening() && permitted && !privacy.muted(),
-                                    this::audioPermitted, timers, alarms, dnd);
+                                    this::audioPermitted, timers, alarms, dnd, systemManager);
                             current.diagnostic(diagnostic);
                             audio = current;
                             byte[] key = settings.key();
@@ -471,6 +505,72 @@ public final class NativeSatelliteService extends Service {
                 .put("producer_over_budget",diagnostic.producerOverBudget())
                 .put("sha256",ready?diagnostic.hash():JSONObject.NULL);
     }
+    private void restartSatelliteService() {
+        Intent intent = new Intent(this, NativeSatelliteService.class);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
+        PendingIntent restart = PendingIntent.getService(this, 117, intent, flags);
+        AlarmManager alarm = (AlarmManager) getSystemService(ALARM_SERVICE);
+        if (alarm == null) throw new IllegalStateException("system_alarm_manager_unavailable");
+        alarm.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                android.os.SystemClock.elapsedRealtime() + 1500L, restart);
+        stopSelf();
+    }
+    private void rebootDevice() {
+        PowerManager power = (PowerManager) getSystemService(POWER_SERVICE);
+        if (power == null) throw new IllegalStateException("system_power_manager_unavailable");
+        power.reboot("r1_system_management");
+    }
+    private JSONObject systemSnapshot() throws Exception {
+        android.content.pm.PackageInfo packageInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+        ConnectivityManager connectivity = (ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+        NetworkInfo networkInfo = connectivity == null ? null : connectivity.getActiveNetworkInfo();
+        boolean wifiConnected = networkInfo != null && networkInfo.isConnected()
+                && networkInfo.getType() == ConnectivityManager.TYPE_WIFI;
+        WifiManager wifi = (WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);
+        WifiInfo info = wifi == null ? null : wifi.getConnectionInfo();
+        int rssi = wifiConnected && info != null ? Math.max(-127, Math.min(0, info.getRssi())) : -127;
+        String address = wifiConnected && info != null ? ipv4(info.getIpAddress()) : "";
+        NativeAudioRuntime current = audio;
+        String currentError = settings.audioBlocked() ? settings.audioBlockReason()
+                : current != null && current.authenticated() ? current.failureCode() : error;
+        return new JSONObject().put("app_version", packageInfo.versionName == null ? "" : packageInfo.versionName)
+                .put("app_version_code", packageInfo.versionCode)
+                .put("android_release", Build.VERSION.RELEASE == null ? "" : Build.VERSION.RELEASE)
+                .put("android_sdk", Build.VERSION.SDK_INT)
+                .put("firmware", Build.DISPLAY == null ? "" : Build.DISPLAY)
+                .put("service_status", settings.audioBlocked() ? "audio_blocked"
+                        : current == null ? state : current.status())
+                .put("service_uptime_seconds", Math.max(0L,
+                        (android.os.SystemClock.elapsedRealtime() - serviceStartedElapsed) / 1000L))
+                .put("device_uptime_seconds", android.os.SystemClock.elapsedRealtime() / 1000L)
+                .put("wifi_connected", wifiConnected).put("wifi_rssi_dbm", rssi)
+                .put("ip_address", address)
+                .put("last_error", currentError == null ? JSONObject.NULL : currentError)
+                .put("connections", connections).put("failures", failures)
+                .put("audio_blocked", settings.audioBlocked())
+                .put("privacy_muted", privacy != null && privacy.muted())
+                .put("factory_isolation", FactoryAudioIsolation.inspect(this));
+    }
+    private static String ipv4(int value) {
+        if (value == 0) return "";
+        return (value & 255) + "." + ((value >> 8) & 255) + "."
+                + ((value >> 16) & 255) + "." + ((value >> 24) & 255);
+    }
+    private static String bootIdentity() {
+        try (BufferedReader reader = new BufferedReader(new FileReader(
+                "/proc/sys/kernel/random/boot_id"))) {
+            String value = reader.readLine();
+            if (value != null && value.matches("[A-Fa-f0-9-]{36}"))
+                return value.toLowerCase(java.util.Locale.ROOT);
+        } catch (IOException ignored) { }
+        try (BufferedReader reader = new BufferedReader(new FileReader("/proc/stat"))) {
+            String line;
+            while ((line = reader.readLine()) != null)
+                if (line.matches("btime [0-9]+")) return line.replace(' ', ':');
+        } catch (IOException ignored) { }
+        throw new IllegalStateException("system_boot_identity_unavailable");
+    }
     private void refreshLed() {
         if (privacyLed == null || privacy == null || settings == null) return;
         R1PrivacyLed.State target;
@@ -534,7 +634,7 @@ public final class NativeSatelliteService extends Service {
         info.setAttribute("version", "2026.8.0"); info.setAttribute("mac", settings.mac().replace(":", "").toLowerCase(java.util.Locale.ROOT));
         info.setAttribute("platform", "R1"); info.setAttribute("network", "wifi");
         info.setAttribute("api_encryption", "Noise_NNpsk0_25519_ChaChaPoly_SHA256");
-        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.10-dnd");
+        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.17-system-management");
         registration = new NsdManager.RegistrationListener() {
             @Override public void onServiceRegistered(NsdServiceInfo serviceInfo) { }
             @Override public void onRegistrationFailed(NsdServiceInfo serviceInfo, int code) { error = "discovery_registration_failed"; }

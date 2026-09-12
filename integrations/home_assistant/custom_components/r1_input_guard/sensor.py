@@ -9,7 +9,7 @@ from .interaction import bridge
 async def async_setup_entry(hass, entry, async_add_entities):
     owner = bridge(hass, entry.entry_id)
     if not owner: return
-    async_add_entities([R1Alarms(owner), R1DoNotDisturb(owner)])
+    async_add_entities([R1Alarms(owner), R1DoNotDisturb(owner), R1SystemStatus(owner)])
     platform = entity_platform.async_get_current_platform()
     platform.async_register_entity_service('alarm_refresh', None, 'async_alarm_refresh')
     platform.async_register_entity_service('alarm_put', {
@@ -141,3 +141,35 @@ class R1DoNotDisturb(SensorEntity):
             if self.owner.dnd_state is None: raise HomeAssistantError('r1_dnd_state_unavailable')
             values['expected_version'] = self.owner.dnd_state['version']
         await self.owner.dnd_request('set', **values)
+
+
+class R1SystemStatus(SensorEntity):
+    _attr_name = '系统状态'
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_icon = 'mdi:information-outline'
+
+    def __init__(self, owner):
+        self.owner = owner
+        self._attr_unique_id = owner.entry.entry_id + '-system-status'
+        self._attr_device_info = owner.device_info
+
+    @property
+    def available(self): return self.owner.system_sync_status == 'synced'
+
+    @property
+    def native_value(self):
+        return self.owner.system_state.get('service_status') if self.owner.system_state else None
+
+    @property
+    def extra_state_attributes(self):
+        state = dict(self.owner.system_state or {})
+        state.pop('request_id', None); state.pop('operation', None)
+        state['sync_status'] = self.owner.system_sync_status
+        state['management_error'] = self.owner.system_last_error
+        return state
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        self.owner.listeners.add(self.async_write_ha_state)
+        self.async_on_remove(lambda: self.owner.listeners.discard(self.async_write_ha_state))

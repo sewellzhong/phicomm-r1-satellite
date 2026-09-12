@@ -42,6 +42,10 @@ class Interaction:
         self.dnd_sync_status = 'connecting'
         self.dnd_last_error = None
         self._dnd_lock = asyncio.Lock()
+        self.system_state = None
+        self.system_sync_status = 'connecting'
+        self.system_last_error = None
+        self._system_lock = asyncio.Lock()
         self.resolve()
         self.cancel = async_track_time_interval(hass, self.refresh, timedelta(seconds=5))
         self.task = entry.async_create_background_task(hass, self._initialize(), 'r1-interaction-config')
@@ -184,6 +188,106 @@ class Interaction:
         if not name or not re.fullmatch(r'[a-z][a-z0-9-]{0,30}', name): return None
         service = name.replace('-', '_') + '_do_not_disturb'
         return service if self.hass.services.has_service('esphome', service) else None
+
+    def system_service(self):
+        entries = [item for item in self.hass.config_entries.async_entries('esphome')
+                   if (item.unique_id or '').lower() == self.mac]
+        if len(entries) != 1: return None
+        info = getattr(getattr(entries[0], 'runtime_data', None), 'device_info', None)
+        name = getattr(info, 'name', None)
+        if not name or not re.fullmatch(r'[a-z][a-z0-9-]{0,30}', name): return None
+        service = name.replace('-', '_') + '_system_management'
+        return service if self.hass.services.has_service('esphome', service) else None
+
+    async def _system_call(self, operation, request_id, context=None):
+        service = self.system_service()
+        if service is None: raise HomeAssistantError('r1_system_unavailable')
+        encoded = json.dumps({'request_id': request_id, 'operation': operation}, separators=(',', ':'))
+        response = await self.hass.services.async_call('esphome', service, {'request': encoded},
+            blocking=True, return_response=True, context=context)
+        return self._validated_system_state(response, request_id, operation)
+
+    async def system_request(self, operation, *, context=None):
+        if operation not in ('status', 'restart_service', 'reboot_device'):
+            raise HomeAssistantError('r1_system_operation_invalid')
+        async with self._system_lock:
+            request_id = uuid4().hex
+            try:
+                state = await self._system_call(operation, request_id, context)
+                if operation != 'status':
+                    if state['last_operation_id'] != request_id \
+                            or state['last_operation'] != operation \
+                            or state['last_operation_state'] != 'requested':
+                        raise HomeAssistantError('r1_system_response_invalid')
+                    self.system_state = state
+                    self.system_sync_status = 'restarting'
+                    self.system_last_error = None
+                    for listener in tuple(self.listeners): listener()
+                    # Completion is proven only by the replacement service/boot instance.
+                    for _ in range(90):
+                        await asyncio.sleep(1)
+                        try:
+                            poll_id = uuid4().hex
+                            current = await self._system_call('status', poll_id, context)
+                        except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError):
+                            continue
+                        if current['last_operation_id'] != request_id \
+                                or current['last_operation'] != operation:
+                            continue
+                        if current['last_operation_state'] == 'completed':
+                            state = current; break
+                        if current['last_operation_state'] == 'failed':
+                            raise HomeAssistantError('r1_system_operation_failed')
+                    else: raise TimeoutError('r1_system_restart_not_confirmed')
+            except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError) as error:
+                cause = error; transport = False
+                while cause is not None:
+                    if isinstance(cause, (TimeoutError, ConnectionError, APIConnectionError)):
+                        transport = True; break
+                    cause = cause.__cause__
+                self.system_sync_status = 'offline' if transport else 'failed'
+                self.system_last_error = 'transport_failed' if transport else 'operation_failed'
+                for listener in tuple(self.listeners): listener()
+                raise HomeAssistantError('r1_system_not_confirmed')
+            self.system_state = state; self.system_sync_status = 'synced'; self.system_last_error = None
+            for listener in tuple(self.listeners): listener()
+            return state
+
+    @staticmethod
+    def _validated_system_state(value, request_id, operation):
+        if not isinstance(value, dict) or value.get('schema') != 1 \
+                or value.get('request_id') != request_id or value.get('operation') != operation:
+            raise HomeAssistantError('r1_system_response_invalid')
+        strings = ('app_version', 'android_release', 'firmware', 'service_status',
+                   'ip_address', 'factory_isolation')
+        if any(not isinstance(value.get(key), str) or len(value[key]) > 160 for key in strings):
+            raise HomeAssistantError('r1_system_response_invalid')
+        integers = ('app_version_code', 'android_sdk', 'service_uptime_seconds',
+                    'device_uptime_seconds', 'wifi_rssi_dbm', 'connections', 'failures')
+        if any(type(value.get(key)) is not int for key in integers) \
+                or any(value[key] < 0 for key in integers if key != 'wifi_rssi_dbm') \
+                or not -127 <= value['wifi_rssi_dbm'] <= 0:
+            raise HomeAssistantError('r1_system_response_invalid')
+        if any(type(value.get(key)) is not bool for key in ('wifi_connected','audio_blocked','privacy_muted')):
+            raise HomeAssistantError('r1_system_response_invalid')
+        if (not value['wifi_connected'] and value['ip_address']) or (value['ip_address'] and
+                not re.fullmatch(r'(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}', value['ip_address'])):
+            raise HomeAssistantError('r1_system_response_invalid')
+        if value.get('last_error') is not None and (not isinstance(value['last_error'], str)
+                or not re.fullmatch(r'[a-z0-9_]{1,96}', value['last_error'])):
+            raise HomeAssistantError('r1_system_response_invalid')
+        lifecycle = (value.get('last_operation_id'), value.get('last_operation'),
+                     value.get('last_operation_state'), value.get('last_operation_error'))
+        if not isinstance(lifecycle[0], str) or lifecycle[1] not in ('none','restart_service','reboot_device') \
+                or lifecycle[2] not in ('none','requested','completed','failed') \
+                or lifecycle[3] is not None and (not isinstance(lifecycle[3], str)
+                    or not re.fullmatch(r'system_[a-z0-9_]{1,64}', lifecycle[3])):
+            raise HomeAssistantError('r1_system_response_invalid')
+        if lifecycle[1] == 'none' and (lifecycle[0] or lifecycle[2] != 'none') \
+                or lifecycle[1] != 'none' and not re.fullmatch(r'[a-f0-9]{32}', lifecycle[0]) \
+                or (lifecycle[2] == 'failed') != (lifecycle[3] is not None):
+            raise HomeAssistantError('r1_system_response_invalid')
+        return value
 
     async def dnd_request(self, operation, *, context=None, **values):
         if operation not in ('status', 'set'):
@@ -494,6 +598,8 @@ class Interaction:
                 await self.replay_alarm_pending()
             except HomeAssistantError: pass
             try: await self.dnd_request('status')
+            except HomeAssistantError: pass
+            try: await self.system_request('status')
             except HomeAssistantError: pass
             for listener in tuple(self.listeners): listener()
         except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError):

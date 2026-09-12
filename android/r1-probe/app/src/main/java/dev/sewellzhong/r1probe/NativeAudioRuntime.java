@@ -17,6 +17,8 @@ import dev.sewellzhong.r1probe.esphome.NativeDndController;
 import dev.sewellzhong.r1probe.esphome.NativeDndProtocol;
 import dev.sewellzhong.r1probe.esphome.NativeMediaController;
 import dev.sewellzhong.r1probe.esphome.NativePcmPlayback;
+import dev.sewellzhong.r1probe.esphome.NativeSystemManager;
+import dev.sewellzhong.r1probe.esphome.NativeSystemProtocol;
 import dev.sewellzhong.r1probe.esphome.NativeTimerController;
 import dev.sewellzhong.r1probe.esphome.NativeVoiceSession;
 import java.io.IOException;
@@ -167,6 +169,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         controls.list(sender);
         if (alarmProtocol != null) alarmProtocol.list(sender);
         if (dndProtocol != null) dndProtocol.list(sender);
+        if (systemProtocol != null) systemProtocol.list(sender);
         media.list(sender);
     }
 
@@ -176,6 +179,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private final NativeAlarmController alarms;
     private final NativeDndController dnd;
     private final NativeDndProtocol dndProtocol;
+    private final NativeSystemProtocol systemProtocol;
     private final NativeMediaController media;
     private volatile boolean wakeEnabled;
     private volatile boolean everOpened;
@@ -269,24 +273,29 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private AudioRecord stopTarget;
 
     public NativeAudioRuntime(Context context) {
-        this(context, true, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null, null);
+        this(context, true, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null, null, null, null);
     }
     public NativeAudioRuntime(Context context, boolean listen) {
-        this(context, listen, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null, null);
+        this(context, listen, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null, null, null, null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission) {
-        this(context, listen, permission, null, null);
+        this(context, listen, permission, null, null, null, null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
             NativeTimerController timers) {
-        this(context, listen, permission, timers, null);
+        this(context, listen, permission, timers, null, null, null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
             NativeTimerController timers, NativeAlarmController alarms) {
-        this(context, listen, permission, timers, alarms, null);
+        this(context, listen, permission, timers, alarms, null, null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
             NativeTimerController timers, NativeAlarmController alarms, NativeDndController dnd) {
+        this(context, listen, permission, timers, alarms, dnd, null);
+    }
+    NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
+            NativeTimerController timers, NativeAlarmController alarms, NativeDndController dnd,
+            NativeSystemManager system) {
         this.context = context.getApplicationContext();
         this.listen = listen;
         this.permission = permission;
@@ -295,6 +304,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         alarmProtocol = alarms == null ? null : new NativeAlarmProtocol(alarms);
         this.dnd = dnd;
         dndProtocol = dnd == null ? null : new NativeDndProtocol(dnd);
+        systemProtocol = system == null ? null : new NativeSystemProtocol(system);
         settings = new NativeSettings(context);
         controls = new NativeControls(context, settings);
         wakeEnabled = settings.wakeEnabled();
@@ -407,6 +417,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         if (controls.message(type, payload, sender)) return;
         if (alarmProtocol != null && alarmProtocol.message(type, payload, sender)) return;
         if (dndProtocol != null && dndProtocol.message(type, payload, sender)) return;
+        if (systemProtocol != null && systemProtocol.message(type, payload, sender)) return;
         if (timers != null && timers.message(type, payload)) return;
         if (type == dev.sewellzhong.r1probe.esphome.proto.MessageIds.VoiceAssistantAnnounceRequest) {
             media.interrupt(NativeMediaController.Interruption.ANNOUNCEMENT);
