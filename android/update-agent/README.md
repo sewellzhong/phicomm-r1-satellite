@@ -30,10 +30,19 @@ fake verifies success, backup rejection, install and identity failures, health
 failure, interrupted-install recovery, rollback failure, and persistence
 failure without executing shell text.
 
-This directory still does **not** ship a listening root daemon, a real Android
-PackageManager implementation, satellite-side request/health client, init
-service, or deployable SELinux policy. Those pieces require a private local
-socket with SO_PEERCRED wired to the exact app UID, a root-owned backup
-directory, no network or block access, and real firmware-3448
-AVC/package-manager evidence. Until then, this is host-validated groundwork and
-is not an OTA or R1 result.
+Protocol version 1 uses AF_UNIX SOCK_SEQPACKET with fixed-size, network-byte-order
+apply, health, and response frames. The listener refuses an existing path or a
+replaceable parent, creates a mode-0600 node for the configured satellite UID,
+then checks the kernel SO_PEERCRED UID exactly. Apply accepts exactly one
+SCM_RIGHTS descriptor and dispatches bounded staging into `PackageOrchestrator`;
+health accepts none. Connections have bounded send/receive timeouts, malformed
+ancillary data is closed and rejected, and every well-formed request gets an
+explicit success or failure response.
+
+This directory still does **not** ship a long-running root daemon executable, a
+real Android PackageManager implementation, Java/JNI satellite integration,
+init service, or deployable SELinux policy. The protocol includes native client
+framing primitives, but they are not yet wired into the APK lifecycle. Device
+deployment still requires a root-owned non-writable socket parent, no network or
+block access, and real firmware-3448 AVC/package-manager evidence. Until then,
+this is host-validated groundwork and is not an OTA or R1 result.

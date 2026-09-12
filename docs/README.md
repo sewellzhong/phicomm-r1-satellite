@@ -33,6 +33,7 @@
 
 ## 阶段与版本记录
 
+- [2026-09-13-r1-update-private-protocol-host](2026-09-13-r1-update-private-protocol-host.md)
 - [2026-09-13-r1-update-package-orchestration-host](2026-09-13-r1-update-package-orchestration-host.md)
 - [2026-09-12-r1-alarm-enable-host](2026-09-12-r1-alarm-enable-host.md)
 - [2026-09-12-r1-do-not-disturb-host](2026-09-12-r1-do-not-disturb-host.md)
