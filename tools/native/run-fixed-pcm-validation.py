@@ -41,7 +41,9 @@ def run(device, pcm, cancel_on_playback=False, timeout=300, clock=time.monotonic
         cancelled = False
         while clock() < deadline:
             current = device.control({"action": "status"})
-            audio = current["audio"]
+            audio = current.get("audio")
+            if audio is None:
+                raise RuntimeError("audio_runtime_unavailable")
             playing = audio["playback_first_write_ms"] > base.get("playback_first_write_ms", 0)
             if cancel_on_playback and playing and not cancelled:
                 device.control({"action": "fixed-pcm-cancel"})

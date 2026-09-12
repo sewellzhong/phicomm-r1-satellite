@@ -37,6 +37,12 @@ class Device:
 
 
 class FixedPcmValidationTests(unittest.TestCase):
+    def test_runtime_rebuild_fails_closed(self):
+        device = Device([{"status": "starting", "last_error": None, "audio": None}])
+        with self.assertRaisesRegex(RuntimeError, "audio_runtime_unavailable"):
+            fixed.run(device, bytes(640), pause=lambda _seconds: None)
+        self.assertEqual("fixed-pcm-cancel", device.commands[-1]["action"])
+
     def test_frames_are_bounded_and_completion_is_reported(self):
         device = Device([state(
             fixed_pcm_runs=1, commands=1, stt_results=1, tts_streams=1, completed=1,
