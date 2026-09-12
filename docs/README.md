@@ -33,6 +33,10 @@
 
 ## 阶段与版本记录
 
+- [2026-09-13-r1-update-mutation-plan-host](2026-09-13-r1-update-mutation-plan-host.md)
+- [2026-09-13-r1-update-device-evidence-tool](2026-09-13-r1-update-device-evidence-tool.md)
+- [2026-09-13-r1-update-supervisor-process-host](2026-09-13-r1-update-supervisor-process-host.md)
+- [2026-09-13-r1-update-apk-client-host](2026-09-13-r1-update-apk-client-host.md)
 - [2026-09-13-r1-update-private-protocol-host](2026-09-13-r1-update-private-protocol-host.md)
 - [2026-09-13-r1-update-package-orchestration-host](2026-09-13-r1-update-package-orchestration-host.md)
 - [2026-09-12-r1-alarm-enable-host](2026-09-12-r1-alarm-enable-host.md)

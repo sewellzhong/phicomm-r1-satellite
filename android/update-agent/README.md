@@ -64,10 +64,18 @@ only fixed read-only package, APK digest, help, and AVC snapshot commands. Its
 exclusive local JSON output is evidence input, not a generated backend or a
 claim that install/downgrade behavior has been observed.
 
+`tools/update/prepare-r1-package-manager-mutation.py` is the host-only gate for
+the later mutating probe. It verifies the prior device evidence, exact current
+version/hash rollback APK, strictly newer production candidate, and a single
+matching signer before sealing an owner-only, non-overwriting plan with an
+explicit confirmation token. It contains no adb invocation and cannot install
+or downgrade a package.
+
 This directory still does **not** ship a device root daemon executable, a real
 Android PackageManager implementation, init service, or deployable SELinux
-policy. The read-only collector has not yet been run on the R1 and cannot
-provide real install/downgrade return values. There is no authenticated remote candidate delivery path yet; the
+policy. The read-only collector confirmed the v102 package baseline on the R1,
+but no exact v102 rollback APK has yet passed the mutation-plan gate and no
+install/downgrade return values have been collected. There is no authenticated remote candidate delivery path yet; the
 app-private inbox is a maintenance boundary, not OTA download support. Device
 deployment still requires a root-owned non-writable socket parent, no network
 or block access, and real firmware-3448 AVC/package-manager evidence. Until
