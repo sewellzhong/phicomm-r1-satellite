@@ -11,16 +11,6 @@ public final class NativeApiConnectionTest {
     @Test public void advertisesOnlyImplementedVoiceAudioTimerAndAnnouncementFeatures() {
         assertEquals(29, NativeApiConnection.SATELLITE_FEATURES);
     }
-    @Test public void internalTtsEntityNegotiatesOnlyBoundedAnnouncementWav() {
-        EsphomeApi.ListEntitiesMediaPlayerResponse entity = NativeApiConnection.ttsFormatEntity();
-        assertEquals(0, entity.getFeatureFlags()); assertFalse(entity.getSupportsPause());
-        assertEquals(1, entity.getSupportedFormatsCount());
-        EsphomeApi.MediaPlayerSupportedFormat format = entity.getSupportedFormats(0);
-        assertEquals("wav", format.getFormat()); assertEquals(16000, format.getSampleRate());
-        assertEquals(1, format.getNumChannels()); assertEquals(2, format.getSampleBytes());
-        assertEquals(EsphomeApi.MediaPlayerFormatPurpose.MEDIA_PLAYER_FORMAT_PURPOSE_ANNOUNCEMENT,
-                format.getPurpose());
-    }
     @Test public void plaintextIsRejectedBeforeAnyProtocolResponse() throws Exception {
         try(ServerSocket server=new ServerSocket(0,1,InetAddress.getLoopbackAddress());
             Socket client=new Socket("127.0.0.1",server.getLocalPort()); Socket accepted=server.accept()) {

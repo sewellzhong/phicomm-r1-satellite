@@ -15,6 +15,7 @@ import dev.sewellzhong.r1probe.esphome.NativeAlarmProtocol;
 import dev.sewellzhong.r1probe.esphome.NativeAudioCoordinator;
 import dev.sewellzhong.r1probe.esphome.NativeDndController;
 import dev.sewellzhong.r1probe.esphome.NativeDndProtocol;
+import dev.sewellzhong.r1probe.esphome.NativeMediaController;
 import dev.sewellzhong.r1probe.esphome.NativePcmPlayback;
 import dev.sewellzhong.r1probe.esphome.NativeTimerController;
 import dev.sewellzhong.r1probe.esphome.NativeVoiceSession;
@@ -166,6 +167,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         controls.list(sender);
         if (alarmProtocol != null) alarmProtocol.list(sender);
         if (dndProtocol != null) dndProtocol.list(sender);
+        media.list(sender);
     }
 
     private final NativePcmPlayback playback;
@@ -174,6 +176,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private final NativeAlarmController alarms;
     private final NativeDndController dnd;
     private final NativeDndProtocol dndProtocol;
+    private final NativeMediaController media;
     private volatile boolean wakeEnabled;
     private volatile boolean everOpened;
     private volatile boolean authenticated;
@@ -240,6 +243,9 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("announcement_segments_started", announcements.segmentsStarted())
                 .put("announcement_segments_completed", announcements.segmentsCompleted())
                 .put("announcement_suppressed", announcements.suppressed())
+                .put("media_state", media.state().name().toLowerCase(java.util.Locale.ROOT))
+                .put("media_requests", media.requests()).put("media_rejected", media.rejected())
+                .put("media_failures", media.failures()).put("media_last_failure", media.lastFailure())
                 .put("do_not_disturb", dnd == null ? org.json.JSONObject.NULL : dnd.snapshot())
                 .put("timers", timers == null ? org.json.JSONObject.NULL : timers.snapshot())
                 .put("tts_stream_start_ms", ttsStreamStartMillis)
@@ -315,9 +321,19 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         });
         coordinator = new NativeAudioCoordinator(playback, () -> System.nanoTime() / 1_000_000L,
                 this::diagnosticEvent);
+        NativeUrlMediaPlayer mediaBackend = new NativeUrlMediaPlayer(this.context);
+        media = new NativeMediaController(mediaBackend, new NativeMediaController.Volume() {
+            @Override public float level() { return settings.volumePercent() / 100f; }
+            @Override public void level(float value) {
+                settings.setting("volume", Math.round(value * 100));
+                new NativeVolume(NativeAudioRuntime.this.context, settings).prepareOutput();
+            }
+        }, () -> coordinator.ready() && !announcements.active()
+                && (NativeAudioRuntime.this.timers == null || !NativeAudioRuntime.this.timers.ringing()));
     }
     boolean cancelAudio(NativeAudioCoordinator.CancelReason reason) { return coordinator.requestCancel(reason); }
     void timerAlarmStarting() {
+        media.interrupt(NativeMediaController.Interruption.ALARM);
         announcements.interrupt();
         coordinator.requestCancel(NativeAudioCoordinator.CancelReason.TIMER_ALARM);
         playback.stop();
@@ -326,7 +342,12 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     public synchronized void fixedPcmStart() throws IOException {
         if (!listen || fixedPcmRun || !"listening".equals(status) || !coordinator.ready())
             throw new IOException("fixed_pcm_requires_idle_listener");
-        coordinator.begin(new byte[0]);
+        media.interrupt(NativeMediaController.Interruption.VOICE);
+        try { coordinator.begin(new byte[0]); }
+        catch (IOException error) {
+            media.release(NativeMediaController.Interruption.VOICE);
+            throw error;
+        }
         fixedPcmRun = true; fixedPcmRuns++; inputBytes = 0;
         ttsStreamStartMillis = haRunEndMillis = 0;
         status = "injecting_fixed_pcm";
@@ -364,18 +385,32 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         authenticated = true;
         coordinator.connected(sender);
         announcements.connected(sender);
+        media.connected(sender);
         status = listen ? "waiting_subscription" : "authenticated_no_microphone";
         if (!listen) return;
         capture = new Thread(this::captureLoop, "native-command-capture");
         capture.setDaemon(true); capture.start();
     }
     @Override public void message(int type, byte[] payload) throws IOException {
+        if (type == dev.sewellzhong.r1probe.esphome.proto.MessageIds.SubscribeStatesRequest) {
+            media.message(type, payload);
+            controls.message(type, payload, sender);
+            return;
+        }
         if (controls.message(type, payload, sender)) return;
         if (alarmProtocol != null && alarmProtocol.message(type, payload, sender)) return;
         if (dndProtocol != null && dndProtocol.message(type, payload, sender)) return;
         if (timers != null && timers.message(type, payload)) return;
-        if (announcements.message(type, payload, coordinator.ready()
-                && (timers == null || !timers.ringing()))) return;
+        if (type == dev.sewellzhong.r1probe.esphome.proto.MessageIds.VoiceAssistantAnnounceRequest) {
+            media.interrupt(NativeMediaController.Interruption.ANNOUNCEMENT);
+            if (announcements.message(type, payload, coordinator.ready()
+                    && (timers == null || !timers.ringing()))) {
+                if (!announcements.active()) media.release(NativeMediaController.Interruption.ANNOUNCEMENT);
+                return;
+            }
+            media.release(NativeMediaController.Interruption.ANNOUNCEMENT);
+        }
+        if (media.message(type, payload)) return;
         coordinator.message(type, payload);
         if (type == dev.sewellzhong.r1probe.esphome.proto.MessageIds.VoiceAssistantEventResponse) {
             dev.sewellzhong.r1probe.esphome.proto.EsphomeApi.VoiceAssistantEvent kind =
@@ -405,6 +440,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         if (sender != null) controls.tick(sender);
         if (timers != null) timers.tick();
         if (alarms != null) alarms.tick();
+        if ((timers == null || !timers.ringing()) && (alarms == null || !alarms.ringing()))
+            media.release(NativeMediaController.Interruption.ALARM);
         if (dnd != null && dnd.active() && announcements.active()) announcements.interrupt();
         if (failure != null) throw new IOException(failure);
         long now = System.nanoTime();
@@ -416,6 +453,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
             failure = "native_capture_timeout"; stopRecorder(); throw new IOException(failure);
         }
         announcements.tick();
+        if (!announcements.active()) media.release(NativeMediaController.Interruption.ANNOUNCEMENT);
+        media.tick();
         // Recompute voice readiness only after an announcement advances or finishes, so a
         // preannounce -> media handoff never publishes a transient idle window to capture.
         coordinator.tick();
@@ -423,7 +462,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     @Override public void closed() {
         if (!stopping.compareAndSet(false, true)) return;
         if(diagnostic!=null) diagnostic.stop("connection_closed");
-        stopRecorder(); announcements.closed(); coordinator.closed();
+        stopRecorder(); announcements.closed(); media.closed(); coordinator.closed();
         new NativeVolume(context, settings).restoreOutput();
         if (capture != null) capture.interrupt();
         status = "closed";
@@ -456,11 +495,13 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     NativeVoiceSession.Outcome fixedOutcome = coordinator.outcome();
                     if (fixedOutcome == NativeVoiceSession.Outcome.COMPLETE) completed++;
                     fixedPcmRun = false;
+                    media.release(NativeMediaController.Interruption.VOICE);
                     status = fixedOutcome == NativeVoiceSession.Outcome.FAILED
                             ? "run_failed" : "listening";
                 }
                 DiagnosticWindowRequest requestedWindow = (!busy && !waiting && coordinator.ready()) ? takeDiagnosticWindow() : null;
                 if (requestedWindow != null) {
+                    media.interrupt(NativeMediaController.Interruption.VOICE);
                     releaseRecorder(); history.clear(); engine.reset(); vad.reset(); index = 0; fill = 0;
                     following = requestedWindow.followup;
                     status = "diagnostic_prompt";
@@ -523,6 +564,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                         } else {
                             playbackInput.clear();
                             if (outcome == NativeVoiceSession.Outcome.COMPLETE) endingPrompt();
+                            media.release(NativeMediaController.Interruption.VOICE);
                             status = outcome == NativeVoiceSession.Outcome.FAILED ? "run_failed" : "listening";
                         }
                     }
@@ -649,6 +691,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     CommandWindow.Decision decision = window.acceptQualified(speech, rawSpeech && evidence.strong());
                     voicedMillis = window.voicedMillis(); commandMillis = window.commandMillis();
                     if (decision == CommandWindow.Decision.START) {
+                        media.interrupt(NativeMediaController.Interruption.VOICE);
                         onsetMillis = window.waitingMillis(); onsetReason = window.onsetReason(); endReason = "speech";
                         byte[] onset = history.snapshot(15);
                         inputBytes = onset.length;
@@ -661,6 +704,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                         diagnosticEvent("window_timeout="+windowId);
                         releaseRecorder();
                         endingPrompt();
+                        media.release(NativeMediaController.Interruption.VOICE);
                         following = false; waiting = false; history.clear(); engine.reset(); vad.reset(); index = 0;
                         status = "listening"; // Both window kinds end with exactly one local prompt.
                     } else if (commandActive && decision != CommandWindow.Decision.DONE) {
@@ -682,6 +726,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     if(diagnostic!=null && diagnostic.armed() && diagnostic.activateOnWake())
                         diagnosticEvent("capture_trigger=alexa,format=PCM_S16LE,rate=16000,channels=1,purpose=post_wake_silence,utc_ms="+System.currentTimeMillis());
                     windowSource = "alexa"; wakes++; controls.wake();
+                    media.interrupt(NativeMediaController.Interruption.VOICE);
                     releaseRecorder(); history.clear(); status = "acknowledging";
                     requireAudioPermission();
                     prompt("ack", selector.next());
