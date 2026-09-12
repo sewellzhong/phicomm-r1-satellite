@@ -221,13 +221,9 @@ void listener_is_private_and_checks_kernel_peer() {
   require(lstat(path.c_str(), &info) == 0 && S_ISSOCK(info.st_mode)
           && info.st_uid == geteuid() && (info.st_mode & 0777) == 0600,
           "listener path is not private");
-  int client = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
-  require(client >= 0, "listener client create failed");
-  struct sockaddr_un address {};
-  address.sun_family = AF_UNIX;
-  std::memcpy(address.sun_path, path.c_str(), path.size() + 1);
-  require(connect(client, reinterpret_cast<struct sockaddr*>(&address),
-                  sizeof(address)) == 0, "listener connect failed");
+  int client = -1;
+  require(r1_update::connect_private_update_socket(path, &client, &error),
+          "listener client connect failed");
   require(r1_update::send_health_request(client, {true, true, true, true}, &error),
           "listener health send failed");
   ProtocolRequest request;

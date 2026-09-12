@@ -10,6 +10,11 @@ add_library(r1-update-policy STATIC
 target_include_directories(r1-update-policy PUBLIC src)
 target_compile_features(r1-update-policy PUBLIC cxx_std_17)
 target_compile_options(r1-update-policy PRIVATE -Wall -Wextra -Werror)
+if(ANDROID)
+  target_compile_options(r1-update-policy PRIVATE -ffunction-sections -fdata-sections)
+  set_target_properties(r1-update-policy PROPERTIES
+    CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+endif()
 
 if(NOT ANDROID)
   enable_testing()
@@ -41,4 +46,11 @@ if(ANDROID)
   if(CMAKE_SYSTEM_VERSION VERSION_GREATER "22")
     message(FATAL_ERROR "The R1 update supervisor must remain compatible with API 22")
   endif()
+  add_library(r1_update_client SHARED src/update_client_jni.cpp)
+  target_link_libraries(r1_update_client PRIVATE r1-update-policy)
+  target_compile_features(r1_update_client PRIVATE cxx_std_17)
+  target_compile_options(r1_update_client PRIVATE -Wall -Wextra -Werror)
+  target_link_options(r1_update_client PRIVATE "-Wl,--hash-style=both" "-Wl,--gc-sections")
+  set_target_properties(r1_update_client PROPERTIES
+    CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
 endif()

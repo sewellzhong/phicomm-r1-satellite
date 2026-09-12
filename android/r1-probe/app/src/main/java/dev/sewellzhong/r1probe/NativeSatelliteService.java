@@ -68,6 +68,10 @@ public final class NativeSatelliteService extends Service {
     private volatile String state = "initializing", error;
     private volatile long connections, failures;
     private volatile String isolation = "unknown";
+    private volatile boolean persistentStateLoaded, serviceReady;
+    private UpdateHealthReporter.PreferencesStore updateHealthStore;
+    private UpdateHealthReporter updateHealthReporter;
+    private String updateBootIdentity;
     private boolean audioPermitted() {
         isolation = FactoryAudioIsolation.inspect(this);
         if (!FactoryAudioIsolation.permitsAudio(isolation)) {
@@ -91,6 +95,16 @@ public final class NativeSatelliteService extends Service {
             if (destroyed) return;
             refreshLed();
             main.postDelayed(this, 200L);
+        }
+    };
+    private final Runnable reportUpdateHealth = new Runnable() {
+        @Override public void run() {
+            if (destroyed || updateHealthReporter == null) return;
+            if (updateHealthReporter.attempt(updateBootIdentity)) {
+                main.postDelayed(this, 1000L);
+            } else if (!settings.enabled()) {
+                stopSelf();
+            }
         }
     };
     private NsdManager nsd;
@@ -176,6 +190,24 @@ public final class NativeSatelliteService extends Service {
             @Override public boolean allowed() { return dnd.alarmsAllowed(); }
             @Override public void suppressed() { dnd.suppressedAlarm(); }
         });
+        persistentStateLoaded = true;
+        updateHealthStore = new UpdateHealthReporter.PreferencesStore(this);
+        updateBootIdentity = UpdateHealthReporter.bootIdentity();
+        updateHealthReporter = new UpdateHealthReporter(updateHealthStore, () -> {
+            boolean ready = serviceReady && worker != null && worker.isAlive()
+                    && controller != null && controller.isAlive()
+                    && (!settings.enabled() || server != null);
+            boolean safe = FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(this));
+            boolean agent = false;
+            if (ready && persistentStateLoaded && safe) {
+                try (dev.sewellzhong.r1probe.factoryaudio.FactoryAudioClient client =
+                             dev.sewellzhong.r1probe.factoryaudio.FactoryAudioClient.connect()) {
+                    agent = client.health() != null;
+                } catch (IOException | RuntimeException ignored) { }
+            }
+            return new UpdateSupervisorClient.Health(ready, persistentStateLoaded,
+                    agent, safe);
+        }, UpdateSupervisorClient.create(this));
         diagnostic = new AudioDiagnostic(getFilesDir());
         hardware = new HardwareInputMonitor(this, settings);
         capabilities = new DeviceCapabilityProbe(this);
@@ -246,7 +278,8 @@ public final class NativeSatelliteService extends Service {
             control = new LocalServerSocket("r1-native-control");
             controller = new Thread(this::controlLoop, "native-administration");
             worker = new Thread(this::serve, "native-server");
-            controller.start(); worker.start();
+            controller.start(); worker.start(); serviceReady = true;
+            if (updateHealthStore.pending(updateBootIdentity)) main.post(reportUpdateHealth);
         } catch (IOException e) { error = "control_unavailable"; stopSelf(); }
     }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -254,7 +287,9 @@ public final class NativeSatelliteService extends Service {
             settings.enable(false, false); closeClient(); stopSelf();
             return START_NOT_STICKY;
         }
-        return settings.enabled() ? START_STICKY : START_NOT_STICKY;
+        return settings.enabled() || (updateHealthStore != null
+                && updateHealthStore.pending(updateBootIdentity))
+                ? START_STICKY : START_NOT_STICKY;
     }
     @Override public IBinder onBind(Intent intent) { return null; }
 
@@ -412,6 +447,26 @@ public final class NativeSatelliteService extends Service {
                             break;
                         case "stop": settings.enable(false, false); closeClient(); closeServer(); break;
                         case "rotate": settings.rotate(); break;
+                        case "update-submit":
+                            String operationId = command.getString("operation_id");
+                            UpdateSupervisorClient updateClient = UpdateSupervisorClient.create(this);
+                            java.io.File candidateFile = updateClient.candidateFile(operationId);
+                            android.content.pm.PackageInfo currentPackage = getPackageManager()
+                                    .getPackageInfo(getPackageName(), 0);
+                            UpdateSupervisorClient.Candidate candidate =
+                                    new UpdateSupervisorClient.Candidate(operationId,
+                                            currentPackage.versionCode,
+                                            command.getInt("to_version"), candidateFile.length(),
+                                            UpdateSupervisorClient.decodeDigest(
+                                                    command.getString("apk_sha256")),
+                                            UpdateSupervisorClient.decodeDigest(
+                                                    command.getString("signer_sha256")),
+                                            command.optInt("health_timeout_seconds", 180));
+                            updateClient.submitExisting(candidate);
+                            actionResponse = new JSONObject().put("update", "submitted")
+                                    .put("operation_id", operationId)
+                                    .put("install_result_deferred", true);
+                            break;
                         case "hardware-reset": hardware.reset(); break;
                         case "button-short": buttonActions.shortPress(); break;
                         case "button-long": buttonActions.longPress(); break;
@@ -634,7 +689,7 @@ public final class NativeSatelliteService extends Service {
         info.setAttribute("version", "2026.8.0"); info.setAttribute("mac", settings.mac().replace(":", "").toLowerCase(java.util.Locale.ROOT));
         info.setAttribute("platform", "R1"); info.setAttribute("network", "wifi");
         info.setAttribute("api_encryption", "Noise_NNpsk0_25519_ChaChaPoly_SHA256");
-        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.17-system-management");
+        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.18-update-client");
         registration = new NsdManager.RegistrationListener() {
             @Override public void onServiceRegistered(NsdServiceInfo serviceInfo) { }
             @Override public void onRegistrationFailed(NsdServiceInfo serviceInfo, int code) { error = "discovery_registration_failed"; }
@@ -666,6 +721,7 @@ public final class NativeSatelliteService extends Service {
         if (originalProvisioning != null) try { originalProvisioning.serviceDestroyed(); }
         catch (Exception ignored) { }
         destroyed = true; main.removeCallbacks(renewLock); main.removeCallbacks(refreshIndicators);
+        serviceReady = false; main.removeCallbacks(reportUpdateHealth);
         closeClient(); closeServer(); unpublish();
         unregisterReceiver(network);
         if (health != null) health.cancel();

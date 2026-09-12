@@ -39,6 +39,11 @@ struct ProtocolRequest {
 bool open_private_update_listener(const std::string& path, uid_t satellite_uid,
                                   int* listener_fd, std::string* error);
 
+// Opens a bounded client connection to an absolute filesystem socket and
+// applies the same five-second I/O limits as the server side.
+bool connect_private_update_socket(const std::string& path, int* connected_fd,
+                                   std::string* error);
+
 // Accepts one connection, verifies its kernel-supplied UID, and receives one
 // complete, fixed-size version-1 packet. Apply packets require exactly one
 // SCM_RIGHTS regular-file descriptor; health packets require none.

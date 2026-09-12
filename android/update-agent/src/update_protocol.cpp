@@ -207,6 +207,40 @@ bool open_private_update_listener(const std::string& path, uid_t satellite_uid,
   return true;
 }
 
+bool connect_private_update_socket(const std::string& path, int* connected_fd,
+                                   std::string* error) {
+  if (connected_fd == nullptr)
+    return reject("update_client_output_missing", error);
+  *connected_fd = -1;
+  if (path.empty() || path.size() >= sizeof(sockaddr_un::sun_path)
+      || path.find('\0') != std::string::npos || path[0] != '/')
+    return reject("update_socket_path_invalid", error);
+  int fd = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+  if (fd < 0) return reject("update_socket_create_failed", error);
+  struct timeval timeout {5, 0};
+  if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0
+      || setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0) {
+    close(fd);
+    return reject("update_socket_timeout_failed", error);
+  }
+  struct sockaddr_un address {};
+  address.sun_family = AF_UNIX;
+  std::memcpy(address.sun_path, path.c_str(), path.size() + 1);
+  const socklen_t address_size = static_cast<socklen_t>(
+      offsetof(struct sockaddr_un, sun_path) + path.size() + 1);
+  int result;
+  do {
+    result = connect(fd, reinterpret_cast<const struct sockaddr*>(&address),
+                     address_size);
+  } while (result != 0 && errno == EINTR);
+  if (result != 0) {
+    close(fd);
+    return reject("update_socket_connect_failed", error);
+  }
+  *connected_fd = fd;
+  return true;
+}
+
 bool receive_protocol_request(int connected_fd, ProtocolRequest* request,
                               std::string* error) {
   if (request == nullptr) return reject("update_protocol_output_missing", error);

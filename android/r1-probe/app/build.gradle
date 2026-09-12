@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("117")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.17-system-management")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("118")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.18-update-client")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 
@@ -37,6 +37,7 @@ android {
             jniLibs.srcDir("../../../local-deps/r1-microfrontend/jniLibs")
             jniLibs.srcDir("../../../local-deps/r1-vad/jniLibs")
             jniLibs.srcDir("../../../local-deps/r1-noise/jniLibs")
+            jniLibs.srcDir("../../../local-deps/r1-update-client/jniLibs")
             java.srcDir(layout.buildDirectory.dir("generated/esphome"))
             java.srcDir(layout.buildDirectory.dir("generated/factory_audio"))
             if (providers.gradleProperty("includeMicroWakeWordProbe").orElse("true").get().toBoolean()) {

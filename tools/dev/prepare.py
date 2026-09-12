@@ -87,6 +87,7 @@ def main():
     run('python3', 'tools/kws/prepare-alexa-microwakeword.py')
     for name in ('microfrontend', 'vad', 'noise'):
         run('bash', f'tools/build-r1-{name}.sh')
+    run('bash', 'tools/build-r1-update-client.sh')
     # Original synthetic development fixture, not licensed third-party speech.
     audio = io.BytesIO()
     with wave.open(audio, 'wb') as wav:

@@ -39,10 +39,20 @@ health accepts none. Connections have bounded send/receive timeouts, malformed
 ancillary data is closed and rejected, and every well-formed request gets an
 explicit success or failure response.
 
+The API-22 APK now bundles a small JNI client for the fixed
+`/dev/socket/r1_update_supervisor` endpoint. A root/shell-only local maintenance
+request names an operation whose APK is already in the app-private update
+inbox; Java verifies the bounded file and SHA-256 before JNI sends its read-only
+descriptor. Apply is deliberately send-only because Android may kill the old
+APK before an install response can return. `MY_PACKAGE_REPLACED` records a
+same-boot marker and starts a bounded health reporter. It probes all four gates
+and sends nothing until all are true; a reboot clears the marker instead of
+converting a post-reboot start into health.
+
 This directory still does **not** ship a long-running root daemon executable, a
-real Android PackageManager implementation, Java/JNI satellite integration,
-init service, or deployable SELinux policy. The protocol includes native client
-framing primitives, but they are not yet wired into the APK lifecycle. Device
-deployment still requires a root-owned non-writable socket parent, no network or
-block access, and real firmware-3448 AVC/package-manager evidence. Until then,
-this is host-validated groundwork and is not an OTA or R1 result.
+real Android PackageManager implementation, init service, or deployable SELinux
+policy. There is no authenticated remote candidate delivery path yet; the
+app-private inbox is a maintenance boundary, not OTA download support. Device
+deployment still requires a root-owned non-writable socket parent, no network
+or block access, and real firmware-3448 AVC/package-manager evidence. Until
+then, this is host-validated groundwork and is not an OTA or R1 result.
