@@ -26,6 +26,8 @@ using r1_update::ProtocolResponse;
 
 namespace {
 
+constexpr char kBootId[] = "11111111-2222-3333-4444-555555555555";
+
 void require(bool value, const char* message) {
   if (!value) { std::cerr << message << '\n'; std::exit(1); }
 }
@@ -173,7 +175,7 @@ void apply_packet_round_trip_and_dispatch() {
   close(archive); close(pair[0]); close(pair[1]);
 
   FakeBackend backend(directory);
-  PackageOrchestrator orchestrator(directory, &backend);
+  PackageOrchestrator orchestrator(directory, kBootId, &backend);
   require(r1_update::dispatch_protocol_request(&request, directory, &orchestrator,
                                                 1000, &error),
           "apply dispatch failed");
@@ -269,7 +271,7 @@ void listener_dispatches_and_returns_fixed_response() {
           "serve apply send failed");
 
   FakeBackend backend(directory);
-  PackageOrchestrator orchestrator(directory, &backend);
+  PackageOrchestrator orchestrator(directory, kBootId, &backend);
   bool operation_succeeded = false;
   require(r1_update::serve_protocol_request_once(listener, geteuid(), directory,
                                                   &orchestrator, 1000,

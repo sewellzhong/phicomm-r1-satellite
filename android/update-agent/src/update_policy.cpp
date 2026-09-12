@@ -15,6 +15,19 @@ bool nonzero(const std::array<uint8_t, 32>& value) {
   return std::any_of(value.begin(), value.end(), [](uint8_t byte) { return byte != 0; });
 }
 
+bool valid_boot_id(const std::string& value) {
+  if (value.size() != 36) return false;
+  for (size_t index = 0; index < value.size(); ++index) {
+    const char byte = value[index];
+    if (index == 8 || index == 13 || index == 18 || index == 23) {
+      if (byte != '-') return false;
+    } else if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f'))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool reject(const char* reason, std::string* error) {
   if (error != nullptr) *error = reason;
   return false;
@@ -74,12 +87,15 @@ bool Policy::stage(const Candidate& candidate, const Installed& installed,
   return true;
 }
 
-bool Policy::begin_install(uint64_t now, std::string* error) {
+bool Policy::begin_install(uint64_t now, const std::string& boot_id,
+                           std::string* error) {
   if (state_.phase != Phase::kStaged) return reject("update_not_staged", error);
+  if (!valid_boot_id(boot_id)) return reject("update_boot_id_invalid", error);
   if (now > UINT64_MAX - state_.candidate.health_timeout_seconds)
     return reject("update_deadline_overflow", error);
   state_.phase = Phase::kInstalling;
   state_.deadline_monotonic_seconds = now + state_.candidate.health_timeout_seconds;
+  state_.boot_id = boot_id;
   return true;
 }
 
@@ -127,6 +143,7 @@ bool Policy::confirm_health(const Installed& installed, const Health& health,
     return request_rollback("update_health_failed", error);
   state_.phase = Phase::kIdle;
   state_.deadline_monotonic_seconds = 0;
+  state_.boot_id.clear();
   state_.failure.clear();
   state_.last_result = "updated";
   return true;
@@ -163,6 +180,7 @@ bool Policy::rollback_finished(const Installed& installed, std::string* error) {
   }
   state_.phase = Phase::kIdle;
   state_.deadline_monotonic_seconds = 0;
+  state_.boot_id.clear();
   state_.last_result = "rolled_back";
   return true;
 }

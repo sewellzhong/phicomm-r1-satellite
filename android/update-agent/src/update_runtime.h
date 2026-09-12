@@ -40,7 +40,8 @@ class TransactionController {
   bool recover(bool* restored, std::string* error);
   bool stage(const Candidate& candidate, const Installed& installed,
              const Installed& archive, std::string* error);
-  bool begin_install(uint64_t now_monotonic_seconds, std::string* error);
+  bool begin_install(uint64_t now_monotonic_seconds, const std::string& boot_id,
+                     std::string* error);
   bool abort_staged(std::string* error);
   bool installation_failed(std::string* error);
   bool health_probe_failed(std::string* error);

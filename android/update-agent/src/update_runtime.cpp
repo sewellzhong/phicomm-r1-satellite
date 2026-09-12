@@ -35,6 +35,19 @@ bool valid_operation_id(const std::string& value) {
   return true;
 }
 
+bool valid_boot_id(const std::string& value) {
+  if (value.size() != 36) return false;
+  for (size_t index = 0; index < value.size(); ++index) {
+    const char byte = value[index];
+    if (index == 8 || index == 13 || index == 18 || index == 23) {
+      if (byte != '-') return false;
+    } else if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f'))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 std::string hex(const std::array<uint8_t, 32>& value) {
   static constexpr char digits[] = "0123456789abcdef";
   std::string output(64, '0');
@@ -117,7 +130,9 @@ bool parse_u64(const std::string& value, uint64_t* output) {
 
 std::string encode(const State& state) {
   std::ostringstream out;
-  out << "R1_UPDATE_TRANSACTION_V1\n"
+  const bool version_two = !state.boot_id.empty();
+  out << (version_two ? "R1_UPDATE_TRANSACTION_V2\n"
+                      : "R1_UPDATE_TRANSACTION_V1\n")
       << "phase=" << static_cast<uint32_t>(state.phase) << '\n'
       << "operation_id=" << state.candidate.operation_id << '\n'
       << "package_name=" << state.candidate.package_name << '\n'
@@ -128,8 +143,9 @@ std::string encode(const State& state) {
       << "signer_sha256=" << hex(state.candidate.signer_sha256) << '\n'
       << "health_timeout_seconds=" << state.candidate.health_timeout_seconds << '\n'
       << "previous_apk_sha256=" << hex(state.previous_apk_sha256) << '\n'
-      << "deadline_monotonic_seconds=" << state.deadline_monotonic_seconds << '\n'
-      << "failure=" << state.failure << '\n'
+      << "deadline_monotonic_seconds=" << state.deadline_monotonic_seconds << '\n';
+  if (version_two) out << "boot_id=" << state.boot_id << '\n';
+  out << "failure=" << state.failure << '\n'
       << "last_result=" << state.last_result << '\n';
   return out.str();
 }
@@ -145,14 +161,24 @@ bool decode(const std::string& payload, State* state, std::string* error) {
   if (state == nullptr) return reject("update_state_output_missing", error);
   std::istringstream input(payload);
   std::string line;
-  if (!std::getline(input, line) || line != "R1_UPDATE_TRANSACTION_V1")
+  if (!std::getline(input, line)
+      || (line != "R1_UPDATE_TRANSACTION_V1"
+          && line != "R1_UPDATE_TRANSACTION_V2"))
     return reject("update_state_header_invalid", error);
+  const bool version_two = line == "R1_UPDATE_TRANSACTION_V2";
   std::vector<std::string> values;
-  static constexpr const char* names[] = {
+  static constexpr const char* names_v1[] = {
       "phase", "operation_id", "package_name", "from_version", "to_version",
       "apk_size", "apk_sha256", "signer_sha256", "health_timeout_seconds",
       "previous_apk_sha256", "deadline_monotonic_seconds", "failure", "last_result"};
-  for (const char* name : names) {
+  static constexpr const char* names_v2[] = {
+      "phase", "operation_id", "package_name", "from_version", "to_version",
+      "apk_size", "apk_sha256", "signer_sha256", "health_timeout_seconds",
+      "previous_apk_sha256", "deadline_monotonic_seconds", "boot_id", "failure",
+      "last_result"};
+  const size_t field_count = version_two ? 14 : 13;
+  for (size_t index = 0; index < field_count; ++index) {
+    const char* name = version_two ? names_v2[index] : names_v1[index];
     if (!std::getline(input, line)) return reject("update_state_truncated", error);
     std::string prefix = std::string(name) + "=";
     if (line.compare(0, prefix.size(), prefix) != 0)
@@ -173,8 +199,12 @@ bool decode(const std::string& payload, State* state, std::string* error) {
       || !parse_hex(values[7], &decoded.candidate.signer_sha256)
       || !parse_u64(values[8], &timeout) || timeout > UINT32_MAX
       || !parse_hex(values[9], &decoded.previous_apk_sha256)
-      || !parse_u64(values[10], &decoded.deadline_monotonic_seconds)
-      || !safe_text(values[11]) || !safe_text(values[12]))
+      || !parse_u64(values[10], &decoded.deadline_monotonic_seconds))
+    return reject("update_state_value_invalid", error);
+  const size_t failure_index = version_two ? 12 : 11;
+  const size_t result_index = version_two ? 13 : 12;
+  if ((version_two && !valid_boot_id(values[11]))
+      || !safe_text(values[failure_index]) || !safe_text(values[result_index]))
     return reject("update_state_value_invalid", error);
   decoded.phase = static_cast<Phase>(phase);
   decoded.candidate.operation_id = values[1];
@@ -182,8 +212,9 @@ bool decode(const std::string& payload, State* state, std::string* error) {
   decoded.candidate.from_version = static_cast<uint32_t>(from);
   decoded.candidate.to_version = static_cast<uint32_t>(to);
   decoded.candidate.health_timeout_seconds = static_cast<uint32_t>(timeout);
-  decoded.failure = values[11];
-  decoded.last_result = values[12];
+  if (version_two) decoded.boot_id = values[11];
+  decoded.failure = values[failure_index];
+  decoded.last_result = values[result_index];
   *state = decoded;
   return true;
 }
@@ -268,6 +299,7 @@ bool TransactionStore::save(const State& state, std::string* error) const {
   if (!ensure_private_directory(directory_, error)) return false;
   if (!valid_operation_id(state.candidate.operation_id)
       || state.candidate.package_name != "dev.sewellzhong.r1probe"
+      || (!state.boot_id.empty() && !valid_boot_id(state.boot_id))
       || !safe_text(state.failure) || !safe_text(state.last_result))
     return reject("update_state_text_invalid", error);
   std::string payload = encode(state);
@@ -339,8 +371,9 @@ bool TransactionController::stage(const Candidate& candidate, const Installed& i
   return persist(error);
 }
 
-bool TransactionController::begin_install(uint64_t now, std::string* error) {
-  if (!policy_.begin_install(now, error)) return false;
+bool TransactionController::begin_install(uint64_t now, const std::string& boot_id,
+                                          std::string* error) {
+  if (!policy_.begin_install(now, boot_id, error)) return false;
   return persist(error);
 }
 

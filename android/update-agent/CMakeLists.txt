@@ -6,6 +6,7 @@ add_library(r1-update-policy STATIC
   src/update_protocol.cpp
   src/update_policy.cpp
   src/update_runtime.cpp
+  src/update_supervisor.cpp
 )
 target_include_directories(r1-update-policy PUBLIC src)
 target_compile_features(r1-update-policy PUBLIC cxx_std_17)
@@ -37,6 +38,16 @@ if(NOT ANDROID)
   target_link_libraries(r1-update-protocol-test PRIVATE r1-update-policy)
   target_compile_options(r1-update-protocol-test PRIVATE -Wall -Wextra -Werror)
   add_test(NAME r1-update-protocol-test COMMAND r1-update-protocol-test)
+
+  add_executable(r1-update-supervisor-host tests/host_supervisor_main.cpp)
+  target_link_libraries(r1-update-supervisor-host PRIVATE r1-update-policy)
+  target_compile_options(r1-update-supervisor-host PRIVATE -Wall -Wextra -Werror)
+
+  add_executable(r1-update-supervisor-test tests/update_supervisor_test.cpp)
+  target_link_libraries(r1-update-supervisor-test PRIVATE r1-update-policy)
+  target_compile_options(r1-update-supervisor-test PRIVATE -Wall -Wextra -Werror)
+  add_dependencies(r1-update-supervisor-test r1-update-supervisor-host)
+  add_test(NAME r1-update-supervisor-test COMMAND r1-update-supervisor-test)
 endif()
 
 if(ANDROID)

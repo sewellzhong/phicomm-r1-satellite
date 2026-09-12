@@ -19,6 +19,8 @@ using r1_update::TransactionController;
 
 namespace {
 
+constexpr char kBootId[] = "11111111-2222-3333-4444-555555555555";
+
 void require(bool value, const char* message) {
   if (!value) { std::cerr << message << '\n'; std::exit(1); }
 }
@@ -75,6 +77,7 @@ State installing_state() {
   state.candidate.health_timeout_seconds = 180;
   state.previous_apk_sha256 = from_hex("5389688abf55bc46639385085bfaf1fda3552f63303e4d4a55d664d0f515d6ac");
   state.deadline_monotonic_seconds = 1180;
+  state.boot_id = kBootId;
   state.last_result = "pending";
   return state;
 }
@@ -110,7 +113,8 @@ void state_round_trip_and_recovery() {
           && actual.candidate.operation_id == expected.candidate.operation_id
           && actual.candidate.apk_sha256 == expected.candidate.apk_sha256
           && actual.previous_apk_sha256 == expected.previous_apk_sha256
-          && actual.deadline_monotonic_seconds == 1180, "state round trip changed data");
+          && actual.deadline_monotonic_seconds == 1180
+          && actual.boot_id == kBootId, "state round trip changed data");
   r1_update::Policy restored(actual);
   require(restored.state().phase == Phase::kRollingBack
           && restored.state().failure == "update_supervisor_restarted_during_install",
@@ -131,7 +135,7 @@ void controller_persists_every_transition() {
       value.candidate.apk_sha256, value.candidate.signer_sha256};
   std::string error;
   require(controller.stage(value.candidate, current, target, &error), "controller stage failed");
-  require(controller.begin_install(1000, &error), "controller begin failed");
+  require(controller.begin_install(1000, kBootId, &error), "controller begin failed");
 
   TransactionController recovered(directory);
   bool restored = false;
@@ -147,7 +151,7 @@ void controller_persists_every_transition() {
           "completed controller left active transaction");
 
   require(empty.stage(value.candidate, current, target, &error), "success stage failed");
-  require(empty.begin_install(2000, &error), "success begin failed");
+  require(empty.begin_install(2000, kBootId, &error), "success begin failed");
   require(empty.installed(target, &error), "success install verification failed");
   require(empty.confirm_health(target, {true, true, true, true}, &error),
           "success health confirmation failed");

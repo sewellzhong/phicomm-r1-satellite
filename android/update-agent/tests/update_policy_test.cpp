@@ -12,6 +12,8 @@ using r1_update::State;
 
 namespace {
 
+constexpr char kBootId[] = "11111111-2222-3333-4444-555555555555";
+
 void require(bool value, const char* message) {
   if (!value) { std::cerr << message << '\n'; std::exit(1); }
 }
@@ -39,7 +41,7 @@ Installed target() {
 void successful_update() {
   Policy policy; std::string error;
   require(policy.stage(candidate(), current(), target(), &error), "stage failed");
-  require(policy.begin_install(1000, &error), "begin failed");
+  require(policy.begin_install(1000, kBootId, &error), "begin failed");
   require(policy.installed(target(), &error), "installed failed");
   require(policy.confirm_health(target(), {true, true, true, true}, &error),
           "health failed");
@@ -72,7 +74,7 @@ void admission_rejections() {
 void timeout_rolls_back() {
   Policy policy; std::string error;
   require(policy.stage(candidate(), current(), target(), &error), "stage failed");
-  require(policy.begin_install(1000, &error), "begin failed");
+  require(policy.begin_install(1000, kBootId, &error), "begin failed");
   require(policy.installed(target(), &error), "installed failed");
   require(!policy.tick(1180, true, &error) && policy.state().phase == Phase::kRollingBack,
           "timeout did not roll back");
@@ -87,14 +89,14 @@ void bad_health_and_reboot_roll_back() {
   std::string error;
   Policy unhealthy;
   require(unhealthy.stage(candidate(), current(), target(), &error), "stage failed");
-  require(unhealthy.begin_install(1, &error), "begin failed");
+  require(unhealthy.begin_install(1, kBootId, &error), "begin failed");
   require(unhealthy.installed(target(), &error), "install failed");
   require(!unhealthy.confirm_health(target(), {true, true, false, true}, &error)
           && error == "update_health_failed", "partial health accepted");
 
   Policy rebooted;
   require(rebooted.stage(candidate(), current(), target(), &error), "stage failed");
-  require(rebooted.begin_install(1, &error), "begin failed");
+  require(rebooted.begin_install(1, kBootId, &error), "begin failed");
   require(!rebooted.tick(2, false, &error)
           && error == "update_rebooted_before_health", "reboot accepted");
 }

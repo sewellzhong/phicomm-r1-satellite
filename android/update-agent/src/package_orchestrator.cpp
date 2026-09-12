@@ -23,8 +23,10 @@ bool valid_operation_id(const std::string& value) {
 }  // namespace
 
 PackageOrchestrator::PackageOrchestrator(std::string directory,
+                                         std::string boot_id,
                                          PackageManagerBackend* backend)
-    : directory_(std::move(directory)), backend_(backend), controller_(directory_) {}
+    : directory_(std::move(directory)), boot_id_(std::move(boot_id)),
+      backend_(backend), controller_(directory_) {}
 
 std::string PackageOrchestrator::candidate_path(const std::string& operation_id) const {
   return directory_ + "/candidate-" + operation_id + ".apk";
@@ -78,7 +80,7 @@ bool PackageOrchestrator::apply(const Candidate& candidate, const StagedArchive&
     return reject("update_previous_backup_failed", error);
   }
 
-  if (!controller_.begin_install(now, error)) return false;
+  if (!controller_.begin_install(now, boot_id_, error)) return false;
   if (!backend_->install_archive(expected_path, false, error))
     return fail_install_and_rollback("update_package_install_failed", error);
 

@@ -21,6 +21,8 @@ using r1_update::TransactionController;
 
 namespace {
 
+constexpr char kBootId[] = "11111111-2222-3333-4444-555555555555";
+
 void require(bool value, const char* message) {
   if (!value) { std::cerr << message << '\n'; std::exit(1); }
 }
@@ -148,7 +150,7 @@ void prepare(FakeBackend* backend, const std::string& directory) {
 void successful_update_has_strict_order() {
   std::string directory = temporary_directory();
   FakeBackend backend; prepare(&backend, directory);
-  PackageOrchestrator orchestrator(directory, &backend);
+  PackageOrchestrator orchestrator(directory, kBootId, &backend);
   std::string error;
   require(orchestrator.apply(candidate(), archive(directory), 1000, &error),
           "valid update apply failed");
@@ -168,7 +170,7 @@ void successful_update_has_strict_order() {
 void backup_failure_aborts_before_install() {
   std::string directory = temporary_directory();
   FakeBackend backend; prepare(&backend, directory); backend.corrupt_backup = true;
-  PackageOrchestrator orchestrator(directory, &backend);
+  PackageOrchestrator orchestrator(directory, kBootId, &backend);
   std::string error;
   require(!orchestrator.apply(candidate(), archive(directory), 1000, &error)
           && error == "update_previous_backup_failed", "bad backup was accepted");
@@ -181,7 +183,7 @@ void backup_failure_aborts_before_install() {
 void invalid_identity_never_reaches_backend() {
   std::string directory = temporary_directory();
   FakeBackend backend;
-  PackageOrchestrator orchestrator(directory, &backend);
+  PackageOrchestrator orchestrator(directory, kBootId, &backend);
   Candidate invalid = candidate(); invalid.operation_id = "../../client-controlled-path";
   StagedArchive supplied{directory + "/anything.apk", invalid.apk_size,
                          invalid.apk_sha256};
@@ -196,7 +198,7 @@ void invalid_identity_never_reaches_backend() {
 void install_failure_rolls_back_and_verifies() {
   std::string directory = temporary_directory();
   FakeBackend backend; prepare(&backend, directory); backend.fail_upgrade = true;
-  PackageOrchestrator orchestrator(directory, &backend);
+  PackageOrchestrator orchestrator(directory, kBootId, &backend);
   std::string error;
   require(!orchestrator.apply(candidate(), archive(directory), 1000, &error)
           && error == "update_package_install_failed", "install failure was hidden");
@@ -210,7 +212,7 @@ void install_failure_rolls_back_and_verifies() {
 void identity_or_health_failure_rolls_back() {
   std::string directory = temporary_directory();
   FakeBackend backend; prepare(&backend, directory); backend.corrupt_upgrade = true;
-  PackageOrchestrator orchestrator(directory, &backend);
+  PackageOrchestrator orchestrator(directory, kBootId, &backend);
   std::string error;
   require(!orchestrator.apply(candidate(), archive(directory), 1000, &error)
           && error == "update_installed_identity_mismatch",
@@ -220,7 +222,7 @@ void identity_or_health_failure_rolls_back() {
 
   directory = temporary_directory();
   FakeBackend unhealthy; prepare(&unhealthy, directory);
-  PackageOrchestrator second(directory, &unhealthy);
+  PackageOrchestrator second(directory, kBootId, &unhealthy);
   require(second.apply(candidate(), archive(directory), 2000, &error), "apply failed");
   require(!second.confirm_health({true, true, false, true}, &error)
           && error == "update_health_failed", "partial health was accepted");
@@ -236,9 +238,9 @@ void restart_during_install_resumes_rollback_only() {
   std::string error;
   require(controller.stage(candidate(), old_package(), new_package(), &error),
           "restart setup stage failed");
-  require(controller.begin_install(1000, &error), "restart setup begin failed");
+  require(controller.begin_install(1000, kBootId, &error), "restart setup begin failed");
 
-  PackageOrchestrator recovered(directory, &backend);
+  PackageOrchestrator recovered(directory, kBootId, &backend);
   bool restored = false;
   require(recovered.recover(&restored, &error) && restored,
           "interrupted install recovery failed");
@@ -253,7 +255,7 @@ void rollback_failure_is_fail_closed() {
   std::string directory = temporary_directory();
   FakeBackend backend; prepare(&backend, directory); backend.fail_upgrade = true;
   backend.fail_rollback = true;
-  PackageOrchestrator orchestrator(directory, &backend);
+  PackageOrchestrator orchestrator(directory, kBootId, &backend);
   std::string error;
   require(!orchestrator.apply(candidate(), archive(directory), 1000, &error)
           && error == "update_package_rollback_failed", "rollback failure was hidden");
@@ -266,7 +268,7 @@ void rollback_side_effect_requires_durable_transition() {
   std::string directory = temporary_directory();
   FakeBackend backend; prepare(&backend, directory); backend.fail_upgrade = true;
   backend.expose_store_on_upgrade_failure = true;
-  PackageOrchestrator orchestrator(directory, &backend);
+  PackageOrchestrator orchestrator(directory, kBootId, &backend);
   std::string error;
   require(!orchestrator.apply(candidate(), archive(directory), 1000, &error)
           && error == "update_store_directory_permissions",

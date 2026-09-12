@@ -25,7 +25,8 @@ class PackageManagerBackend {
 
 class PackageOrchestrator {
  public:
-  PackageOrchestrator(std::string directory, PackageManagerBackend* backend);
+  PackageOrchestrator(std::string directory, std::string boot_id,
+                      PackageManagerBackend* backend);
 
   const State& state() const { return controller_.state(); }
   bool recover(bool* restored, std::string* error);
@@ -43,6 +44,7 @@ class PackageOrchestrator {
   bool identities_equal(const Installed& left, const Installed& right) const;
 
   std::string directory_;
+  std::string boot_id_;
   PackageManagerBackend* backend_;
   TransactionController controller_;
 };

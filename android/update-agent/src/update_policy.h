@@ -45,6 +45,10 @@ struct State {
   Candidate candidate;
   std::array<uint8_t, 32> previous_apk_sha256{};
   uint64_t deadline_monotonic_seconds = 0;
+  // Kernel boot identity captured before PackageManager may replace the APK.
+  // An empty value is accepted only when loading the legacy v1 transaction
+  // format and must be treated as a different boot by the daemon.
+  std::string boot_id;
   std::string failure;
   std::string last_result = "none";
 };
@@ -57,7 +61,8 @@ class Policy {
   bool stage(const Candidate& candidate, const Installed& installed,
              const Installed& archive,
              std::string* error);
-  bool begin_install(uint64_t now_monotonic_seconds, std::string* error);
+  bool begin_install(uint64_t now_monotonic_seconds, const std::string& boot_id,
+                     std::string* error);
   bool abort_staged(std::string* error);
   bool installation_failed(std::string* error);
   bool health_probe_failed(std::string* error);
