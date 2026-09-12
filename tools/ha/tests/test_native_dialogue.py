@@ -235,6 +235,44 @@ class ConversationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[1][1],self.agent._sessions[next(iter(self.agent._sessions))][0])
         self.delegate.assert_not_awaited()
 
+    async def test_streaming_first_delta_precedes_completion_and_cancel_blocks_stale_delta(self):
+        deltas=[];nested=[]
+        first_delta=asyncio.Event();release=asyncio.Event()
+        class Target:
+            supports_streaming=True
+            def async_set_context(self,_context): pass
+            async def internal_async_process(self,user_input):
+                nested[-1].delta_listener(nested[-1],{'role':'assistant','content':'先播放这一段，'})
+                first_delta.set()
+                await release.wait()
+                nested[-1].delta_listener(nested[-1],{'content':'再播放全文。'})
+                response=intent.IntentResponse(language='zh-CN');response.async_set_speech('先播放这一段，再播放全文。')
+                return conversation.ConversationResult(response=response,
+                    conversation_id=user_input.conversation_id,continue_conversation=True)
+        @contextmanager
+        def session(_hass,conversation_id):
+            yield SimpleNamespace(conversation_id=conversation_id)
+        @contextmanager
+        def chat_log(_hass,_session,_input,chat_log_delta_listener=None):
+            item=SimpleNamespace(delta_listener=chat_log_delta_listener);nested.append(item);yield item
+        outer=SimpleNamespace(delta_listener=lambda _log,delta:deltas.append(delta.copy()))
+        token=current_chat_log.set(outer)
+        try:
+            with patch('custom_components.r1_input_guard.conversation.conversation.async_get_agent',return_value=Target()), \
+                    patch('custom_components.r1_input_guard.conversation.chat_session.async_get_chat_session',side_effect=session), \
+                    patch('custom_components.r1_input_guard.conversation.conversation.async_get_chat_log',side_effect=chat_log):
+                task=asyncio.create_task(self.agent.async_process(self.user()))
+                await asyncio.wait_for(first_delta.wait(),1)
+                self.assertFalse(task.done())
+                self.assertEqual(['先播放这一段，'],[delta['content'] for delta in deltas])
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError): await task
+                nested[-1].delta_listener(nested[-1],{'content':'取消后的旧内容。'})
+        finally:
+            current_chat_log.reset(token)
+        self.assertEqual(['先播放这一段，'],[delta['content'] for delta in deltas])
+        self.assertFalse(self.agent._sessions);self.assertFalse(self.agent._busy)
+
     async def test_nonstreaming_delegate_does_not_claim_streaming(self):
         with patch('custom_components.r1_input_guard.conversation.conversation.async_get_agent',
                    return_value=SimpleNamespace(supports_streaming=False)):

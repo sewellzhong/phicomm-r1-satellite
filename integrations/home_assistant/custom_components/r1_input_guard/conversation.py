@@ -88,14 +88,27 @@ class NativeConversation(conversation.ConversationEntity):
         # The outer Assist pipeline owns the listener that feeds incremental text to TTS.
         # Give the isolated inner chat log that listener while keeping its source-bound ID;
         # the delegate's public internal entry point then reuses this active inner log.
-        async with asyncio.timeout(self.STREAMING_DELEGATE_TIMEOUT):
-            with chat_session.async_get_chat_session(self.hass, inner) as session, \
-                    conversation.async_get_chat_log(
-                        self.hass, session, forwarded,
-                        chat_log_delta_listener=getattr(outer_log, "delta_listener", None),
-                    ):
-                target.async_set_context(user_input.context)
-                return await target.internal_async_process(forwarded)
+        # Scope forwarding to this awaited call. A delegate may retain a chat-log reference
+        # in a background task; after cancellation, timeout, failure or completion it must
+        # not be able to feed stale text into this run's TTS queue.
+        outer_listener = getattr(outer_log, "delta_listener", None)
+        forwarding = True
+
+        def forward_delta(chat_log, delta):
+            if forwarding and outer_listener is not None:
+                outer_listener(chat_log, delta)
+
+        try:
+            async with asyncio.timeout(self.STREAMING_DELEGATE_TIMEOUT):
+                with chat_session.async_get_chat_session(self.hass, inner) as session, \
+                        conversation.async_get_chat_log(
+                            self.hass, session, forwarded,
+                            chat_log_delta_listener=(forward_delta if outer_listener else None),
+                        ):
+                    target.async_set_context(user_input.context)
+                    return await target.internal_async_process(forwarded)
+        finally:
+            forwarding = False
 
     async def async_process(self, user_input):
         if self._unloaded:
