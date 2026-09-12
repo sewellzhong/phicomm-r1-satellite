@@ -14,6 +14,11 @@ class TimerAdminTests(unittest.TestCase):
         self.assertIn("timer-status", admin.ADMIN_ACTIONS)
         self.assertIn("timer-stop", admin.ADMIN_ACTIONS)
 
+    def test_shell_only_alarm_actions_are_exposed(self):
+        for action in ("alarm-status", "alarm-put", "alarm-delete", "alarm-enable",
+                       "alarm-stop", "alarm-snooze"):
+            self.assertIn(action, admin.ADMIN_ACTIONS)
+
 
 if __name__ == "__main__":
     unittest.main()

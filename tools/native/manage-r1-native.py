@@ -16,6 +16,7 @@ SERVICE = PACKAGE + "/.NativeSatelliteService"
 ADMIN_ACTIONS = ["initialize", "start", "stop", "status", "rotate", "pair", "audio-check",
     "diagnostic-window", "diagnostic-start", "diagnostic-arm", "diagnostic-stop", "diagnostic-status", "diagnostic-export", "diagnostic-clear",
     "capability-status", "hardware-reset", "timer-status", "timer-stop", "bluetooth-discoverable", "bluetooth-close", "ble-window", "ble-close", "hotspot-window", "hotspot-close",
+    "alarm-status", "alarm-put", "alarm-delete", "alarm-enable", "alarm-stop", "alarm-snooze",
     "original-provisioning-open", "original-provisioning-close", "provisioning-recover",
     "provisioning-handoff-probe"]
 
@@ -109,6 +110,16 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--sha256")
     parser.add_argument("--name", default="r1-sample01")
+    parser.add_argument("--id")
+    parser.add_argument("--date", default="")
+    parser.add_argument("--hour", type=int, choices=range(24))
+    parser.add_argument("--minute", type=int, choices=range(60))
+    parser.add_argument("--weekdays", type=int, choices=range(128), default=0,
+                        help="Monday=bit0 through Sunday=bit6")
+    parser.add_argument("--enabled", choices=("true", "false"), default="true")
+    parser.add_argument("--snooze-minutes", type=int, choices=range(1, 61), default=10)
+    parser.add_argument("--expected-version", type=int, default=-1)
+    parser.add_argument("--minutes", type=int, choices=range(1, 61))
     parser.add_argument("--prompt-index", type=int, choices=range(10))
     parser.add_argument("--followup", action="store_true")
     parser.add_argument("--listen", action="store_true")
@@ -133,6 +144,21 @@ def main():
         command["followup"] = args.followup
         if args.prompt_index is not None: command["prompt_index"] = args.prompt_index
     if args.action == "initialize": command["name"] = args.name
+    if args.action == "alarm-put":
+        if not args.id or args.hour is None or args.minute is None:
+            parser.error("alarm-put requires --id, --hour and --minute")
+        if bool(args.date) == bool(args.weekdays):
+            parser.error("alarm-put requires exactly one of --date or nonzero --weekdays")
+        command.update({"id": args.id, "name": args.name, "date": args.date,
+                        "hour": args.hour, "minute": args.minute, "weekdays": args.weekdays,
+                        "enabled": args.enabled == "true", "snooze_minutes": args.snooze_minutes,
+                        "expected_version": args.expected_version})
+    if args.action in ("alarm-delete", "alarm-enable"):
+        if not args.id: parser.error(args.action + " requires --id")
+        command.update({"id": args.id, "expected_version": args.expected_version})
+        if args.action == "alarm-enable": command["enabled"] = args.enabled == "true"
+    if args.action in ("alarm-stop", "alarm-snooze") and args.id: command["id"] = args.id
+    if args.action == "alarm-snooze" and args.minutes is not None: command["minutes"] = args.minutes
     if args.action == "start": command["listen"] = args.listen
     if args.action == "pair":
         pairing = device.control({"action": "pairing"})

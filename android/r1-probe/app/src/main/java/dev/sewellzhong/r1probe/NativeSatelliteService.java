@@ -18,6 +18,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
+import dev.sewellzhong.r1probe.esphome.NativeAlarmController;
 import dev.sewellzhong.r1probe.esphome.NativeTimerController;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -39,6 +40,7 @@ public final class NativeSatelliteService extends Service {
     private R1MessageDispatchBridge originalProvisioning;
     private R1SystemKeyMonitor systemKeys;
     private NativeTimerController timers;
+    private NativeAlarmController alarms;
     private NativeTimerAlarm timerAlarm;
     private volatile boolean destroyed;
     private volatile Socket client;
@@ -96,6 +98,16 @@ public final class NativeSatelliteService extends Service {
             @Override public long wallMillis() { return System.currentTimeMillis(); }
             @Override public boolean wallTrusted() { return wallMillis() >= 1577836800000L; }
         }, timerAlarm);
+        alarms = new NativeAlarmController(new NativeAlarmStore(this), new NativeAlarmController.Clock() {
+            @Override public long wallMillis() { return System.currentTimeMillis(); }
+            @Override public boolean wallTrusted() { return wallMillis() >= 1577836800000L; }
+            @Override public String timeZoneId() { return java.util.TimeZone.getDefault().getID(); }
+        }, new NativeAlarmController.Ringer() {
+            @Override public void start() { timerAlarm.startAlarm(); }
+            @Override public void stop() { timerAlarm.stopAlarm(); }
+            @Override public boolean active() { return timerAlarm.alarmActive(); }
+            @Override public String failure() { return timerAlarm.failure(); }
+        });
         diagnostic = new AudioDiagnostic(getFilesDir());
         hardware = new HardwareInputMonitor(this, settings);
         capabilities = new DeviceCapabilityProbe(this);
@@ -105,7 +117,11 @@ public final class NativeSatelliteService extends Service {
         try {
             systemKeys = new R1SystemKeyMonitor(this, new R1SystemKeyMonitor.Listener() {
                 @Override public void shortPress() {
-                    if (timers.stopRinging()) return;
+                    boolean stopped = timers.stopRinging();
+                    boolean alarmWasRinging = alarms.ringing();
+                    try { stopped |= alarms.stopRinging(null); }
+                    catch (IOException ignored) { stopped |= alarmWasRinging; }
+                    if (stopped) return;
                     NativeAudioRuntime current = audio;
                     if (current != null) current.cancelAudio(
                             dev.sewellzhong.r1probe.esphome.NativeAudioCoordinator.CancelReason.USER_STOP);
@@ -154,6 +170,7 @@ public final class NativeSatelliteService extends Service {
         try {
             while (!destroyed) {
                 timers.tick();
+                alarms.tick();
                 if (!settings.enabled()) { state = settings.configured() ? "disabled" : "uninitialized"; Thread.sleep(200); continue; }
                 if (!AudioOwner.acquire(this)) { state = "audio_owned_by_other_runtime"; Thread.sleep(1000); continue; }
                 try {
@@ -169,6 +186,7 @@ public final class NativeSatelliteService extends Service {
                     while (!destroyed && settings.enabled()) {
                         if (!wakeLock.isHeld()) wakeLock.acquire(120000L);
                         timers.tick();
+                        alarms.tick();
                         state = "waiting_ha";
                         audioPermitted();
                         try {
@@ -302,6 +320,26 @@ public final class NativeSatelliteService extends Service {
                         case "hardware-reset": hardware.reset(); break;
                         case "timer-stop": timers.stopRinging(); break;
                         case "timer-status": break;
+                        case "alarm-put":
+                            alarms.put(command.getString("id"), command.optString("name", ""),
+                                    command.optString("date", ""), command.getInt("hour"),
+                                    command.getInt("minute"), command.optInt("weekdays", 0),
+                                    command.optBoolean("enabled", true), command.optInt("snooze_minutes", 10),
+                                    command.optLong("expected_version", -1));
+                            break;
+                        case "alarm-delete":
+                            alarms.delete(command.getString("id"), command.optLong("expected_version", -1));
+                            break;
+                        case "alarm-enable":
+                            alarms.enable(command.getString("id"), command.getBoolean("enabled"),
+                                    command.optLong("expected_version", -1));
+                            break;
+                        case "alarm-stop": alarms.stopRinging(command.optString("id", "")); break;
+                        case "alarm-snooze":
+                            alarms.snooze(command.optString("id", ""), command.has("minutes")
+                                    ? Integer.valueOf(command.getInt("minutes")) : null);
+                            break;
+                        case "alarm-status": break;
                         case "capability-status": break;
                         case "bluetooth-discoverable": capabilities.openDiscoverable(command.optInt("seconds", 60)); break;
                         case "bluetooth-close": capabilities.closeDiscoverable(); break;
@@ -337,6 +375,7 @@ public final class NativeSatelliteService extends Service {
                         response = capabilitySnapshot();
                     if (action.equals("timer-stop") || action.equals("timer-status"))
                         response = timers.snapshot();
+                    if (action.startsWith("alarm-")) response = alarms.snapshot();
                     if (actionResponse != null) {
                         java.util.Iterator<String> keys = actionResponse.keys();
                         while (keys.hasNext()) { String key = keys.next(); response.put(key, actionResponse.get(key)); }
@@ -382,6 +421,7 @@ public final class NativeSatelliteService extends Service {
                 .put("protocol_mac", settings.mac()).put("connections", connections).put("failures", failures)
                 .put("port", 6053).put("audio_opened", current != null && current.audioOpened())
                 .put("audio", current == null ? JSONObject.NULL : current.diagnostics())
+                .put("alarms", alarms.snapshot())
                 .put("health", health == null ? JSONObject.NULL : health.snapshot())
                 .put("hardware", hardware.snapshot());
     }
@@ -405,7 +445,7 @@ public final class NativeSatelliteService extends Service {
         info.setAttribute("version", "2026.8.0"); info.setAttribute("mac", settings.mac().replace(":", "").toLowerCase(java.util.Locale.ROOT));
         info.setAttribute("platform", "R1"); info.setAttribute("network", "wifi");
         info.setAttribute("api_encryption", "Noise_NNpsk0_25519_ChaChaPoly_SHA256");
-        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.04-native-timers");
+        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.06-local-alarms");
         registration = new NsdManager.RegistrationListener() {
             @Override public void onServiceRegistered(NsdServiceInfo serviceInfo) { }
             @Override public void onRegistrationFailed(NsdServiceInfo serviceInfo, int code) { error = "discovery_registration_failed"; }
@@ -430,7 +470,7 @@ public final class NativeSatelliteService extends Service {
     }
     @Override public void onDestroy() {
         diagnostic.stop("service_destroyed");
-        hardware.stop(); capabilities.close(); hotspot.close(); timers.close();
+        hardware.stop(); capabilities.close(); hotspot.close(); timers.close(); alarms.close();
         if (systemKeys != null) systemKeys.stop();
         if (originalProvisioning != null) try { originalProvisioning.serviceDestroyed(); }
         catch (Exception ignored) { }

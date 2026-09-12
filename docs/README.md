@@ -33,6 +33,7 @@
 
 ## 阶段与版本记录
 
+- [2026-09-12-r1-local-alarm-core-host](2026-09-12-r1-local-alarm-core-host.md)
 - [2026-09-12-r1-live-router-streaming-implementation](2026-09-12-r1-live-router-streaming-implementation.md)
 - [2026-09-12-r1-streaming-long-reply-host](2026-09-12-r1-streaming-long-reply-host.md)
 - [2026-09-12-r1-live-router-streaming-audit](2026-09-12-r1-live-router-streaming-audit.md)

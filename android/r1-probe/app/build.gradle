@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("104")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.04-native-timers")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("106")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.06-local-alarms")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 
