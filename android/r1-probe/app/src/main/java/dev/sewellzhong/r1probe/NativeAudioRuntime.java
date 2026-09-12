@@ -45,6 +45,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private int lastEndingPrompt = -1;
     private final dev.sewellzhong.r1probe.assist.PlaybackInputBoundary playbackInput = new dev.sewellzhong.r1probe.assist.PlaybackInputBoundary();
     private volatile long emptyResumes, endingPrompts;
+    private volatile long fixedPcmRuns, fixedPcmCancels;
+    private volatile boolean fixedPcmRun;
     private volatile Thread promptPlayer;
     private final short[] promptHandoff = new short[320];
     private int promptHandoffCount;
@@ -207,6 +209,13 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("commands", commands).put("stt_results", transcripts).put("tts_streams", replies)
                 .put("reply_wake_interruptions", replyWakeInterruptions)
                 .put("direct_barge_interruptions", directBargeInterruptions)
+                .put("fixed_pcm_runs", fixedPcmRuns).put("fixed_pcm_cancels", fixedPcmCancels)
+                .put("playback_requested_ms", playback.requestedMillis())
+                .put("playback_first_write_ms", playback.firstWriteMillis())
+                .put("playback_drained_ms", playback.drainedMillis())
+                .put("playback_released_ms", playback.releasedMillis())
+                .put("playback_buffer_high_water_bytes", playback.highWaterBytes())
+                .put("playback_underruns", playback.underruns())
                 .put("prompt_index", lastPromptIndex).put("reference_correlation", promptReference.correlation)
                 .put("reference_delay_samples", promptReference.delaySamples).put("reference_before_rms", promptReference.beforeRms)
                 .put("reference_after_rms", promptReference.afterRms).put("reference_matched_frames", promptReference.matchedFrames)
@@ -255,6 +264,27 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 this::diagnosticEvent);
     }
     boolean cancelAudio(NativeAudioCoordinator.CancelReason reason) { return coordinator.requestCancel(reason); }
+    public synchronized void fixedPcmStart() throws IOException {
+        if (!listen || fixedPcmRun || !"listening".equals(status) || !coordinator.ready())
+            throw new IOException("fixed_pcm_requires_idle_listener");
+        coordinator.begin(new byte[0]);
+        fixedPcmRun = true; fixedPcmRuns++; inputBytes = 0;
+        status = "injecting_fixed_pcm";
+    }
+    public synchronized void fixedPcmFrame(byte[] pcm) throws IOException {
+        if (!fixedPcmRun || pcm == null || pcm.length != 640)
+            throw new IOException("fixed_pcm_frame_invalid");
+        coordinator.audio(pcm); inputBytes += pcm.length;
+    }
+    public synchronized void fixedPcmEnd() throws IOException {
+        if (!fixedPcmRun) throw new IOException("fixed_pcm_not_active");
+        coordinator.endInput(); status = "processing";
+    }
+    public synchronized void fixedPcmCancel() throws IOException {
+        if (!fixedPcmRun || !coordinator.requestCancel(NativeAudioCoordinator.CancelReason.USER_STOP))
+            throw new IOException("fixed_pcm_cancel_rejected");
+        fixedPcmCancels++; status = "cancelling_fixed_pcm";
+    }
     public String status() { return status; }
     public boolean audioOpened() { return everOpened; }
     public boolean terminated() { return (capture == null || !capture.isAlive()) && (promptPlayer == null || !promptPlayer.isAlive()) && playback.terminated() && (recorderStopper == null || !recorderStopper.isAlive()); }
@@ -329,6 +359,13 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
             CommandWindow window = settings.window(following);
             CommandWindow bargeWindow = null;
             while (!stopping.get()) {
+                if (fixedPcmRun && coordinator.ready()) {
+                    NativeVoiceSession.Outcome fixedOutcome = coordinator.outcome();
+                    if (fixedOutcome == NativeVoiceSession.Outcome.COMPLETE) completed++;
+                    fixedPcmRun = false;
+                    status = fixedOutcome == NativeVoiceSession.Outcome.FAILED
+                            ? "run_failed" : "listening";
+                }
                 DiagnosticWindowRequest requestedWindow = (!busy && !waiting && coordinator.ready()) ? takeDiagnosticWindow() : null;
                 if (requestedWindow != null) {
                     releaseRecorder(); history.clear(); engine.reset(); vad.reset(); index = 0; fill = 0;

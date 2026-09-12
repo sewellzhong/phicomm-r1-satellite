@@ -54,6 +54,12 @@ public class NativePcmPlaybackTest {
             assertTrue(events.stream().anyMatch(value -> value.contains("playback_first_write")));
             assertTrue(events.stream().anyMatch(value -> value.contains("playback_drained")));
             assertTrue(events.stream().anyMatch(value -> value.contains("buffer_high_water_bytes=1500")));
+            assertTrue(player.requestedMillis() > 0);
+            assertTrue(player.firstWriteMillis() >= player.requestedMillis());
+            assertTrue(player.drainedMillis() >= player.firstWriteMillis());
+            assertTrue(player.releasedMillis() >= player.drainedMillis());
+            assertEquals(1500, player.highWaterBytes());
+            assertTrue(player.underruns() >= 0);
         } finally { player.stop(); }
     }
     @Test public void overflowAndOddSamplesAreRejectedWithoutUnboundedAllocation() throws Exception {

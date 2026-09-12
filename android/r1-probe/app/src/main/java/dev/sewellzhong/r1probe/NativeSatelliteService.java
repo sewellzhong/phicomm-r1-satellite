@@ -241,6 +241,23 @@ public final class NativeSatelliteService extends Service {
                             if (audio == null || !settings.listening()) throw new IllegalStateException("listener_required");
                             audio.diagnosticWindow(command.optBoolean("followup", false),command.optInt("prompt_index",-1));
                             break;
+                        case "fixed-pcm-start":
+                            if (audio == null) throw new IllegalStateException("listener_required");
+                            audio.fixedPcmStart();
+                            break;
+                        case "fixed-pcm-frame":
+                            if (audio == null) throw new IllegalStateException("listener_required");
+                            audio.fixedPcmFrame(android.util.Base64.decode(
+                                    command.getString("data"), android.util.Base64.NO_WRAP));
+                            break;
+                        case "fixed-pcm-end":
+                            if (audio == null) throw new IllegalStateException("listener_required");
+                            audio.fixedPcmEnd();
+                            break;
+                        case "fixed-pcm-cancel":
+                            if (audio == null) throw new IllegalStateException("listener_required");
+                            audio.fixedPcmCancel();
+                            break;
                         case "audio-check":
                             if (!audioPermitted() || settings.enabled() || (health != null && health.alive())) throw new IllegalStateException("stop_before_audio_check");
                             NativeAudioHealth check = new NativeAudioHealth(() -> {

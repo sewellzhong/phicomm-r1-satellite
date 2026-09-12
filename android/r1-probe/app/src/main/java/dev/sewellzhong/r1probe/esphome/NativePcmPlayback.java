@@ -36,6 +36,17 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
     private long generation;
     private int highWaterBytes;
     private int underruns;
+    private volatile long requestedMillis;
+    private volatile long firstWriteMillis;
+    private volatile long drainedMillis;
+    private volatile long releasedMillis;
+
+    public synchronized int highWaterBytes() { return highWaterBytes; }
+    public synchronized int underruns() { return underruns; }
+    public long requestedMillis() { return requestedMillis; }
+    public long firstWriteMillis() { return firstWriteMillis; }
+    public long drainedMillis() { return drainedMillis; }
+    public long releasedMillis() { return releasedMillis; }
 
     public NativePcmPlayback(Factory factory, Gate gate) { this(factory, gate, NO_EVENTS); }
     public NativePcmPlayback(Factory factory, Gate gate, Observer observer) {
@@ -51,6 +62,8 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
         head = 0; size = 0; ended = false; stopped = false; done = false; failure = null;
         stopper = null; sinkStopClaimed = false;
         highWaterBytes = 0; underruns = 0; generation++;
+        requestedMillis = System.nanoTime() / 1_000_000L;
+        firstWriteMillis = drainedMillis = releasedMillis = 0;
         event("playback_requested,generation=" + generation);
         gate.request();
         worker = new Thread(this::play, "native-pcm-playback");
@@ -134,6 +147,7 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
                     offset += accepted; writtenFrames += accepted / 2;
                     if (!wrote) {
                         wrote = true;
+                        firstWriteMillis = System.nanoTime() / 1_000_000L;
                         event("playback_first_write,generation=" + generation);
                     }
                 }
@@ -147,6 +161,7 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
             if (!stopped && writtenFrames == 0) throw new IOException("empty_tts_stream");
             drained = !stopped;
             if (drained) {
+                drainedMillis = System.nanoTime() / 1_000_000L;
                 event("playback_drained,generation=" + generation + ",frames=" + writtenFrames);
                 gate.drained();
             }
@@ -181,6 +196,7 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
             Arrays.fill(frame, (byte) 0);
             synchronized (this) { Arrays.fill(ring, (byte) 0); size = 0; }
             gate.release();
+            releasedMillis = System.nanoTime() / 1_000_000L;
             done = drained;
             event("playback_released,generation=" + generation + ",drained=" + drained
                     + ",buffer_high_water_bytes=" + highWaterBytes + ",underruns=" + underruns);
