@@ -1,6 +1,6 @@
 # R1 原生语音卫星 APK
 
-当前开发源码 v66，独立包名 `dev.sewellzhong.r1probe`；Android 5.1 / API 22、ARMv7、固件 3448。`NativeSatelliteService` 提供原生运行、持久配置、开机恢复、按键/音量环探针及限时硬件能力窗口。v65 实机确认普通应用被 SELinux 拒绝直接打开 evdev；v66 由前台 Activity 接收 Android 分发事件并转给常驻服务，待实机复验。
+当前开发源码 v115，独立包名 `dev.sewellzhong.r1probe`；Android 5.1 / API 22、ARMv7、固件 3448。`NativeSatelliteService` 提供原生运行、持久配置、开机恢复、按键/音量环、强制软件静音、状态灯及限时硬件能力窗口。v65 实机确认普通应用被 SELinux 拒绝直接打开 evdev和灯节点；当前中央键改用固件消息中心，v115灯控严格写后回读，所需特权/Enforcing策略及真实R1行为仍待验证。
 
 ## 构建
 
