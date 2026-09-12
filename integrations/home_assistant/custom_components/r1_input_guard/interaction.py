@@ -11,6 +11,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er, device_registry as dr
 from homeassistant.helpers.event import async_track_time_interval, async_track_state_change_event
 from homeassistant.helpers.entity import DeviceInfo
+from .alarm_pending import AlarmPending, editable, valid_editable
 
 
 def bridge(hass, entry_id):
@@ -34,9 +35,20 @@ class Interaction:
         self.alarm_sync_status = 'connecting'
         self.alarm_last_error = None
         self._alarm_lock = asyncio.Lock()
+        self.alarm_pending = AlarmPending(hass, entry.entry_id)
         self.resolve()
         self.cancel = async_track_time_interval(hass, self.refresh, timedelta(seconds=5))
-        self.task = entry.async_create_background_task(hass, self.refresh(None), 'r1-interaction-config')
+        self.task = entry.async_create_background_task(hass, self._initialize(), 'r1-interaction-config')
+
+    async def _initialize(self):
+        try:
+            await self.alarm_pending.load()
+        except HomeAssistantError:
+            self.alarm_sync_status = 'conflict'
+            self.alarm_last_error = 'pending_store_invalid'
+            for listener in tuple(self.listeners): listener()
+            return
+        await self.refresh(None)
 
     def resolve(self):
         registry = er.async_get(self.hass)
@@ -143,8 +155,16 @@ class Interaction:
                     raise HomeAssistantError('r1_alarm_response_invalid')
                 state['alarms'] = alarms
                 state['page_offset'] = 0
-            except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError):
-                self.alarm_sync_status = 'offline'; self.alarm_last_error = 'request_failed'
+            except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError) as error:
+                cause = error
+                transport = False
+                while cause is not None:
+                    if isinstance(cause, (TimeoutError, ConnectionError, APIConnectionError)):
+                        transport = True
+                        break
+                    cause = cause.__cause__
+                self.alarm_sync_status = 'offline'
+                self.alarm_last_error = 'transport_failed' if transport else 'request_failed'
                 for listener in tuple(self.listeners): listener()
                 raise HomeAssistantError('r1_alarm_not_confirmed')
             self.alarm_state = state
@@ -152,6 +172,79 @@ class Interaction:
             self.alarm_last_error = None
             for listener in tuple(self.listeners): listener()
             return state
+
+    async def alarm_write(self, operation, **values):
+        """Write immediately only from a confirmed baseline; otherwise persist desired state."""
+        if operation not in ('put', 'delete', 'enable'):
+            return await self.alarm_request(operation, **values)
+        pending = self.alarm_pending.items()
+        if pending or self.alarm_sync_status != 'synced' or self.alarm_service() is None:
+            await self.alarm_pending.queue(operation, values, self.alarm_state)
+            self.alarm_sync_status = 'pending'
+            self.alarm_last_error = 'not_delivered'
+            for listener in tuple(self.listeners): listener()
+            raise HomeAssistantError('r1_alarm_pending')
+        try:
+            return await self.alarm_request(operation, **values)
+        except HomeAssistantError:
+            if self.alarm_last_error != 'transport_failed':
+                raise
+            await self.alarm_pending.queue(operation, values, self.alarm_state)
+            self.alarm_sync_status = 'pending'
+            self.alarm_last_error = 'not_delivered'
+            for listener in tuple(self.listeners): listener()
+            raise HomeAssistantError('r1_alarm_pending')
+
+    async def discard_alarm_pending(self, id=''):
+        await self.alarm_pending.discard(id)
+        self.alarm_sync_status = 'connecting' if self.alarm_pending.items() else 'offline'
+        self.alarm_last_error = None if not self.alarm_pending.items() else 'not_delivered'
+        for listener in tuple(self.listeners): listener()
+
+    async def replay_alarm_pending(self):
+        """Apply pending desired state only when every remote item still matches its baseline."""
+        items = self.alarm_pending.items()
+        if not items:
+            return self.alarm_state
+        remote = {item['id']: editable(item) for item in self.alarm_state['alarms']}
+        for item in items:
+            if item['blocked']:
+                self.alarm_sync_status = 'conflict'
+                self.alarm_last_error = 'pending_blocked'
+                for listener in tuple(self.listeners): listener()
+                raise HomeAssistantError('r1_alarm_pending_conflict')
+            actual = remote.get(item['id'])
+            if actual != item['base'] and actual != item['desired']:
+                await self.alarm_pending.block(item['id'])
+                self.alarm_sync_status = 'conflict'
+                self.alarm_last_error = 'remote_changed'
+                for listener in tuple(self.listeners): listener()
+                raise HomeAssistantError('r1_alarm_pending_conflict')
+        for item in items:
+            actual = next((editable(value) for value in self.alarm_state['alarms']
+                           if value['id'] == item['id']), None)
+            desired = item['desired']
+            if actual != desired:
+                version = self.alarm_state['version']
+                if desired is None:
+                    operation = ('delete', {'id': item['id'], 'expected_version': version})
+                else:
+                    operation = ('put', {**desired, 'expected_version': version})
+                try:
+                    await self.alarm_request(operation[0], **operation[1])
+                except HomeAssistantError:
+                    if self.alarm_last_error != 'transport_failed':
+                        await self.alarm_pending.block(item['id'])
+                        self.alarm_sync_status = 'conflict'
+                        self.alarm_last_error = 'device_rejected'
+                        for listener in tuple(self.listeners): listener()
+                        raise HomeAssistantError('r1_alarm_pending_conflict')
+                    raise
+            await self.alarm_pending.discard(item['id'])
+        self.alarm_sync_status = 'synced'
+        self.alarm_last_error = None
+        for listener in tuple(self.listeners): listener()
+        return self.alarm_state
 
     async def _alarm_page(self, operation, values):
         service = self.alarm_service()
@@ -184,7 +277,10 @@ class Interaction:
                     or not alarm['id'] or alarm['id'] in seen:
                 raise HomeAssistantError('r1_alarm_response_invalid')
             seen.add(alarm['id'])
-            if not isinstance(alarm.get('revision'), int) or alarm['revision'] > version:
+            try: alarm_fields = editable(alarm)
+            except KeyError: raise HomeAssistantError('r1_alarm_response_invalid')
+            if not valid_editable(alarm_fields) or type(alarm.get('revision')) is not int \
+                    or alarm['revision'] < 0 or alarm['revision'] > version:
                 raise HomeAssistantError('r1_alarm_response_invalid')
         return value
 
@@ -271,7 +367,9 @@ class Interaction:
             # Fixed-version adapter: ANNOUNCE devices expose wake configuration here.
             if satellite is not None and satellite.available:
                 async with asyncio.timeout(12): await satellite._update_satellite_config()
-            try: await self.alarm_request('status')
+            try:
+                await self.alarm_request('status')
+                await self.replay_alarm_pending()
             except HomeAssistantError: pass
             for listener in tuple(self.listeners): listener()
         except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError):

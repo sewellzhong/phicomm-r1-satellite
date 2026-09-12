@@ -32,6 +32,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
         vol.Optional('id', default=''): cv.string,
         vol.Optional('minutes'): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
     }, 'async_alarm_snooze')
+    platform.async_register_entity_service('alarm_pending_discard', {
+        vol.Optional('id', default=''): cv.string,
+    }, 'async_alarm_pending_discard')
 
 
 class R1Alarms(SensorEntity):
@@ -59,6 +62,7 @@ class R1Alarms(SensorEntity):
         state.pop('request_id', None); state.pop('operation', None)
         state['sync_status'] = self.owner.alarm_sync_status
         state['last_error'] = self.owner.alarm_last_error
+        state['pending_changes'] = self.owner.alarm_pending.public()
         return state
 
     async def async_added_to_hass(self):
@@ -73,9 +77,12 @@ class R1Alarms(SensorEntity):
             values['expected_version'] = state['version']
         return values
 
-    async def async_alarm_refresh(self): await self.owner.alarm_request('status')
-    async def async_alarm_put(self, **values): await self.owner.alarm_request('put', **self._versioned(values))
-    async def async_alarm_delete(self, **values): await self.owner.alarm_request('delete', **self._versioned(values))
-    async def async_alarm_enable(self, **values): await self.owner.alarm_request('enable', **self._versioned(values))
+    async def async_alarm_refresh(self):
+        await self.owner.alarm_request('status')
+        await self.owner.replay_alarm_pending()
+    async def async_alarm_put(self, **values): await self.owner.alarm_write('put', **self._versioned(values))
+    async def async_alarm_delete(self, **values): await self.owner.alarm_write('delete', **self._versioned(values))
+    async def async_alarm_enable(self, **values): await self.owner.alarm_write('enable', **self._versioned(values))
     async def async_alarm_stop(self, **values): await self.owner.alarm_request('stop', **values)
     async def async_alarm_snooze(self, **values): await self.owner.alarm_request('snooze', **values)
+    async def async_alarm_pending_discard(self, **values): await self.owner.discard_alarm_pending(**values)
