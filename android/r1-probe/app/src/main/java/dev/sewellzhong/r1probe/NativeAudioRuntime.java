@@ -10,6 +10,8 @@ import dev.sewellzhong.r1probe.assist.DiagnosticWindowRequest;
 import dev.sewellzhong.r1probe.assist.PcmPrebuffer;
 import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
 import dev.sewellzhong.r1probe.esphome.NativeAnnouncementController;
+import dev.sewellzhong.r1probe.esphome.NativeAlarmController;
+import dev.sewellzhong.r1probe.esphome.NativeAlarmProtocol;
 import dev.sewellzhong.r1probe.esphome.NativeAudioCoordinator;
 import dev.sewellzhong.r1probe.esphome.NativePcmPlayback;
 import dev.sewellzhong.r1probe.esphome.NativeTimerController;
@@ -158,10 +160,14 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         promptHandoffCount = 0; Arrays.fill(promptHandoff, (short)0);
         releaseRecorder();
     }
-    @Override public void listEntities(NativeVoiceSession.Sender sender) throws IOException { controls.list(sender); }
+    @Override public void listEntities(NativeVoiceSession.Sender sender) throws IOException {
+        controls.list(sender);
+        if (alarmProtocol != null) alarmProtocol.list(sender);
+    }
 
     private final NativePcmPlayback playback;
     private final NativeAnnouncementController announcements;
+    private final NativeAlarmProtocol alarmProtocol;
     private volatile boolean wakeEnabled;
     private volatile boolean everOpened;
     private volatile boolean authenticated;
@@ -249,20 +255,25 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private AudioRecord stopTarget;
 
     public NativeAudioRuntime(Context context) {
-        this(context, true, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null);
+        this(context, true, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null, null);
     }
     public NativeAudioRuntime(Context context, boolean listen) {
-        this(context, listen, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null);
+        this(context, listen, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null, null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission) {
-        this(context, listen, permission, null);
+        this(context, listen, permission, null, null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
             NativeTimerController timers) {
+        this(context, listen, permission, timers, null);
+    }
+    NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
+            NativeTimerController timers, NativeAlarmController alarms) {
         this.context = context.getApplicationContext();
         this.listen = listen;
         this.permission = permission;
         this.timers = timers;
+        alarmProtocol = alarms == null ? null : new NativeAlarmProtocol(alarms);
         settings = new NativeSettings(context);
         controls = new NativeControls(context, settings);
         wakeEnabled = settings.wakeEnabled();
@@ -339,6 +350,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     }
     @Override public void message(int type, byte[] payload) throws IOException {
         if (controls.message(type, payload, sender)) return;
+        if (alarmProtocol != null && alarmProtocol.message(type, payload, sender)) return;
         if (timers != null && timers.message(type, payload)) return;
         if (announcements.message(type, payload, coordinator.ready()
                 && (timers == null || !timers.ringing()))) return;

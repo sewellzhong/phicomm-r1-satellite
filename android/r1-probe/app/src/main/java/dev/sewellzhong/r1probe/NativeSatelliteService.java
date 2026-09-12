@@ -194,7 +194,7 @@ public final class NativeSatelliteService extends Service {
                             if (destroyed || !settings.enabled()) { closeClient(); break; }
                             boolean permitted = audioPermitted();
                             NativeAudioRuntime current = new NativeAudioRuntime(this,
-                                    settings.listening() && permitted, this::audioPermitted, timers);
+                                    settings.listening() && permitted, this::audioPermitted, timers, alarms);
                             current.diagnostic(diagnostic);
                             audio = current;
                             byte[] key = settings.key();
@@ -445,7 +445,7 @@ public final class NativeSatelliteService extends Service {
         info.setAttribute("version", "2026.8.0"); info.setAttribute("mac", settings.mac().replace(":", "").toLowerCase(java.util.Locale.ROOT));
         info.setAttribute("platform", "R1"); info.setAttribute("network", "wifi");
         info.setAttribute("api_encryption", "Noise_NNpsk0_25519_ChaChaPoly_SHA256");
-        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.06-local-alarms");
+        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.07-alarm-sync");
         registration = new NsdManager.RegistrationListener() {
             @Override public void onServiceRegistered(NsdServiceInfo serviceInfo) { }
             @Override public void onRegistrationFailed(NsdServiceInfo serviceInfo, int code) { error = "discovery_registration_failed"; }

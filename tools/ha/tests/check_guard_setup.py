@@ -60,15 +60,23 @@ async def main():
             native_entry=native['result']
             await hass.async_block_till_done()
             assert native_entry.state.value=='loaded',native_entry.state.value
+            mac='5a:ab:ea:2d:d4:c3'
+            source_registered=registry.async_get(source.entity_id)
+            hass.config_entries.async_update_entry(native_entry,data={**native_entry.data,
+                'interaction_mac':mac,'tts_source_registry_id':source_registered.id})
+            assert await hass.config_entries.async_reload(native_entry.entry_id)
+            await hass.async_block_till_done()
+            assert native_entry.state.value=='loaded',native_entry.state.value
             natives=[e for e in hass.data[stt.DATA_COMPONENT].entities if getattr(e,'_native',False)]
             assert len(natives)==1 and not natives[0].audio_processing.requires_external_vad
             assert guard.audio_processing.requires_external_vad
             assert any(e.domain=='conversation' for e in registry.entities.values() if e.config_entry_id==native_entry.entry_id)
+            assert any(e.domain=='sensor' for e in registry.entities.values() if e.config_entry_id==native_entry.entry_id)
+            assert hass.services.has_service('r1_input_guard','alarm_put')
             # HA 2026.8 per-integration device registry: no DeviceInfo for the bridge.
             from homeassistant.helpers import device_registry as dr
             from custom_components.r1_input_guard.interaction import Interaction
             devices = dr.async_get(hass)
-            mac='5a:ab:ea:2d:d4:c3'
             physical=devices.async_get_or_create(config_entry_id=entry.entry_id,
                 connections={('mac',mac)},name='R1 原生语音')
             orphan=devices.async_get_or_create(config_entry_id=native_entry.entry_id,
@@ -77,7 +85,9 @@ async def main():
                 device_id=physical.id)
             registry.async_get_or_create('media_player','r1_input_guard','test-speaker',config_entry=native_entry,
                 device_id=physical.id)
-            owner=Interaction.__new__(Interaction);owner.hass=hass;owner.mac=mac;owner.entry=native_entry
+            from custom_components.r1_input_guard.interaction import bridge
+            owner=bridge(hass,native_entry.entry_id)
+            assert owner is not None
             owner.resolve();owner.reconcile_device()
             assert owner.device_info is None
             assert devices.async_get(orphan.id) is None
@@ -89,6 +99,7 @@ async def main():
             assert stt.async_get_speech_to_text_entity(hass,guard.entity_id) is None
             print(json.dumps({'surface':'HA_2026.8.2_container','config_flow':'passed','platform_setup':'passed',
                               'duplicate_guard':'rejected','nested_guard':'rejected','unload':'passed','native_entry_and_conversation_platform':'passed','standard_entry_preserved':'passed',
+                              'alarm_sensor_platform':'passed','alarm_entity_actions':'registered',
                               'real_microphone':False,'production_HA':False}))
         finally:
             await hass.async_stop()

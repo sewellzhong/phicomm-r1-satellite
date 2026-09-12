@@ -1,7 +1,10 @@
 """Device-bound HA 2026.8.2 compatibility bridge."""
 import asyncio
 from datetime import timedelta
+import json
 import math
+import re
+from uuid import uuid4
 from aioesphomeapi import APIConnectionError
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
@@ -27,6 +30,10 @@ class Interaction:
         self._adapted_satellite = None
         self._original_vad_resolver = None
         self._vad_resolver = None
+        self.alarm_state = None
+        self.alarm_sync_status = 'connecting'
+        self.alarm_last_error = None
+        self._alarm_lock = asyncio.Lock()
         self.resolve()
         self.cancel = async_track_time_interval(hass, self.refresh, timedelta(seconds=5))
         self.task = entry.async_create_background_task(hass, self.refresh(None), 'r1-interaction-config')
@@ -104,6 +111,82 @@ class Interaction:
             if actual is not None and abs(actual-expected)<.002: return actual
             await asyncio.sleep(.1)
         raise HomeAssistantError('r1_wait_not_confirmed')
+
+    def alarm_service(self):
+        """Resolve the generated ESPHome service through the bound MAC, never by display name."""
+        entries = [item for item in self.hass.config_entries.async_entries('esphome')
+                   if (item.unique_id or '').lower() == self.mac]
+        if len(entries) != 1: return None
+        info = getattr(getattr(entries[0], 'runtime_data', None), 'device_info', None)
+        name = getattr(info, 'name', None)
+        if not name or not re.fullmatch(r'[a-z][a-z0-9-]{0,30}', name): return None
+        service = name.replace('-', '_') + '_alarm_sync'
+        return service if self.hass.services.has_service('esphome', service) else None
+
+    async def alarm_request(self, operation, **values):
+        if operation not in ('status', 'put', 'delete', 'enable', 'stop', 'snooze'):
+            raise HomeAssistantError('r1_alarm_operation_invalid')
+        async with self._alarm_lock:
+            try:
+                state = await self._alarm_page(operation, values)
+                alarms = list(state['alarms'])
+                while not state['page_complete']:
+                    page = await self._alarm_page('status', {
+                        'expected_version': state['version'], 'page_offset': len(alarms)})
+                    if page['version'] != state['version'] or page['page_offset'] != len(alarms):
+                        raise HomeAssistantError('r1_alarm_response_stale')
+                    alarms.extend(page['alarms'])
+                    state['page_complete'] = page['page_complete']
+                if len(alarms) != state['alarm_count']:
+                    raise HomeAssistantError('r1_alarm_response_invalid')
+                if len({alarm['id'] for alarm in alarms}) != len(alarms):
+                    raise HomeAssistantError('r1_alarm_response_invalid')
+                state['alarms'] = alarms
+                state['page_offset'] = 0
+            except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError):
+                self.alarm_sync_status = 'offline'; self.alarm_last_error = 'request_failed'
+                for listener in tuple(self.listeners): listener()
+                raise HomeAssistantError('r1_alarm_not_confirmed')
+            self.alarm_state = state
+            self.alarm_sync_status = 'synced'
+            self.alarm_last_error = None
+            for listener in tuple(self.listeners): listener()
+            return state
+
+    async def _alarm_page(self, operation, values):
+        service = self.alarm_service()
+        if service is None: raise HomeAssistantError('r1_alarm_unavailable')
+        request_id = uuid4().hex
+        request = {'request_id': request_id, 'operation': operation, **values}
+        encoded = json.dumps(request, ensure_ascii=False, separators=(',', ':'))
+        if len(encoded.encode()) > 4096: raise HomeAssistantError('r1_alarm_request_too_large')
+        response = await self.hass.services.async_call('esphome', service,
+            {'request': encoded}, blocking=True, return_response=True)
+        return self._validated_alarm_state(response, request_id, operation)
+
+    @staticmethod
+    def _validated_alarm_state(value, request_id, operation):
+        if not isinstance(value, dict) or value.get('request_id') != request_id \
+                or value.get('operation') != operation or value.get('schema') != 1:
+            raise HomeAssistantError('r1_alarm_response_invalid')
+        version, alarms = value.get('version'), value.get('alarms')
+        offset, complete = value.get('page_offset'), value.get('page_complete')
+        if not isinstance(version, int) or version < 0 or not isinstance(alarms, list) or len(alarms) > 4 \
+                or not isinstance(offset, int) or offset < 0 or not isinstance(complete, bool):
+            raise HomeAssistantError('r1_alarm_response_invalid')
+        count = value.get('alarm_count')
+        if not isinstance(count, int) or count < offset + len(alarms) or count > 32 \
+                or complete != (offset + len(alarms) == count):
+            raise HomeAssistantError('r1_alarm_response_invalid')
+        seen = set()
+        for alarm in alarms:
+            if not isinstance(alarm, dict) or not isinstance(alarm.get('id'), str) \
+                    or not alarm['id'] or alarm['id'] in seen:
+                raise HomeAssistantError('r1_alarm_response_invalid')
+            seen.add(alarm['id'])
+            if not isinstance(alarm.get('revision'), int) or alarm['revision'] > version:
+                raise HomeAssistantError('r1_alarm_response_invalid')
+        return value
 
     def reconcile_device(self):
         if not self.device_id: return
@@ -188,6 +271,8 @@ class Interaction:
             # Fixed-version adapter: ANNOUNCE devices expose wake configuration here.
             if satellite is not None and satellite.available:
                 async with asyncio.timeout(12): await satellite._update_satellite_config()
+            try: await self.alarm_request('status')
+            except HomeAssistantError: pass
             for listener in tuple(self.listeners): listener()
         except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError):
             pass

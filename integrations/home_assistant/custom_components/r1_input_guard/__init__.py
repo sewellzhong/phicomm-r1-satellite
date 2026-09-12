@@ -5,7 +5,7 @@ DOMAIN = "r1_input_guard"
 
 def platforms(entry):
     result = [Platform.STT, Platform.CONVERSATION] if entry.data.get("mode") == "r1_native" else [Platform.STT]
-    if entry.data.get("interaction_mac"): result += [Platform.MEDIA_PLAYER, Platform.TTS]
+    if entry.data.get("interaction_mac"): result += [Platform.MEDIA_PLAYER, Platform.TTS, Platform.SENSOR]
     return result
 
 async def async_setup(hass, config):
