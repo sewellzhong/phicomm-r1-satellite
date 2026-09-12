@@ -57,9 +57,17 @@ identity while retaining fail-closed v1 reads. A host-only executable and fake
 package backend exercise malformed-client isolation followed by cross-process
 apply and health confirmation; they are test artifacts, not a device backend.
 
+`tools/update/collect-r1-package-manager-evidence.py` prepares the next device
+gate without guessing firmware behavior. It requires an explicit serial and
+device confirmation, verifies the 3448/API-22/Enforcing baseline, and performs
+only fixed read-only package, APK digest, help, and AVC snapshot commands. Its
+exclusive local JSON output is evidence input, not a generated backend or a
+claim that install/downgrade behavior has been observed.
+
 This directory still does **not** ship a device root daemon executable, a real
 Android PackageManager implementation, init service, or deployable SELinux
-policy. There is no authenticated remote candidate delivery path yet; the
+policy. The read-only collector has not yet been run on the R1 and cannot
+provide real install/downgrade return values. There is no authenticated remote candidate delivery path yet; the
 app-private inbox is a maintenance boundary, not OTA download support. Device
 deployment still requires a root-owned non-writable socket parent, no network
 or block access, and real firmware-3448 AVC/package-manager evidence. Until

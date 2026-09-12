@@ -50,6 +50,8 @@ v118/U5（`c3ad4d642f276155d9e5ac385ece4b569dc7cf4e`）已把候选提交和四�
 
 U6（`3cec49dccdfa88d0eea5a6b8da5584cef871b13b`）已实现可复用的常驻监督器循环：启动先恢复持久事务，随后以1秒上限轮询私有listener、隔离单个畸形客户端、处理申请/健康请求并持续检查超时。事务v2在允许PackageManager副作用前持久记录规范kernel boot ID；监督器恢复后若boot不同或旧v1事务没有boot证据，会先持久进入回滚并复核旧版本。独立主机进程以伪包管理后端完成“畸形连接不中止服务→SCM_RIGHTS申请→等待健康→新连接健康确认”的真实Unix socket闭环，另验证跨boot恢复回滚；更新CTest 5/5及完整主机门禁通过。当前可执行main和包管理后端仍是host测试件，不是设备root守护进程；真实3448 PackageManager、init/Enforcing部署及R1成功/失败回滚仍未完成。详见[U6监督器进程闭环记录](docs/2026-09-13-r1-update-supervisor-process-host.md)。下一入口是在不预写宽泛权限的前提下采集3448包路径、安装/降级返回值与AVC，随后实现固定调用的真实后端及最小init/Enforcing部署件。
 
+U7（`b57d176427a18a6a9736421b02f083bc0b2f2d24`）新增[3448包管理只读证据采集器](docs/2026-09-13-r1-update-device-evidence-tool.md)：必须显式指定ADB serial并确认`r1-sample01`，随后核对3448/API 22、shell UID和Enforcing，再固定读取生产包的`pm path`、`dumpsys package`、设备端APK SHA-256能力、`pm help`能力摘要及现有dmesg/logcat AVC。路径与包记录不一致、身份或SELinux不符均在进一步采集前失败关闭；输出以0600、不覆盖方式写入被Git忽略的本地证据目录。工具主机测试7项及更新CTest 5项通过，但本轮按规则未自动连接ADB，故尚无3448结果，也没有执行安装、降级或策略探测。下一入口是在受控实机窗口运行该只读采集器；真实安装/显式降级返回值仍须另设带候选、备份和确认门槛的实机步骤，不能由`pm help`推断。
+
 必要配置和状态统一支持语音与 HA 管理：可写配置查询/修改，只读状态查询/展示，共用确认结果并明确失败、离线和待同步状态。闹钟通过语音或 HA 创建/设置，全部已有闹钟在 HA 显示，R1 本地保存并执行；语音管理仍依赖 HA 中文链路。
 
 2026-09-07 已完成[功能盘点与需求合并](docs/2026-09-07-r1-feature-requirements.md)文档。WAN 阻断下的可回退原厂链窗口已经完成；Android布局盘点及Loader可见7.814 GB image空间的双读、逐块和整体校验均已完成。免拆软件Maskrom可达，但三枚不同官方RAM Loader候选均未进入Loader，且已禁止重发；设备已恢复Android。共同失败离线审计排除主机工具核心传输算法差异。只有以后取得缺失首4 MiB、合成完整eMMC副本并复读，且验证不依赖Android的恢复入口后，才能把R0写成通过并进行受控完整回刷。后续开发按2026-09-11免拆分级授权，可在R0 pending时依据最小必要证据推进精确命名的boot/system/recovery操作；这不改变R0状态，也不授权Loader、分区表、首4 MiB、擦除或格式化。热点网页配网保留 v79 待复测状态，不因权限放宽自动绕过配网安全门槛。
@@ -70,6 +72,7 @@ Linux 环境按 [开发指南](docs/development.md) 准备依赖，运行 `bash 
 - `tools/native/`：原生管理、部署、配对和有界诊断。
 - `tools/recovery/`：R0 镜像清单、副本校验、恢复门槛报告、原厂boot双份与来源复读、固定只读RockUSB盘点器，以及只能离线准备和单次RAM加载的受限工具；默认双加密副本，单主机明文例外必须显式、限定设备并保留风险状态。所有设备工具均不提供复位、写入或擦除入口。
 - `tools/factory_audio/`：原厂库 ABI 审计、双份system离线提取、私有材料静态审计、只读实机预检、可回退原厂链窗口、v82 无刷写调试文件生命周期探测和门槛化私有 overlay 暂存；不包含原厂二进制或刷写命令。
+- `tools/update/`：更新监督器主机门禁，以及必须显式确认首台身份、只读采集3448包路径/能力/AVC的实机证据工具；采集入口不安装、不降级、不传输APK。
 - `tools/assist/`：固定提示音素材生成；已无旧 WebSocket 启动工具。
 - `tools/kws/`：当前 Alexa 模型准备和既有诊断工具，保留工具不表示恢复专项测试。
 - `integrations/home_assistant/`：R1 原生 HA 集成；`protocol/`：固定版本协议与许可证。
