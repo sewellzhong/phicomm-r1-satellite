@@ -79,6 +79,7 @@ def run(device, pcm, cancel_on_playback=False, timeout=300, clock=time.monotonic
 def safe_report(before, after, cancelled, source):
     old, new = before["audio"], after["audio"]
     first, drained = new["playback_first_write_ms"], new["playback_drained_ms"]
+    run_end = new["ha_run_end_ms"]
     return {
         "source": str(source), "household_audio": False, "status": after["status"],
         "last_error": after["last_error"], "cancelled": cancelled,
@@ -88,6 +89,9 @@ def safe_report(before, after, cancelled, source):
                    "fixed_pcm_runs", "fixed_pcm_cancels")},
         "playback": {"first_write_ms": first, "drained_ms": drained,
                      "duration_ms": drained - first if first and drained else None,
+                     "tts_stream_start_ms": new["tts_stream_start_ms"],
+                     "ha_run_end_ms": run_end,
+                     "first_write_before_run_end": bool(first and run_end and first < run_end),
                      "released_ms": new["playback_released_ms"],
                      "buffer_high_water_bytes": new["playback_buffer_high_water_bytes"],
                      "underruns": new["playback_underruns"]},

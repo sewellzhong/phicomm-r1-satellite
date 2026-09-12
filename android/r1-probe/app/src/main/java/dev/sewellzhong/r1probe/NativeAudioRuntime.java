@@ -46,6 +46,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private final dev.sewellzhong.r1probe.assist.PlaybackInputBoundary playbackInput = new dev.sewellzhong.r1probe.assist.PlaybackInputBoundary();
     private volatile long emptyResumes, endingPrompts;
     private volatile long fixedPcmRuns, fixedPcmCancels;
+    private volatile long ttsStreamStartMillis, haRunEndMillis;
     private volatile boolean fixedPcmRun;
     private volatile Thread promptPlayer;
     private final short[] promptHandoff = new short[320];
@@ -216,6 +217,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("playback_released_ms", playback.releasedMillis())
                 .put("playback_buffer_high_water_bytes", playback.highWaterBytes())
                 .put("playback_underruns", playback.underruns())
+                .put("tts_stream_start_ms", ttsStreamStartMillis)
+                .put("ha_run_end_ms", haRunEndMillis)
                 .put("prompt_index", lastPromptIndex).put("reference_correlation", promptReference.correlation)
                 .put("reference_delay_samples", promptReference.delaySamples).put("reference_before_rms", promptReference.beforeRms)
                 .put("reference_after_rms", promptReference.afterRms).put("reference_matched_frames", promptReference.matchedFrames)
@@ -269,6 +272,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
             throw new IOException("fixed_pcm_requires_idle_listener");
         coordinator.begin(new byte[0]);
         fixedPcmRun = true; fixedPcmRuns++; inputBytes = 0;
+        ttsStreamStartMillis = haRunEndMillis = 0;
         status = "injecting_fixed_pcm";
     }
     public synchronized void fixedPcmFrame(byte[] pcm) throws IOException {
@@ -316,9 +320,12 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     dev.sewellzhong.r1probe.esphome.proto.EsphomeApi.VoiceAssistantEventResponse.parseFrom(payload).getEventType();
             event = kind.name();
             diagnosticEvent("ha_event="+event);
+            long eventMillis = System.nanoTime() / 1_000_000L;
             switch (kind) {
                 case VOICE_ASSISTANT_STT_END: transcripts++; break;
-                case VOICE_ASSISTANT_TTS_STREAM_START: replies++; break;
+                case VOICE_ASSISTANT_TTS_STREAM_START:
+                    replies++; ttsStreamStartMillis = eventMillis; break;
+                case VOICE_ASSISTANT_RUN_END: haRunEndMillis = eventMillis; break;
                 default: break;
             }
         }

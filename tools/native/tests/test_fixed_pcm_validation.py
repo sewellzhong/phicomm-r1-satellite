@@ -18,6 +18,7 @@ def state(status="listening", **updates):
         "playback_first_write_ms": 0, "playback_drained_ms": 0,
         "playback_released_ms": 0, "playback_buffer_high_water_bytes": 0,
         "playback_underruns": 0,
+        "tts_stream_start_ms": 0, "ha_run_end_ms": 0,
     }
     audio.update(updates)
     return {"status": status, "last_error": None, "audio": audio}
@@ -52,6 +53,7 @@ class FixedPcmValidationTests(unittest.TestCase):
             fixed_pcm_runs=1, commands=1, stt_results=1, tts_streams=1, completed=1,
             playback_first_write_ms=100, playback_drained_ms=60100,
             playback_released_ms=60110, playback_buffer_high_water_bytes=4096,
+            tts_stream_start_ms=90, ha_run_end_ms=60000,
         )])
         before, after, cancelled = fixed.run(device, bytes(1280), pause=lambda _seconds: None)
         frames = [item for item in device.commands if item["action"] == "fixed-pcm-frame"]
@@ -59,6 +61,7 @@ class FixedPcmValidationTests(unittest.TestCase):
         self.assertTrue(all(len(base64.b64decode(item["data"])) == 640 for item in frames))
         report = fixed.safe_report(before, after, cancelled, Path("fixture.wav"))
         self.assertEqual(60000, report["playback"]["duration_ms"])
+        self.assertTrue(report["playback"]["first_write_before_run_end"])
         self.assertEqual(1, report["delta"]["completed"])
         self.assertFalse(report["text_saved"])
 
