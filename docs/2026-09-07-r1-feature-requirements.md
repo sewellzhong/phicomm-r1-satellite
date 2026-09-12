@@ -24,7 +24,7 @@ R1 负责声音、设备交互及本地基础能力；HA 负责中文理解、�
 | 播放中打断 | 有取消和播放停止基础；播放时采集不等于插话已支持 | 保留核心项；分别完成按键、新唤醒和直接插话 |
 | 流式回答 | v91～v96完成卫星、固定HA管线与实际家庭路由流式契约；v97～v102完成固定PCM驱动、早期有签名HTTP TTS、WAV格式协商、播放时钟和取消释放证据。真实HA/R1自动链路中首写早于HA运行结束3.131秒，连续播放219.128秒、完整排空、0 underrun；播放中取消首写后148毫秒释放 | 核心项已通过当前首台自动实机验证；真人听感不验收，最终候选仍须执行统一功能回归、网络/IP恢复与72小时稳定性 |
 | 主动播报、计时器 | v103已实现标准主动播报协议、前置提示音顺序、失败关闭及诊断状态；v104已实现标准计时器事件、本地持久倒计时、暂停/恢复、重启时钟边界、本地铃声、停止和重复事件去重并声明`TIMERS`。完整主机门禁通过，两项均待首台自动实机验证 | 保留核心项；与闹钟共用声音控制，调度语义独立 |
-| 媒体播放 | HA `media_player` 当前仅支持音量 | 必需；补齐 URL 播放、暂停、停止和真实状态回报 |
+| 媒体播放 | v111已实现Noise认证Native API实体、HTTP(S) URL、API 22系统播放器实际回调、播放/暂停/继续/停止/音量状态，以及语音、公告、计时器/闹钟的嵌套抢占和用户停止不恢复；代码/主机通过，真实R1解码、扬声器、状态与资源链待验证 | 必需；补齐 URL 播放、暂停、停止和真实状态回报 |
 | 签名更新、回滚 | 已有部署基线、哈希核对及人工回退工具 | 必需；APK、模型和自有用户态组件须完成签名更新及失败回退，不要求所有引导组件同时损坏后的自动恢复 |
 
 证据入口：[v63 清理与最小实机验证](2026-09-07-repository-cleanup.md)、[历史交互配置](2026-09-06-r1-interaction-settings.md)、[短句失败](2026-09-07-r1-short-reply-failures.md)。源码依据：`NativeControls.java`、`NativeAudioRuntime.java`、`esphome/NativeVoiceSession.java`、`esphome/NativeApiConnection.java` 位于 `android/r1-probe/app/src/main/java/dev/sewellzhong/r1probe/`；HA 音量入口位于 `integrations/home_assistant/custom_components/r1_input_guard/media_player.py`。
