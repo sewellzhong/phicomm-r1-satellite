@@ -62,7 +62,8 @@ struct StagedArchive {
 // Copies exactly expected_size bytes from an already received regular-file
 // descriptor (for example via SCM_RIGHTS). Pipes and sockets are rejected.
 // No client-provided path is opened by the supervisor. The final name derives
-// only from the validated operation id and is published with an atomic rename.
+// only from the validated operation id and is atomically published without
+// replacing an existing archive.
 bool stage_archive_from_fd(int source_fd, const std::string& directory,
                            const std::string& operation_id,
                            uint64_t expected_size,
