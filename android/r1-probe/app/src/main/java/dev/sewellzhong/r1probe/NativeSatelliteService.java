@@ -40,6 +40,7 @@ public final class NativeSatelliteService extends Service {
     private HotspotCapabilityProbe hotspot;
     private R1MessageDispatchBridge originalProvisioning;
     private R1SystemKeyMonitor systemKeys;
+    private R1PhysicalButtonActions buttonActions;
     private NativeTimerController timers;
     private NativeAlarmController alarms;
     private NativeDndController dnd;
@@ -129,26 +130,42 @@ public final class NativeSatelliteService extends Service {
         try { originalProvisioning = new R1MessageDispatchBridge(this); }
         catch (Exception ignored) { originalProvisioning = null; }
         try {
-            systemKeys = new R1SystemKeyMonitor(this, new R1SystemKeyMonitor.Listener() {
-                @Override public void shortPress() {
-                    boolean stopped = timers.stopRinging();
-                    boolean alarmWasRinging = alarms.ringing();
-                    try { stopped |= alarms.stopRinging(null); }
-                    catch (IOException ignored) { stopped |= alarmWasRinging; }
-                    if (stopped) return;
-                    NativeAudioRuntime current = audio;
-                    if (current != null) current.cancelAudio(
-                            dev.sewellzhong.r1probe.esphome.NativeAudioCoordinator.CancelReason.USER_STOP);
-                }
-                @Override public void longPress() {
-                    if (originalProvisioning == null) return;
-                    Thread trigger = new Thread(() -> {
-                        try { originalProvisioning.openOriginalProvisioning(); }
-                        catch (Exception ignored) { }
-                    }, "r1-key-provisioning");
-                    trigger.setDaemon(true); trigger.start();
-                }
-            });
+            buttonActions = new R1PhysicalButtonActions(
+                    () -> timers.stopRinging(),
+                    new R1PhysicalButtonActions.Alarms() {
+                        @Override public boolean ringing() { return alarms.ringing(); }
+                        @Override public boolean stopRinging() throws IOException {
+                            return alarms.stopRinging(null);
+                        }
+                        @Override public boolean snooze() throws IOException {
+                            return alarms.snooze(null, null);
+                        }
+                    },
+                    () -> {
+                        NativeAudioRuntime current = audio;
+                        if (current != null) current.cancelAudio(
+                                dev.sewellzhong.r1probe.esphome.NativeAudioCoordinator.CancelReason.USER_STOP);
+                    },
+                    () -> {
+                        if (originalProvisioning == null) return false;
+                        // Message-center callbacks must not block on the firmware provisioning bridge.
+                        Thread trigger = new Thread(() -> {
+                            try { originalProvisioning.openOriginalProvisioning(); }
+                            catch (Exception ignored) { }
+                        }, "r1-key-provisioning");
+                        trigger.setDaemon(true); trigger.start();
+                        return true;
+                    },
+                    new R1PhysicalButtonActions.Scheduler() {
+                        @Override public Object schedule(Runnable action, long delayMillis) {
+                            main.postDelayed(action, delayMillis);
+                            return action;
+                        }
+                        @Override public void cancel(Object token) {
+                            main.removeCallbacks((Runnable) token);
+                        }
+                    });
+            systemKeys = new R1SystemKeyMonitor(this, buttonActions);
             systemKeys.start();
         } catch (Exception ignored) { systemKeys = null; }
         hardware.start();
@@ -444,6 +461,7 @@ public final class NativeSatelliteService extends Service {
     private JSONObject capabilitySnapshot() throws org.json.JSONException {
         return new JSONObject().put("hardware", hardware.snapshot())
                 .put("system_keys", systemKeys == null ? JSONObject.NULL : systemKeys.snapshot())
+                .put("button_actions", buttonActions == null ? JSONObject.NULL : buttonActions.snapshot())
                 .put("capabilities", capabilities.snapshot()).put("hotspot", hotspot.snapshot())
                 .put("original_provisioning_bridge", originalProvisioning != null)
                 .put("original_provisioning_page", "http://192.168.43.1:8080/")
@@ -486,7 +504,9 @@ public final class NativeSatelliteService extends Service {
     }
     @Override public void onDestroy() {
         diagnostic.stop("service_destroyed");
-        hardware.stop(); capabilities.close(); hotspot.close(); timers.close(); alarms.close();
+        hardware.stop(); capabilities.close(); hotspot.close();
+        if (buttonActions != null) buttonActions.close();
+        timers.close(); alarms.close();
         if (systemKeys != null) systemKeys.stop();
         if (originalProvisioning != null) try { originalProvisioning.serviceDestroyed(); }
         catch (Exception ignored) { }
