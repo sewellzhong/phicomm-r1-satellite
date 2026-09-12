@@ -54,6 +54,7 @@ class FixedPcmValidationTests(unittest.TestCase):
 
     def test_cancel_is_sent_once_after_playback_starts(self):
         device = Device([
+            state("processing", fixed_pcm_runs=1, commands=1, stt_results=1, tts_streams=1),
             state("playing", fixed_pcm_runs=1, commands=1, stt_results=1, tts_streams=1,
                   playback_first_write_ms=100),
             state(fixed_pcm_runs=1, fixed_pcm_cancels=1, commands=1, stt_results=1,
@@ -64,6 +65,9 @@ class FixedPcmValidationTests(unittest.TestCase):
         )
         self.assertTrue(cancelled)
         self.assertEqual(1, [item["action"] for item in device.commands].count("fixed-pcm-cancel"))
+        self.assertGreaterEqual(
+            [item["action"] for item in device.commands].index("fixed-pcm-cancel"), 5
+        )
         self.assertEqual(1, after["audio"]["fixed_pcm_cancels"])
 
 

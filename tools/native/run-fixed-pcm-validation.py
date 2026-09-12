@@ -42,7 +42,7 @@ def run(device, pcm, cancel_on_playback=False, timeout=300, clock=time.monotonic
         while clock() < deadline:
             current = device.control({"action": "status"})
             audio = current["audio"]
-            playing = audio["tts_streams"] > base["tts_streams"] or current["status"] == "playing"
+            playing = audio["playback_first_write_ms"] > base.get("playback_first_write_ms", 0)
             if cancel_on_playback and playing and not cancelled:
                 device.control({"action": "fixed-pcm-cancel"})
                 cancelled = True
