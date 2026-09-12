@@ -39,18 +39,32 @@ def run(device, pcm, cancel_on_playback=False, timeout=300, clock=time.monotonic
         device.control({"action": "fixed-pcm-end"})
         deadline = clock() + timeout
         cancelled = False
+        cancel_proof = None
         while clock() < deadline:
             current = device.control({"action": "status"})
             audio = current.get("audio")
             if audio is None:
-                raise RuntimeError("audio_runtime_unavailable")
+                if not cancelled:
+                    raise RuntimeError("audio_runtime_unavailable")
+                pause(.1)
+                continue
             playing = audio["playback_first_write_ms"] > base.get("playback_first_write_ms", 0)
             if cancel_on_playback and playing and not cancelled:
-                device.control({"action": "fixed-pcm-cancel"})
+                cancel_proof = device.control({"action": "fixed-pcm-cancel"})
+                proof_audio = cancel_proof.get("audio")
+                if (proof_audio is None
+                        or proof_audio["playback_first_write_ms"] <= base.get("playback_first_write_ms", 0)
+                        or proof_audio["playback_released_ms"] < proof_audio["playback_first_write_ms"]):
+                    raise RuntimeError("fixed_pcm_cancel_release_unproven")
                 cancelled = True
             terminal = current["status"] in {"listening", "run_failed"}
             changed = audio["fixed_pcm_runs"] > base.get("fixed_pcm_runs", 0)
-            if terminal and changed:
+            if terminal and (changed or cancel_proof is not None):
+                if cancel_proof is not None:
+                    proof = dict(current)
+                    proof["audio"] = cancel_proof["audio"]
+                    proof["connection_recovered"] = current.get("connections", 0) > cancel_proof.get("connections", 0)
+                    return before, proof, cancelled
                 return before, current, cancelled
             pause(.1)
         raise RuntimeError("fixed_pcm_validation_timeout")
@@ -68,6 +82,7 @@ def safe_report(before, after, cancelled, source):
     return {
         "source": str(source), "household_audio": False, "status": after["status"],
         "last_error": after["last_error"], "cancelled": cancelled,
+        "connection_recovered": after.get("connection_recovered", False),
         "delta": {key: new[key] - old.get(key, 0) for key in
                   ("commands", "stt_results", "tts_streams", "completed",
                    "fixed_pcm_runs", "fixed_pcm_cancels")},

@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("97")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.97-fixed-pcm-validation")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("98")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("0.98-fixed-pcm-cancel-proof")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

@@ -284,6 +284,15 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         if (!fixedPcmRun || !coordinator.requestCancel(NativeAudioCoordinator.CancelReason.USER_STOP))
             throw new IOException("fixed_pcm_cancel_rejected");
         fixedPcmCancels++; status = "cancelling_fixed_pcm";
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (!playback.terminated()) {
+            if (System.nanoTime() >= deadline) throw new IOException("fixed_pcm_release_timeout");
+            try { Thread.sleep(10); }
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("fixed_pcm_release_interrupted", e);
+            }
+        }
     }
     public String status() { return status; }
     public boolean audioOpened() { return everOpened; }

@@ -33,6 +33,10 @@ class Device:
         self.commands.append(command)
         if command["action"] == "status":
             return next(self.states)
+        if command["action"] == "fixed-pcm-cancel":
+            return state("cancelling_fixed_pcm", fixed_pcm_runs=1, fixed_pcm_cancels=1,
+                         commands=1, stt_results=1, tts_streams=1,
+                         playback_first_write_ms=100, playback_released_ms=200)
         return state()
 
 
@@ -63,8 +67,8 @@ class FixedPcmValidationTests(unittest.TestCase):
             state("processing", fixed_pcm_runs=1, commands=1, stt_results=1, tts_streams=1),
             state("playing", fixed_pcm_runs=1, commands=1, stt_results=1, tts_streams=1,
                   playback_first_write_ms=100),
-            state(fixed_pcm_runs=1, fixed_pcm_cancels=1, commands=1, stt_results=1,
-                  tts_streams=1, playback_first_write_ms=100, playback_released_ms=200),
+            {"status": "waiting_ha", "last_error": None, "audio": None},
+            state(),
         ])
         _before, after, cancelled = fixed.run(
             device, bytes(640), cancel_on_playback=True, pause=lambda _seconds: None
@@ -75,6 +79,7 @@ class FixedPcmValidationTests(unittest.TestCase):
             [item["action"] for item in device.commands].index("fixed-pcm-cancel"), 5
         )
         self.assertEqual(1, after["audio"]["fixed_pcm_cancels"])
+        self.assertEqual(200, after["audio"]["playback_released_ms"])
 
 
 if __name__ == "__main__":
