@@ -98,6 +98,19 @@ async def main():
             assert devices.async_get(physical.id) is not None
             owner.reconcile_device()  # idempotent, no empty device recreated
             assert len(devices.devices)==1
+            # Friendly name and Area use HA's real registries while preserving identity.
+            from homeassistant.helpers import area_registry as ar
+            from custom_components.r1_input_guard.device_voice import DeviceVoiceCommand, execute_device_voice
+            areas=ar.async_get(hass)
+            study=areas.async_create('书房')
+            assert '已改为书房音箱' in await execute_device_voice(owner,DeviceVoiceCommand('set_name','书房音箱'))
+            assert '已分配到书房' in await execute_device_voice(owner,DeviceVoiceCommand('set_area','书房'))
+            confirmed=devices.async_get(physical.id)
+            assert confirmed.id==physical.id and confirmed.name_by_user=='书房音箱' and confirmed.area_id==study.id
+            assert '书房音箱' in await execute_device_voice(owner,DeviceVoiceCommand('query_name'))
+            assert '书房区域' in await execute_device_voice(owner,DeviceVoiceCommand('query_area'))
+            devices.async_update_device(physical.id,name_by_user='HA页面名称')
+            assert 'HA页面名称' in await execute_device_voice(owner,DeviceVoiceCommand('query_name'))
             assert await hass.config_entries.async_unload(native_entry.entry_id)
             assert await hass.config_entries.async_unload(entry.entry_id)
             assert stt.async_get_speech_to_text_entity(hass,guard.entity_id) is None
@@ -105,6 +118,7 @@ async def main():
                               'duplicate_guard':'rejected','nested_guard':'rejected','unload':'passed','native_entry_and_conversation_platform':'passed','standard_entry_preserved':'passed',
                               'alarm_sensor_platform':'passed','alarm_entity_actions':'registered',
                               'dnd_sensor_platform':'passed','dnd_entity_actions':'registered',
+                              'device_registry_name_area':'passed','device_identity_preserved':True,
                               'real_microphone':False,'production_HA':False}))
         finally:
             await hass.async_stop()

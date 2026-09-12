@@ -140,6 +140,23 @@ class NativeConversation(conversation.ConversationEntity):
         from .interaction import bridge
         from .controls import parse_control
         owner = bridge(self.hass, self._entry_id) if hasattr(self.hass, 'data') else None
+        from .device_voice import parse_device_voice, execute_device_voice
+        device_command = parse_device_voice(user_input.text)
+        if device_command:
+            def device_answer(text):
+                response = intent.IntentResponse(language=user_input.language)
+                response.async_set_speech(text)
+                return conversation.ConversationResult(response=response, conversation_id=outer,
+                                                         continue_conversation=True)
+            self._last_control_diagnostic = {"matched": True, "kind": "device_registry",
+                "device_id": user_input.device_id, "satellite_id": user_input.satellite_id,
+                "bound_device": owner.device_id if owner else None,
+                "operation": device_command.operation, "issue": device_command.issue}
+            if not owner or not owner.device_id or user_input.device_id != owner.device_id:
+                return device_answer('无法确定要管理的音箱，请通过R1发出指令。')
+            self._busy.add(key)
+            try: return device_answer(await execute_device_voice(owner, device_command, user_input.context))
+            finally: self._busy.discard(key)
         from .dnd_voice import parse_dnd_voice, execute_dnd_voice
         dnd_command = parse_dnd_voice(user_input.text)
         if dnd_command:

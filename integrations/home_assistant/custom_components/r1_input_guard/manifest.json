@@ -1,7 +1,7 @@
 {
   "domain": "r1_input_guard",
   "name": "语音识别与无效输入过滤",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "config_flow": true,
   "dependencies": [
     "stt",
