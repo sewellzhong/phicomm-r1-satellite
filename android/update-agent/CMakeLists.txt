@@ -3,6 +3,7 @@ project(r1_update_agent LANGUAGES CXX)
 
 add_library(r1-update-policy STATIC
   src/package_orchestrator.cpp
+  src/update_protocol.cpp
   src/update_policy.cpp
   src/update_runtime.cpp
 )
@@ -26,6 +27,11 @@ if(NOT ANDROID)
   target_link_libraries(r1-update-orchestrator-test PRIVATE r1-update-policy)
   target_compile_options(r1-update-orchestrator-test PRIVATE -Wall -Wextra -Werror)
   add_test(NAME r1-update-orchestrator-test COMMAND r1-update-orchestrator-test)
+
+  add_executable(r1-update-protocol-test tests/update_protocol_test.cpp)
+  target_link_libraries(r1-update-protocol-test PRIVATE r1-update-policy)
+  target_compile_options(r1-update-protocol-test PRIVATE -Wall -Wextra -Werror)
+  add_test(NAME r1-update-protocol-test COMMAND r1-update-protocol-test)
 endif()
 
 if(ANDROID)
