@@ -16,6 +16,12 @@ from homeassistant.helpers import intent
 from custom_components.r1_input_guard.conversation import NativeConversation
 
 ROOT=Path(__file__).resolve().parents[3] / 'local-deps/ha-live-routing-2026-09-06'
+EXPECTED_SHA256={
+    'conversation_router/const.py':'3fdc73c1287e8784996c1c209f1b04d3076abf6fce25d189d816c4961ef9aeca',
+    'conversation_router/conversation.py':'a5b5723089262a94fc17648dfc425aac6b83368c70cf874c8a7e84c037074814',
+    'domestic_ai/hub.py':'4e448dd5b917884988d55ad3f7808a363f1eb728fbb89748517a939b1e491bb3',
+    'domestic_ai/rules.py':'1c8b6e53547d6ea6b91691d44150668009c19ec94f2f5eac573d7d0280d2f466',
+}
 
 def load(name,path):
     spec=importlib.util.spec_from_file_location(name,path);module=importlib.util.module_from_spec(spec)
@@ -23,6 +29,8 @@ def load(name,path):
 
 class LiveRouterTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        for relative,expected in EXPECTED_SHA256.items():
+            self.assertEqual(expected,hashlib.sha256((ROOT/relative).read_bytes()).hexdigest())
         self.original={k:v for k,v in sys.modules.items() if k.startswith(('custom_components.domestic_ai','custom_components.conversation_router'))}
         for name in ['domestic_ai','conversation_router']:
             package=ModuleType('custom_components.'+name);package.__path__=[str(ROOT/name)]
@@ -65,15 +73,17 @@ class LiveRouterTest(unittest.IsolatedAsyncioTestCase):
         return conversation.ConversationInput(agent_id='conversation.native',text=text,context=Context(user_id='fixture-user'),conversation_id='outer',language='zh-CN',device_id='r1',satellite_id='assist_satellite.r1')
 
     async def test_actual_router_delegates_and_uses_same_source_bound_hub_session(self):
-        # Bind the capability decision to the retained, unmodified household
-        # router source. This snapshot must stay on the public non-streaming
-        # path until that external component exposes a real incremental API.
-        self.assertFalse(self.router.supports_streaming)
+        # Bind the capability decision to the retained household router source
+        # and its guarded domestic_ai child capability.
+        cloud_target=SimpleNamespace(supports_streaming=True,internal_async_process=AsyncMock())
+        def agent(_hass,entity_id):
+            return self.router if entity_id=='conversation.router' else cloud_target
         with patch('custom_components.r1_input_guard.conversation.conversation.async_get_agent',
-                   return_value=self.router):
-            self.assertFalse(self.adapter.supports_streaming)
-        await self.adapter.async_process(self.user('解释一下月亮为什么发光'))
-        await self.adapter.async_process(self.user('再解释一下'))
+                   side_effect=agent):
+            self.assertTrue(self.router.supports_streaming)
+            self.assertTrue(self.adapter.supports_streaming)
+            await self.adapter.async_process(self.user('解释一下月亮为什么发光'))
+            await self.adapter.async_process(self.user('再解释一下'))
         self.assertEqual(1,len(self.hub.sessions))
         self.assertEqual(4,len(self.calls))
         self.assertEqual(self.calls[0]['conversation_id'],self.calls[2]['conversation_id'])
