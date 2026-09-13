@@ -17,6 +17,7 @@ ADMIN_ACTIONS = ["initialize", "start", "stop", "status", "rotate", "pair", "aud
     "diagnostic-window", "diagnostic-start", "diagnostic-arm", "diagnostic-stop", "diagnostic-status", "diagnostic-export", "diagnostic-clear",
     "capability-status", "hardware-reset", "timer-status", "timer-stop", "bluetooth-discoverable", "bluetooth-close", "ble-window", "ble-close", "hotspot-window", "hotspot-close",
     "alarm-status", "alarm-put", "alarm-delete", "alarm-enable", "alarm-stop", "alarm-snooze",
+    "update-submit",
     "original-provisioning-open", "original-provisioning-close", "provisioning-recover",
     "provisioning-handoff-probe"]
 
@@ -120,6 +121,10 @@ def main():
     parser.add_argument("--snooze-minutes", type=int, choices=range(1, 61), default=10)
     parser.add_argument("--expected-version", type=int, default=-1)
     parser.add_argument("--minutes", type=int, choices=range(1, 61))
+    parser.add_argument("--operation-id")
+    parser.add_argument("--to-version", type=int)
+    parser.add_argument("--signer-sha256")
+    parser.add_argument("--health-timeout-seconds", type=int, choices=range(30, 601), default=180)
     parser.add_argument("--prompt-index", type=int, choices=range(10))
     parser.add_argument("--followup", action="store_true")
     parser.add_argument("--listen", action="store_true")
@@ -160,6 +165,21 @@ def main():
     if args.action in ("alarm-stop", "alarm-snooze") and args.id: command["id"] = args.id
     if args.action == "alarm-snooze" and args.minutes is not None: command["minutes"] = args.minutes
     if args.action == "start": command["listen"] = args.listen
+    if args.action == "update-submit":
+        if (not args.operation_id or not args.sha256 or args.to_version is None
+                or not args.signer_sha256):
+            parser.error("update-submit requires --operation-id, --to-version, --sha256 and --signer-sha256")
+        if not __import__("re").fullmatch(r"[0-9a-f]{32}", args.operation_id):
+            parser.error("--operation-id is invalid")
+        for name, value in (("--sha256", args.sha256),
+                            ("--signer-sha256", args.signer_sha256)):
+            if not __import__("re").fullmatch(r"[0-9a-f]{64}", value):
+                parser.error(name + " is invalid")
+        command.update({"operation_id": args.operation_id,
+                        "to_version": args.to_version,
+                        "apk_sha256": args.sha256,
+                        "signer_sha256": args.signer_sha256,
+                        "health_timeout_seconds": args.health_timeout_seconds})
     if args.action == "pair":
         pairing = device.control({"action": "pairing"})
         pairing["host"] = args.serial.split(":")[0]

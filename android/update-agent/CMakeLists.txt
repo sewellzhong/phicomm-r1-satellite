@@ -87,4 +87,13 @@ if(ANDROID)
   target_compile_options(r1-update-backend-probe PRIVATE -Wall -Wextra -Werror)
   target_link_options(r1-update-backend-probe PRIVATE
     "-Wl,--hash-style=both" "-Wl,--gc-sections")
+
+  # Validation-only helper. It is never included by the production update boot
+  # builder and accepts only operation ids fixed into a temporary test boot.
+  add_executable(r1-update-fault-helper tests/device_fault_helper_main.cpp)
+  target_link_libraries(r1-update-fault-helper PRIVATE log)
+  target_compile_features(r1-update-fault-helper PRIVATE cxx_std_17)
+  target_compile_options(r1-update-fault-helper PRIVATE -Wall -Wextra -Werror)
+  target_link_options(r1-update-fault-helper PRIVATE
+    "-Wl,--hash-style=both" "-Wl,--gc-sections")
 endif()

@@ -83,12 +83,12 @@ Host tests exercise this contract. The second sealed plan has now passed on the
 3448 device and proved the exact fixed-argv upgrade and explicit downgrade
 return shape; this remains backend evidence rather than OTA delivery.
 
-This directory now builds a device root daemon, a fixed Android PackageManager
-backend, a package-identity helper, and device-locked init/SELinux templates.
-The helper and backend read path have passed a temporary, read-only ARMv7 probe;
-the init and policy have not been installed or validated in their dedicated
-domain, and automatic rollback has not run on the device. There is no authenticated remote candidate delivery path yet; the
-app-private inbox is a maintenance boundary, not OTA download support. Device
-deployment still requires a root-owned non-writable socket parent, no network
-or block access, and real firmware-3448 AVC/package-manager evidence. Until
-then, this is partial host/device groundwork and is not an OTA result.
+The root daemon, fixed Android PackageManager backend, helper and device-locked
+init/SELinux policy now run on r1-sample01/3448 in Enforcing mode. The device has
+passed a same-signer update plus health-timeout, pre-health reboot, supervisor
+crash and rollback-install-failure recovery. `r1-update-fault-helper` is a
+validation-only executable: it has no socket or network interface, is bound to
+two operation ids in a temporary boot, and is absent from the restored
+production boot. There is still no authenticated remote candidate delivery
+path; the app-private inbox remains a local maintenance boundary rather than an
+OTA download service.

@@ -34,6 +34,7 @@
 ## 阶段与版本记录
 
 - [2026-09-13-r1-update-supervisor-boot-device](2026-09-13-r1-update-supervisor-boot-device.md)
+- [2026-09-13-r1-update-remaining-failures-device](2026-09-13-r1-update-remaining-failures-device.md)
 - [2026-09-13-r1-update-device-backend-host](2026-09-13-r1-update-device-backend-host.md)
 - [2026-09-13-r1-update-package-manager-device](2026-09-13-r1-update-package-manager-device.md)
 - [2026-09-13-r1-update-mutation-executor-host](2026-09-13-r1-update-mutation-executor-host.md)

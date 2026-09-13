@@ -15,7 +15,7 @@ cmake --fresh -S "$ROOT_DIR/android/update-agent" -B "$BUILD_DIR/native" \
   -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-22 \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build "$BUILD_DIR/native" --parallel 4 --target \
-  r1-update-supervisor r1-update-backend-probe
+  r1-update-supervisor r1-update-backend-probe r1-update-fault-helper
 
 rm -rf "$JAVA_CLASSES" "$DEX_DIR"
 mkdir -p "$JAVA_CLASSES" "$DEX_DIR" "$OUTPUT_DIR"
@@ -26,12 +26,14 @@ javac -source 8 -target 8 -bootclasspath "$ANDROID_JAR" -d "$JAVA_CLASSES" \
 TZ=UTC touch -t 200001010000.00 "$DEX_DIR/classes.dex"
 cp "$BUILD_DIR/native/r1-update-supervisor" "$OUTPUT_DIR/"
 cp "$BUILD_DIR/native/r1-update-backend-probe" "$OUTPUT_DIR/"
+cp "$BUILD_DIR/native/r1-update-fault-helper" "$OUTPUT_DIR/"
 (cd "$DEX_DIR" && zip -q -X "$OUTPUT_DIR/r1-update-helper.jar" classes.dex)
 
 READELF="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
-for binary in r1-update-supervisor r1-update-backend-probe; do
+for binary in r1-update-supervisor r1-update-backend-probe r1-update-fault-helper; do
   "$READELF" -h "$OUTPUT_DIR/$binary" | rg -q 'Machine:.*ARM'
   "$READELF" -d "$OUTPUT_DIR/$binary" | rg -q '\(HASH\)'
 done
 sha256sum "$OUTPUT_DIR/r1-update-supervisor" \
-  "$OUTPUT_DIR/r1-update-backend-probe" "$OUTPUT_DIR/r1-update-helper.jar"
+  "$OUTPUT_DIR/r1-update-backend-probe" "$OUTPUT_DIR/r1-update-fault-helper" \
+  "$OUTPUT_DIR/r1-update-helper.jar"
