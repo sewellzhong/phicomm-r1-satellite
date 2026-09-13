@@ -22,6 +22,7 @@ constexpr char kSocketName[] = "r1_update_supervisor";
 constexpr char kSocketPath[] = "/dev/socket/r1_update_supervisor";
 constexpr char kTransactionDirectory[] = "/data/misc/r1_update";
 constexpr char kHelperJar[] = "/sbin/r1-update-helper.jar";
+constexpr char kPackageName[] = "dev.sewellzhong.r1probe";
 constexpr uid_t kSatelliteUid = 10010;
 volatile sig_atomic_t stop_requested = 0;
 
@@ -99,6 +100,13 @@ int main() {
   }
   r1_update::AndroidPackageManagerBackend backend(
       kTransactionDirectory, kHelperJar);
+  r1_update::Installed installed;
+  if (!backend.read_installed(kPackageName, &installed, &error)) {
+    log_error(error);
+    return 2;
+  }
+  __android_log_write(ANDROID_LOG_INFO, "R1UpdateSupervisor",
+                      "update_supervisor_identity_ready");
   r1_update::PackageOrchestrator orchestrator(
       kTransactionDirectory, boot_id, &backend);
   r1_update::SupervisorConfig config;

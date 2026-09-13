@@ -47,6 +47,8 @@ class DeviceSupervisorTemplateTest(unittest.TestCase):
         self.assertIn('"R1UpdateSupervisor"', value)
         self.assertIn("r1-update-policy log", cmake)
         self.assertIn("listen(fd, 4)", value)
+        self.assertIn("update_supervisor_identity_ready", value)
+        self.assertIn("backend.read_installed", value)
 
 
 if __name__ == "__main__":
