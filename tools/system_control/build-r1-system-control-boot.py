@@ -94,29 +94,44 @@ def build(args):
     require(len(before) == len(entries), "duplicate_ramdisk_entry")
     for name in ("sepolicy", "file_contexts", "init.rk30board.rc"):
         require(name in before, f"required_entry_missing:{name}")
-    require(boot.digest_bytes(before["sepolicy"][1])
-            == manifest.get("current_policy_sha256"), "embedded_policy_mismatch")
-    for name in ADDITIONS:
-        require(name not in before, f"system_control_entry_exists:{name}")
-    require(b"r1_system_control" not in before["file_contexts"][1],
-            "system_control_context_exists")
-    require(b"init.r1_system_control.rc" not in before["init.rk30board.rc"][1],
-            "system_control_init_import_exists")
+    replace_existing = bool(getattr(args, "replace_existing_init", False))
+    expected_policy = (manifest.get("patched_policy_sha256") if replace_existing
+                       else manifest.get("current_policy_sha256"))
+    require(boot.digest_bytes(before["sepolicy"][1]) == expected_policy,
+            "embedded_policy_mismatch")
     context_bytes = contexts.read_bytes()
     require(context_bytes.endswith(b"\n"), "contexts_newline_missing")
-    boot.replace(entries, "sepolicy", policy.read_bytes())
-    boot.replace(entries, "file_contexts",
-                 before["file_contexts"][1].rstrip(b"\n") + b"\n" + context_bytes)
-    boot.replace(entries, "init.rk30board.rc",
-                 before["init.rk30board.rc"][1].rstrip(b"\n")
-                 + b"\nimport /init.r1_system_control.rc\n")
     payloads = {"sbin/r1-system-control-agent": agent.read_bytes(),
                 "init.r1_system_control.rc": init_rc.read_bytes()}
-    for name, mode in ADDITIONS.items():
-        boot.add(entries, name, payloads[name], mode)
+    if replace_existing:
+        require(before.get("sbin/r1-system-control-agent", (None, None))[1]
+                == payloads["sbin/r1-system-control-agent"], "embedded_agent_mismatch")
+        require("init.r1_system_control.rc" in before, "embedded_init_missing")
+        require(context_bytes.rstrip(b"\n") in before["file_contexts"][1],
+                "embedded_contexts_missing")
+        require(b"import /init.r1_system_control.rc" in before["init.rk30board.rc"][1],
+                "embedded_init_import_missing")
+        boot.replace(entries, "init.r1_system_control.rc", payloads["init.r1_system_control.rc"])
+    else:
+        for name in ADDITIONS:
+            require(name not in before, f"system_control_entry_exists:{name}")
+        require(b"r1_system_control" not in before["file_contexts"][1],
+                "system_control_context_exists")
+        require(b"init.r1_system_control.rc" not in before["init.rk30board.rc"][1],
+                "system_control_init_import_exists")
+        boot.replace(entries, "sepolicy", policy.read_bytes())
+        boot.replace(entries, "file_contexts",
+                     before["file_contexts"][1].rstrip(b"\n") + b"\n" + context_bytes)
+        boot.replace(entries, "init.rk30board.rc",
+                     before["init.rk30board.rc"][1].rstrip(b"\n")
+                     + b"\nimport /init.r1_system_control.rc\n")
+        for name, mode in ADDITIONS.items():
+            boot.add(entries, name, payloads[name], mode)
     after = {item.name: (contract(item), item.data) for item in entries}
-    require(set(after) == set(before) | set(ADDITIONS), "candidate_entry_set_invalid")
-    changed = {"sepolicy", "file_contexts", "init.rk30board.rc"}
+    expected_names = set(before) if replace_existing else set(before) | set(ADDITIONS)
+    require(set(after) == expected_names, "candidate_entry_set_invalid")
+    changed = ({"init.r1_system_control.rc"} if replace_existing else
+               {"sepolicy", "file_contexts", "init.rk30board.rc"})
     for name in before:
         require(before[name][0] == after[name][0], f"metadata_changed:{name}")
         if name not in changed:
@@ -173,9 +188,10 @@ def build(args):
         "candidate_ramdisk_sha256": boot.digest_bytes(new_ramdisk),
         "candidate_ramdisk_bytes": len(new_ramdisk), "page_size": page,
         "boot_id_scheme": "rockchip_secure_ns_sha1",
-        "declared_changes": ["ramdisk_system_control_agent",
-                             "ramdisk_system_control_init",
-                             "ramdisk_file_contexts", "ramdisk_enforcing_sepolicy"],
+        "declared_changes": (["ramdisk_system_control_init"] if replace_existing else
+                             ["ramdisk_system_control_agent",
+                              "ramdisk_system_control_init",
+                              "ramdisk_file_contexts", "ramdisk_enforcing_sepolicy"]),
     }
     (output / "manifest.json").write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n")
@@ -193,6 +209,7 @@ def main():
     parser.add_argument("--agent", required=True)
     parser.add_argument("--init-rc", required=True)
     parser.add_argument("--file-contexts", required=True)
+    parser.add_argument("--replace-existing-init", action="store_true")
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
     try:

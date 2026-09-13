@@ -16,6 +16,8 @@ class DevicePolicyTest(unittest.TestCase):
                           "shell_exec", "mount", "execute_no_trans"):
             self.assertNotIn(forbidden, policy)
         self.assertIn("socket r1_system_control seqpacket 0600 10010 10010", init)
+        self.assertIn("service r1_sysctl /sbin/r1-system-control-agent", init)
+        self.assertNotIn("service r1_system_control ", init)
         self.assertIn("seclabel u:r:r1_system_control:s0", init)
 
 

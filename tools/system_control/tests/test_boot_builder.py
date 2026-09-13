@@ -95,7 +95,29 @@ class BootBuilderTest(unittest.TestCase):
             args.current_boot_b = args.current_boot_a
             with self.assertRaisesRegex(builder.BuildError,
                                         "current_boot_copies_not_independent"):
+                    builder.build(args)
+
+    def test_existing_overlay_update_changes_only_init(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            args = self.inputs(temporary)
+            completed = types.SimpleNamespace(stdout="ELF32 ARM")
+            with mock.patch.object(builder.subprocess, "run", return_value=completed):
                 builder.build(args)
+            initial = Path(args.output_dir, "boot-r1-system-control.img")
+            args.current_boot_a = str(initial)
+            copy = Path(temporary, "installed-readback.img")
+            copy.write_bytes(initial.read_bytes())
+            args.current_boot_b = str(copy)
+            args.expected_current_sha256 = hashlib.sha256(initial.read_bytes()).hexdigest()
+            manifest = json.loads(Path(args.policy_manifest).read_text())
+            manifest["current_policy_sha256"] = manifest["patched_policy_sha256"]
+            Path(args.policy_manifest).write_text(json.dumps(manifest))
+            Path(args.init_rc).write_bytes(b"service r1_sysctl agent\n")
+            args.output_dir = str(Path(temporary, "replacement"))
+            args.replace_existing_init = True
+            with mock.patch.object(builder.subprocess, "run", return_value=completed):
+                result = builder.build(args)
+            self.assertEqual(["ramdisk_system_control_init"], result["declared_changes"])
 
 
 if __name__ == "__main__":

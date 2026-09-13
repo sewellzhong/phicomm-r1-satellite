@@ -1,5 +1,5 @@
 # r1-sample01/3448 only. Deployment must revalidate package UID 10010.
-service r1_system_control /sbin/r1-system-control-agent
+service r1_sysctl /sbin/r1-system-control-agent
     class main
     user root
     group root
@@ -8,5 +8,4 @@ service r1_system_control /sbin/r1-system-control-agent
     disabled
 
 on property:sys.boot_completed=1
-    restorecon /sbin/r1-system-control-agent
-    start r1_system_control
+    start r1_sysctl
