@@ -77,11 +77,16 @@ public final class NativeSatelliteService extends Service {
     private String updateBootIdentity;
     private boolean audioPermitted() {
         isolation = FactoryAudioIsolation.inspect(this);
-        if (!FactoryAudioIsolation.permitsAudio(isolation)) {
+        if (FactoryAudioIsolation.permitsAudio(isolation)) {
+            settings.clearIsolationAudioBlock();
+            return !settings.audioBlocked();
+        }
+        if (FactoryAudioIsolation.definitivelyUnsafe(isolation)) {
             if (!settings.audioBlocked()) settings.blockAudio("factory_audio_not_isolated");
             return false;
         }
-        return !settings.audioBlocked();
+        error = "factory_audio_isolation_unknown";
+        return false;
     }
     private Thread worker, controller;
     private volatile PowerManager.WakeLock wakeLock;

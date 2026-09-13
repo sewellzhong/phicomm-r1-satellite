@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("123")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.23-system-control")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("124")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.24-system-control-recovery")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

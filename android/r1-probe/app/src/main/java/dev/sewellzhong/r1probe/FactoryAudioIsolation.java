@@ -56,5 +56,9 @@ final class FactoryAudioIsolation {
         return "packages_disabled".equals(state) || "packages_hidden".equals(state)
                 || "packages_disabled_or_hidden".equals(state) || "temporary_force_stop".equals(state);
     }
+    static boolean definitivelyUnsafe(String state) {
+        return "factory_process_running".equals(state)
+                || "factory_package_startable".equals(state);
+    }
     private FactoryAudioIsolation() { }
 }

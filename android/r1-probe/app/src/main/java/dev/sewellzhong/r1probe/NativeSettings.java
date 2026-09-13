@@ -33,6 +33,10 @@ final class NativeSettings {
     void blockAudio(String reason) {
         commit(prefs.edit().putBoolean("audio_blocked", true).putString("audio_block_reason", reason));
     }
+    synchronized void clearIsolationAudioBlock() {
+        if (audioBlocked() && "factory_audio_not_isolated".equals(audioBlockReason()))
+            commit(prefs.edit().remove("audio_blocked").remove("audio_block_reason"));
+    }
     float waitSeconds() { return prefs.getFloat("wait_seconds", 10); }
     float followupWaitSeconds() { return prefs.getFloat("followup_wait_seconds", 15); }
     float quietSeconds() { return prefs.getFloat("quiet_seconds", 1.8f); }

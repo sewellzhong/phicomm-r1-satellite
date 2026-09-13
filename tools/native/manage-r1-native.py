@@ -17,6 +17,7 @@ ADMIN_ACTIONS = ["initialize", "start", "stop", "status", "rotate", "pair", "aud
     "diagnostic-window", "diagnostic-start", "diagnostic-arm", "diagnostic-stop", "diagnostic-status", "diagnostic-export", "diagnostic-clear",
     "capability-status", "hardware-reset", "timer-status", "timer-stop", "bluetooth-discoverable", "bluetooth-close", "ble-window", "ble-close", "hotspot-window", "hotspot-close",
     "alarm-status", "alarm-put", "alarm-delete", "alarm-enable", "alarm-stop", "alarm-snooze",
+    "button-short", "button-long",
     "update-submit",
     "original-provisioning-open", "original-provisioning-close", "provisioning-recover",
     "provisioning-handoff-probe"]
