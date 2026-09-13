@@ -158,9 +158,13 @@ def require_live_baseline(session, plan):
     return {"identity": actual, "package": package}
 
 
-def parse_success(record, label):
+def parse_success(record, label, remote_path):
     lines = [line.strip() for line in record["stdout"].splitlines() if line.strip()]
-    if record["exit_code"] != 0 or lines != ["Success"]:
+    accepted = (
+        lines == ["Success"]
+        or lines == [f"pkg: {remote_path}", "Success"]
+    )
+    if record["exit_code"] != 0 or not accepted:
         raise ExecutionError(f"{label}_package_manager_failed")
 
 
@@ -280,12 +284,12 @@ def execute(plan_path, confirmation, output, serial, execute_enabled, adb, aapt,
         report["package_mutation_started"] = True
         upgrade = package_manager_install(session, remote_candidate)
         report["upgrade_return"] = upgrade
-        parse_success(upgrade, "upgrade")
+        parse_success(upgrade, "upgrade", remote_candidate)
         report["upgraded"] = wait_for_package(session, plan["candidate"], sleeper)
 
         downgrade = package_manager_install(session, remote_rollback, downgrade=True)
         report["downgrade_return"] = downgrade
-        parse_success(downgrade, "downgrade")
+        parse_success(downgrade, "downgrade", remote_rollback)
         report["restored"] = wait_for_package(session, plan["rollback"], sleeper)
         rollback_restored = True
         report["status"] = "pass_backend_evidence_only"
@@ -308,7 +312,9 @@ def execute(plan_path, confirmation, output, serial, execute_enabled, adb, aapt,
                         session, remote_rollback, downgrade=True
                     )
                     report["emergency_rollback_return"] = emergency
-                    parse_success(emergency, "emergency_rollback")
+                    parse_success(
+                        emergency, "emergency_rollback", remote_rollback
+                    )
                     report["restored"] = wait_for_package(
                         session, plan["rollback"], sleeper
                     )

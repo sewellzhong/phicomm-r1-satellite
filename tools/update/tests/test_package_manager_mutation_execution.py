@@ -176,6 +176,30 @@ class MutationExecutionTest(unittest.TestCase):
         self.assertIn("-d", installs[1])
         self.assertEqual(0o600, self.execute_output().stat().st_mode & 0o777)
 
+    def test_accepts_exact_3448_package_manager_prefix(self):
+        remote = "/data/local/tmp/fixed.apk"
+        executor.parse_success(
+            {"exit_code": 0, "stdout": f"\tpkg: {remote}\nSuccess\n"},
+            "fixture",
+            remote,
+        )
+
+    def test_rejects_package_manager_prefix_for_another_path(self):
+        with self.assertRaisesRegex(executor.ExecutionError, "package_manager_failed"):
+            executor.parse_success(
+                {"exit_code": 0, "stdout": "pkg: /data/local/tmp/other.apk\nSuccess\n"},
+                "fixture",
+                "/data/local/tmp/fixed.apk",
+            )
+
+    def test_rejects_extra_package_manager_output(self):
+        with self.assertRaisesRegex(executor.ExecutionError, "package_manager_failed"):
+            executor.parse_success(
+                {"exit_code": 0, "stdout": "note\nSuccess\n"},
+                "fixture",
+                "/data/local/tmp/fixed.apk",
+            )
+
     def test_missing_execute_flag_stops_before_any_tool(self):
         with self.assertRaisesRegex(executor.ExecutionError, "execute_flag"):
             self.execute(execute_enabled=False)
