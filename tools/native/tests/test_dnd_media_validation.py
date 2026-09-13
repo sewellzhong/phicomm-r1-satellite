@@ -22,8 +22,9 @@ def dnd_state(manual=False, version=3, suppressed=0):
 
 def state(media="idle", requests=0, rejected=0, failures=0, failure="none",
           volume=50, announcement_active=False, announcement_requests=0,
-          announcement_completed=0, announcement_started=0, dnd_value=None):
-    return {"status": "listening", "volume_percent": volume,
+          announcement_completed=0, announcement_started=0, dnd_value=None,
+          runtime_status="listening"):
+    return {"status": runtime_status, "volume_percent": volume,
             "do_not_disturb": dnd_value or dnd_state(),
             "audio": {"media_state": media, "media_requests": requests,
                       "media_rejected": rejected, "media_failures": failures,
@@ -84,8 +85,10 @@ class DndMediaValidationTests(unittest.TestCase):
     def test_announcement_pauses_and_resumes_media(self):
         device = Device([
             state(), state("playing", requests=1),
-            state("paused", requests=1, announcement_active=True, announcement_requests=1),
-            state("playing", requests=1, announcement_completed=1),
+            state("paused", requests=1, announcement_active=True, announcement_requests=1,
+                  runtime_status="playing"),
+            state("playing", requests=1, announcement_completed=1,
+                  runtime_status="playing"),
         ])
         report = validation.validate_media_announcement(
             device, HA(), "media_player.r1", "assist_satellite.r1",

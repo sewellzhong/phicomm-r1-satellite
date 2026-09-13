@@ -22,9 +22,15 @@ admin = common.admin
 
 def audio(state):
     value = state.get("audio")
-    if state.get("status") != "listening" or not isinstance(value, dict):
-        raise RuntimeError("device_not_idle")
+    if not isinstance(value, dict):
+        raise RuntimeError("device_audio_state_unavailable")
     return value
+
+
+def ready_audio(state):
+    if state.get("status") != "listening":
+        raise RuntimeError("device_not_idle")
+    return audio(state)
 
 
 def dnd(state):
@@ -67,7 +73,7 @@ def dnd_values(value, manual=None):
 def validate_media_lifecycle(device, ha, entity_id, media_url, failure_url,
                              volume=.37, timeout=30):
     before_state = device.start_control()
-    before = audio(before_state)
+    before = ready_audio(before_state)
     if before.get("media_state") != "idle" or before.get("announcement_active"):
         raise RuntimeError("media_state_not_idle")
     timers = before.get("timers") or {}
@@ -142,7 +148,7 @@ def validate_media_lifecycle(device, ha, entity_id, media_url, failure_url,
 def validate_media_announcement(device, ha, media_entity_id, satellite_entity_id,
                                 media_url, announcement_url, timeout=310):
     before_state = device.start_control()
-    before = audio(before_state)
+    before = ready_audio(before_state)
     if before.get("media_state") != "idle" or before.get("announcement_active"):
         raise RuntimeError("media_state_not_idle")
     media_command(ha, media_entity_id, "play_media", media_content_id=media_url,
@@ -184,7 +190,7 @@ def validate_media_announcement(device, ha, media_entity_id, satellite_entity_id
 def validate_dnd_announcement(device, ha, dnd_entity_id, satellite_entity_id,
                               announcement_url, timeout=30):
     before_state = device.start_control()
-    before_audio = audio(before_state)
+    before_audio = ready_audio(before_state)
     before = dnd(before_state)
     if before.get("active") or before.get("manual") or before.get("restore_failed"):
         raise RuntimeError("dnd_preexisting_or_invalid")
