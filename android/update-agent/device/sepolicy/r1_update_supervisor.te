@@ -29,6 +29,8 @@ allow r1_update_supervisor proc:dir { open read search getattr };
 allow r1_update_supervisor proc:file { open read getattr };
 allow r1_update_supervisor proc:lnk_file read;
 allow r1_update_supervisor sysfs:dir search;
+allow r1_update_supervisor sysfs_devices_system_cpu:dir { open read search getattr };
+allow r1_update_supervisor selinuxfs:filesystem getattr;
 allow r1_update_supervisor properties_device:file { open read getattr };
 allow r1_update_supervisor null_device:chr_file { open read write getattr ioctl };
 
@@ -36,16 +38,16 @@ allow r1_update_supervisor null_device:chr_file { open read write getattr ioctl 
 # Package replacement uses the same fixed PackageManager Binder service; no
 # block-device, mount, network or arbitrary shell permission is granted.
 allow r1_update_supervisor binder_device:chr_file { open read write getattr ioctl };
-allow r1_update_supervisor ion_device:chr_file { read write };
-allow r1_update_supervisor ashmem_device:chr_file { read write };
+allow r1_update_supervisor ion_device:chr_file { open read write getattr };
+allow r1_update_supervisor ashmem_device:chr_file { open read write getattr };
 allow r1_update_supervisor system_server_service:service_manager find;
 allow r1_update_supervisor system_server:binder { call transfer };
 allow system_server r1_update_supervisor:binder { call transfer };
 allow r1_update_supervisor system_data_file:dir { open read search getattr };
 allow r1_update_supervisor apk_data_file:dir { open read search getattr };
 allow r1_update_supervisor apk_data_file:file { open read getattr };
-allow r1_update_supervisor dalvikcache_data_file:dir { open read write search add_name getattr };
-allow r1_update_supervisor dalvikcache_data_file:file { create open read write getattr setattr lock };
+allow r1_update_supervisor dalvikcache_data_file:dir { open read write search add_name remove_name getattr };
+allow r1_update_supervisor dalvikcache_data_file:file { create open read write getattr setattr lock unlink };
 
 allow r1_update_supervisor self:dir { create open read write search add_name remove_name getattr setattr };
 allow r1_update_supervisor self:sock_file { open read write getattr };
