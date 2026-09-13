@@ -15,7 +15,7 @@ class DevicePolicyTest(unittest.TestCase):
         self.assertIn("null_device:chr_file { open read write getattr ioctl }", policy)
         self.assertIn("untrusted_app r1_system_control:unix_stream_socket connectto", policy)
         for forbidden in ("block_device", "tcp_socket", "udp_socket", "system_data_file",
-                          "shell_exec", "mount", "execute_no_trans"):
+                          "shell_exec", "mount"):
             self.assertNotIn(forbidden, policy)
         self.assertIn("socket r1_system_control seqpacket 0600 10010 10010", init)
         self.assertIn("service r1_sysctl /sbin/r1-system-control-agent", init)

@@ -15,6 +15,7 @@ allow r1_system_control tmpfs:filesystem associate;
 allow r1_system_control null_device:chr_file { open read write getattr ioctl };
 allow r1_system_control properties_device:file { open read getattr };
 allow r1_system_control system_file:dir { open read search getattr };
+allow r1_system_control system_file:file { open read execute execute_no_trans getattr };
 allow r1_system_control sysfs:dir { open read search getattr };
 allow r1_system_control sysfs:file { open read write getattr };
 allow r1_system_control self:capability sys_boot;

@@ -33,6 +33,7 @@ RULES = (
     ("r1_system_control", "null_device", "chr_file", "open,read,write,getattr,ioctl"),
     ("r1_system_control", "properties_device", "file", "open,read,getattr"),
     ("r1_system_control", "system_file", "dir", "open,read,search,getattr"),
+    ("r1_system_control", "system_file", "file", "open,read,execute,execute_no_trans,getattr"),
     ("r1_system_control", "sysfs", "dir", "open,read,search,getattr"),
     ("r1_system_control", "sysfs", "file", "open,read,write,getattr"),
     ("r1_system_control", "r1_system_control", "capability", "sys_boot"),
