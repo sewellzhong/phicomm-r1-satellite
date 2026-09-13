@@ -8,7 +8,7 @@ service r1_update_supervisor /sbin/r1-update-supervisor
     user root
     group root
     seclabel u:r:r1_update_supervisor:s0
-    socket r1_update_supervisor seqpacket 0600 10010 10010 u:object_r:r1_update_supervisor_socket:s0
+    socket r1_update_supervisor seqpacket 0600 10010 10010 u:object_r:r1_update_supervisor:s0
     disabled
 
 on property:sys.boot_completed=1

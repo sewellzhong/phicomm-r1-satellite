@@ -20,8 +20,10 @@ class DeviceSupervisorTemplateTest(unittest.TestCase):
 
     def test_policy_has_no_expansive_device_or_network_permission(self):
         value = (DEVICE / "sepolicy/r1_update_supervisor.te").read_text()
-        self.assertIn("r1_update_supervisor_data", value)
-        self.assertIn("unix_seqpacket_socket", value)
+        self.assertIn("type r1_update_supervisor;", value)
+        self.assertIn("unix_stream_socket", value)
+        self.assertNotIn("unix_seqpacket_socket", value)
+        self.assertNotIn("r1_factory_audio", value)
         for forbidden in (
             "block_device", "tcp_socket", "udp_socket", "net_domain(",
             "mount ", "ptrace", "permissive r1_update_supervisor",

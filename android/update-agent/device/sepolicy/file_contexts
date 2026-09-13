@@ -1,4 +1,4 @@
-/sbin/r1-update-supervisor                 u:object_r:r1_update_supervisor_exec:s0
-/sbin/r1-update-helper.jar                 u:object_r:r1_update_supervisor_helper:s0
-/dev/socket/r1_update_supervisor           u:object_r:r1_update_supervisor_socket:s0
-/data/misc/r1_update(/.*)?                 u:object_r:r1_update_supervisor_data:s0
+/sbin/r1-update-supervisor                 u:object_r:r1_update_supervisor:s0
+/sbin/r1-update-helper.jar                 u:object_r:r1_update_supervisor:s0
+/dev/socket/r1_update_supervisor           u:object_r:r1_update_supervisor:s0
+/data/misc/r1_update(/.*)?                 u:object_r:r1_update_supervisor:s0
