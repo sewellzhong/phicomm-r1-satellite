@@ -63,7 +63,10 @@ class R1Alarms(SensorEntity):
         self._attr_device_info = owner.device_info
 
     @property
-    def available(self): return self.owner.alarm_sync_status == 'synced'
+    def available(self):
+        # Keep the last confirmed list and explicit offline/pending/conflict state visible.
+        # A never-synchronized entity has no trustworthy baseline and remains unavailable.
+        return self.owner.alarm_state is not None
 
     @property
     def native_value(self):

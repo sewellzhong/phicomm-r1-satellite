@@ -83,12 +83,33 @@ class AlarmSyncTest(unittest.IsolatedAsyncioTestCase):
             alarm_last_error=self.owner.alarm_last_error,alarm_pending=self.owner.alarm_pending,
             listeners=set(),alarm_request=self.owner.alarm_request,alarm_write=self.owner.alarm_write)
         entity=R1Alarms(wrapper)
+        self.assertTrue(entity.available)
         await entity.async_alarm_enable(id='wake',enabled=False)
         request=json.loads(self.services.calls[-1][2]['request'])
         self.assertEqual(3,request['expected_version'])
         self.assertEqual(1,entity.native_value)
         self.assertEqual('wake',entity.extra_state_attributes['alarms'][0]['id'])
         self.assertNotIn('request_id',entity.extra_state_attributes)
+
+    async def test_entity_keeps_confirmed_state_visible_while_offline_or_pending(self):
+        await self.owner.alarm_request('status')
+        wrapper=SimpleNamespace(entry=SimpleNamespace(entry_id='native'),device_info=None,
+            alarm_state=self.owner.alarm_state,alarm_sync_status='offline',
+            alarm_last_error='transport_failed',alarm_pending=self.owner.alarm_pending,
+            listeners=set(),alarm_request=self.owner.alarm_request,alarm_write=self.owner.alarm_write)
+        entity=R1Alarms(wrapper)
+        self.assertTrue(entity.available)
+        self.assertEqual('offline',entity.extra_state_attributes['sync_status'])
+        wrapper.alarm_sync_status='pending'
+        wrapper.alarm_last_error='not_delivered'
+        self.assertTrue(entity.available)
+        self.assertEqual('pending',entity.extra_state_attributes['sync_status'])
+        wrapper.alarm_sync_status='conflict'
+        wrapper.alarm_last_error='remote_changed'
+        self.assertTrue(entity.available)
+        self.assertEqual('conflict',entity.extra_state_attributes['sync_status'])
+        wrapper.alarm_state=None
+        self.assertFalse(entity.available)
 
     async def test_invalid_shape_rejected(self):
         request={'request_id':'a'*32,'operation':'status'}
