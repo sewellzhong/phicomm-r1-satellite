@@ -11,6 +11,8 @@ class DevicePolicyTest(unittest.TestCase):
         init = (ROOT / "device/init.r1_system_control.rc").read_text()
         self.assertIn("self:capability sys_boot", policy)
         self.assertIn("sysfs:file { open read write getattr }", policy)
+        self.assertIn("tmpfs:filesystem associate", policy)
+        self.assertIn("null_device:chr_file { open read write getattr ioctl }", policy)
         self.assertIn("untrusted_app r1_system_control:unix_stream_socket connectto", policy)
         for forbidden in ("block_device", "tcp_socket", "udp_socket", "system_data_file",
                           "shell_exec", "mount", "execute_no_trans"):

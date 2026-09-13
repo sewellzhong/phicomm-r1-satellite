@@ -94,9 +94,15 @@ def build(args):
     require(len(before) == len(entries), "duplicate_ramdisk_entry")
     for name in ("sepolicy", "file_contexts", "init.rk30board.rc"):
         require(name in before, f"required_entry_missing:{name}")
-    replace_existing = bool(getattr(args, "replace_existing_init", False))
-    expected_policy = (manifest.get("patched_policy_sha256") if replace_existing
-                       else manifest.get("current_policy_sha256"))
+    replace_existing_init = bool(getattr(args, "replace_existing_init", False))
+    replace_existing_overlay = bool(getattr(args, "replace_existing_overlay", False))
+    require(not (replace_existing_init and replace_existing_overlay),
+            "replacement_modes_conflict")
+    replace_existing = replace_existing_init or replace_existing_overlay
+    expected_policy = (manifest.get("current_policy_sha256")
+                       if replace_existing_overlay else
+                       manifest.get("patched_policy_sha256")
+                       if replace_existing_init else manifest.get("current_policy_sha256"))
     require(boot.digest_bytes(before["sepolicy"][1]) == expected_policy,
             "embedded_policy_mismatch")
     context_bytes = contexts.read_bytes()
@@ -111,6 +117,8 @@ def build(args):
                 "embedded_contexts_missing")
         require(b"import /init.r1_system_control.rc" in before["init.rk30board.rc"][1],
                 "embedded_init_import_missing")
+        if replace_existing_overlay:
+            boot.replace(entries, "sepolicy", policy.read_bytes())
         boot.replace(entries, "init.r1_system_control.rc", payloads["init.r1_system_control.rc"])
     else:
         for name in ADDITIONS:
@@ -130,7 +138,9 @@ def build(args):
     after = {item.name: (contract(item), item.data) for item in entries}
     expected_names = set(before) if replace_existing else set(before) | set(ADDITIONS)
     require(set(after) == expected_names, "candidate_entry_set_invalid")
-    changed = ({"init.r1_system_control.rc"} if replace_existing else
+    changed = ({"init.r1_system_control.rc", "sepolicy"}
+               if replace_existing_overlay else
+               {"init.r1_system_control.rc"} if replace_existing_init else
                {"sepolicy", "file_contexts", "init.rk30board.rc"})
     for name in before:
         require(before[name][0] == after[name][0], f"metadata_changed:{name}")
@@ -188,7 +198,9 @@ def build(args):
         "candidate_ramdisk_sha256": boot.digest_bytes(new_ramdisk),
         "candidate_ramdisk_bytes": len(new_ramdisk), "page_size": page,
         "boot_id_scheme": "rockchip_secure_ns_sha1",
-        "declared_changes": (["ramdisk_system_control_init"] if replace_existing else
+        "declared_changes": (["ramdisk_enforcing_sepolicy"]
+                             if replace_existing_overlay else
+                             ["ramdisk_system_control_init"] if replace_existing_init else
                              ["ramdisk_system_control_agent",
                               "ramdisk_system_control_init",
                               "ramdisk_file_contexts", "ramdisk_enforcing_sepolicy"]),
@@ -210,6 +222,7 @@ def main():
     parser.add_argument("--init-rc", required=True)
     parser.add_argument("--file-contexts", required=True)
     parser.add_argument("--replace-existing-init", action="store_true")
+    parser.add_argument("--replace-existing-overlay", action="store_true")
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
     try:

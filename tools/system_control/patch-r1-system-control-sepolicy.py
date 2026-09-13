@@ -26,8 +26,13 @@ RULES = (
     ("r1_system_control", "init", "process", "sigchld"),
     ("r1_system_control", "rootfs", "dir", "search,getattr"),
     ("r1_system_control", "rootfs", "file", "entrypoint,open,read,execute,getattr"),
+    ("r1_system_control", "rootfs", "lnk_file", "read,getattr"),
     ("r1_system_control", "device", "dir", "search,getattr"),
     ("r1_system_control", "socket_device", "dir", "search"),
+    ("r1_system_control", "tmpfs", "filesystem", "associate"),
+    ("r1_system_control", "null_device", "chr_file", "open,read,write,getattr,ioctl"),
+    ("r1_system_control", "properties_device", "file", "open,read,getattr"),
+    ("r1_system_control", "system_file", "dir", "open,read,search,getattr"),
     ("r1_system_control", "sysfs", "dir", "open,read,search,getattr"),
     ("r1_system_control", "sysfs", "file", "open,read,write,getattr"),
     ("r1_system_control", "r1_system_control", "capability", "sys_boot"),
@@ -78,8 +83,11 @@ def patch(args):
     existing = current_manifest.get("rules")
     require(isinstance(existing, list) and len(existing) >= 100,
             "current_policy_rule_history_incomplete")
+    retained_count = current_manifest.get("existing_rule_count", len(existing))
+    require(isinstance(retained_count, int) and 100 <= retained_count <= len(existing),
+            "current_policy_retained_rule_count_invalid")
     existing_rules = []
-    for index, record in enumerate(existing, 1):
+    for index, record in enumerate(existing[:retained_count], 1):
         require(record.get("index") == index, "current_policy_rule_index_invalid")
         values = tuple(record.get(name) for name in
                        ("source", "target", "class", "permissions"))
