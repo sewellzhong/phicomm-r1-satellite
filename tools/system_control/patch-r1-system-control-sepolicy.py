@@ -35,6 +35,7 @@ RULES = (
     ("r1_system_control", "system_file", "dir", "open,read,search,getattr"),
     ("r1_system_control", "system_file", "file", "open,read,execute,execute_no_trans,getattr"),
     ("r1_system_control", "sysfs", "dir", "open,read,search,getattr"),
+    ("r1_system_control", "sysfs", "lnk_file", "read,getattr"),
     ("r1_system_control", "sysfs", "file", "open,read,write,getattr"),
     ("r1_system_control", "r1_system_control", "capability", "sys_boot"),
     ("r1_system_control", "r1_system_control", "unix_stream_socket", "listen,accept,read,write,getattr,getopt,setopt,shutdown"),
