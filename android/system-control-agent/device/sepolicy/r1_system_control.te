@@ -22,7 +22,7 @@ allow r1_system_control self:capability sys_boot;
 
 allow init r1_system_control:unix_stream_socket { create bind listen setopt getattr };
 allow init r1_system_control:sock_file { create open write getattr setattr unlink };
-allow r1_system_control self:unix_stream_socket { accept read write getattr getopt setopt shutdown };
+allow r1_system_control self:unix_stream_socket { listen accept read write getattr getopt setopt shutdown };
 allow untrusted_app r1_system_control:sock_file { open read write getattr };
 allow untrusted_app r1_system_control:unix_stream_socket connectto;
 allow r1_system_control untrusted_app:unix_stream_socket { accept read write getattr getopt setopt };

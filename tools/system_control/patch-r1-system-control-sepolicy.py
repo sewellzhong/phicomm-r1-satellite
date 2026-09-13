@@ -37,7 +37,7 @@ RULES = (
     ("r1_system_control", "sysfs", "dir", "open,read,search,getattr"),
     ("r1_system_control", "sysfs", "file", "open,read,write,getattr"),
     ("r1_system_control", "r1_system_control", "capability", "sys_boot"),
-    ("r1_system_control", "r1_system_control", "unix_stream_socket", "accept,read,write,getattr,getopt,setopt,shutdown"),
+    ("r1_system_control", "r1_system_control", "unix_stream_socket", "listen,accept,read,write,getattr,getopt,setopt,shutdown"),
     ("untrusted_app", "r1_system_control", "sock_file", "open,read,write,getattr"),
     ("untrusted_app", "r1_system_control", "unix_stream_socket", "connectto"),
     ("r1_system_control", "untrusted_app", "unix_stream_socket", "accept,read,write,getattr,getopt,setopt"),
