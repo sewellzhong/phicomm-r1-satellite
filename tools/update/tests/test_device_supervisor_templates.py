@@ -40,6 +40,13 @@ class DeviceSupervisorTemplateTest(unittest.TestCase):
         self.assertNotIn("ActivityThread", value)
         self.assertNotIn("Runtime.getRuntime", value)
 
+    def test_supervisor_startup_failures_are_observable_in_android_log(self):
+        value = (ROOT / "android/update-agent/src/supervisor_main.cpp").read_text()
+        cmake = (ROOT / "android/update-agent/CMakeLists.txt").read_text()
+        self.assertIn("__android_log_write", value)
+        self.assertIn('"R1UpdateSupervisor"', value)
+        self.assertIn("r1-update-policy log", cmake)
+
 
 if __name__ == "__main__":
     unittest.main()

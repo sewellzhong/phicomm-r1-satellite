@@ -75,7 +75,7 @@ if(ANDROID)
     CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
 
   add_executable(r1-update-supervisor src/supervisor_main.cpp)
-  target_link_libraries(r1-update-supervisor PRIVATE r1-update-policy)
+  target_link_libraries(r1-update-supervisor PRIVATE r1-update-policy log)
   target_compile_features(r1-update-supervisor PRIVATE cxx_std_17)
   target_compile_options(r1-update-supervisor PRIVATE -Wall -Wextra -Werror)
   target_link_options(r1-update-supervisor PRIVATE

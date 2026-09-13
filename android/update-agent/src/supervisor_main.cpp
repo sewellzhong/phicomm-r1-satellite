@@ -14,6 +14,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <android/log.h>
 
 namespace {
 
@@ -23,6 +24,11 @@ constexpr char kTransactionDirectory[] = "/data/misc/r1_update";
 constexpr char kHelperJar[] = "/sbin/r1-update-helper.jar";
 constexpr uid_t kSatelliteUid = 10010;
 volatile sig_atomic_t stop_requested = 0;
+
+void log_error(const std::string& message) {
+  fprintf(stderr, "%s\n", message.c_str());
+  __android_log_write(ANDROID_LOG_ERROR, "R1UpdateSupervisor", message.c_str());
+}
 
 void handle_signal(int) { stop_requested = 1; }
 
@@ -64,7 +70,7 @@ bool inherited_listener(int* listener, std::string* error) {
 
 int main() {
   if (geteuid() != 0) {
-    fprintf(stderr, "update_supervisor_root_required\n");
+    log_error("update_supervisor_root_required");
     return 2;
   }
   struct sigaction action {};
@@ -72,19 +78,19 @@ int main() {
   sigemptyset(&action.sa_mask);
   if (sigaction(SIGTERM, &action, nullptr) != 0
       || sigaction(SIGINT, &action, nullptr) != 0) {
-    fprintf(stderr, "update_supervisor_signal_failed\n");
+    log_error("update_supervisor_signal_failed");
     return 2;
   }
   std::string error;
   int listener = -1;
   if (!inherited_listener(&listener, &error)) {
-    fprintf(stderr, "%s\n", error.c_str());
+    log_error(error);
     return 2;
   }
   std::string boot_id;
   if (!r1_update::read_kernel_boot_id("/proc/sys/kernel/random/boot_id", &boot_id,
                                       &error)) {
-    fprintf(stderr, "%s\n", error.c_str());
+    log_error(error);
     return 2;
   }
   r1_update::AndroidPackageManagerBackend backend(
@@ -99,8 +105,8 @@ int main() {
   const bool okay = r1_update::run_update_supervisor(
       config, &orchestrator, r1_update::monotonic_seconds,
       [] { return stop_requested != 0; },
-      [](const std::string& event) { fprintf(stderr, "%s\n", event.c_str()); },
+      [](const std::string& event) { log_error(event); },
       &error);
-  if (!okay) fprintf(stderr, "%s\n", error.c_str());
+  if (!okay) log_error(error);
   return okay ? 0 : 1;
 }
