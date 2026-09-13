@@ -14,8 +14,10 @@ allow r1_update_supervisor init:process sigchld;
 allow r1_update_supervisor self:process { fork sigchld };
 
 allow r1_update_supervisor rootfs:dir { open read search getattr };
-allow r1_update_supervisor rootfs:file { open read execute getattr };
+allow r1_update_supervisor rootfs:file { entrypoint open read execute getattr };
 allow r1_update_supervisor rootfs:lnk_file { read getattr };
+allow r1_update_supervisor labeledfs:filesystem associate;
+allow r1_update_supervisor tmpfs:filesystem associate;
 allow r1_update_supervisor system_file:dir { open read search getattr };
 allow r1_update_supervisor system_file:file { open read execute execute_no_trans getattr };
 allow r1_update_supervisor system_file:lnk_file { read getattr };
