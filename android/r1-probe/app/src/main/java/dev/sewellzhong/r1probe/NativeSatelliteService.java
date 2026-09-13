@@ -502,6 +502,14 @@ public final class NativeSatelliteService extends Service {
                                     ? Integer.valueOf(command.getInt("minutes")) : null);
                             break;
                         case "alarm-status": break;
+                        case "dnd-set":
+                            dnd.configure(command.getBoolean("manual"),
+                                    command.getBoolean("schedule_enabled"),
+                                    command.getInt("start_hour"), command.getInt("start_minute"),
+                                    command.getInt("end_hour"), command.getInt("end_minute"),
+                                    command.getBoolean("alarms_allowed"),
+                                    command.optLong("expected_version", -1));
+                            break;
                         case "capability-status": break;
                         case "bluetooth-discoverable": capabilities.openDiscoverable(command.optInt("seconds", 60)); break;
                         case "bluetooth-close": capabilities.closeDiscoverable(); break;
@@ -539,7 +547,8 @@ public final class NativeSatelliteService extends Service {
                     if (action.equals("timer-stop") || action.equals("timer-status"))
                         response = timers.snapshot();
                     if (action.startsWith("alarm-")) response = alarms.snapshot();
-                    if (action.equals("dnd-status")) response = dnd.snapshot();
+                    if (action.equals("dnd-status") || action.equals("dnd-set"))
+                        response = dnd.snapshot();
                     if (actionResponse != null) {
                         java.util.Iterator<String> keys = actionResponse.keys();
                         while (keys.hasNext()) { String key = keys.next(); response.put(key, actionResponse.get(key)); }

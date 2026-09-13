@@ -17,6 +17,7 @@ ADMIN_ACTIONS = ["initialize", "start", "stop", "status", "rotate", "pair", "aud
     "diagnostic-window", "diagnostic-start", "diagnostic-arm", "diagnostic-stop", "diagnostic-status", "diagnostic-export", "diagnostic-clear",
     "capability-status", "hardware-reset", "timer-status", "timer-stop", "bluetooth-discoverable", "bluetooth-close", "ble-window", "ble-close", "hotspot-window", "hotspot-close",
     "alarm-status", "alarm-put", "alarm-delete", "alarm-enable", "alarm-stop", "alarm-snooze",
+    "dnd-status", "dnd-set",
     "button-short", "button-long",
     "update-submit",
     "original-provisioning-open", "original-provisioning-close", "provisioning-recover",
@@ -122,6 +123,13 @@ def main():
     parser.add_argument("--snooze-minutes", type=int, choices=range(1, 61), default=10)
     parser.add_argument("--expected-version", type=int, default=-1)
     parser.add_argument("--minutes", type=int, choices=range(1, 61))
+    parser.add_argument("--manual", choices=("true", "false"))
+    parser.add_argument("--schedule-enabled", choices=("true", "false"))
+    parser.add_argument("--start-hour", type=int, choices=range(24))
+    parser.add_argument("--start-minute", type=int, choices=range(60))
+    parser.add_argument("--end-hour", type=int, choices=range(24))
+    parser.add_argument("--end-minute", type=int, choices=range(60))
+    parser.add_argument("--alarms-allowed", choices=("true", "false"))
     parser.add_argument("--operation-id")
     parser.add_argument("--to-version", type=int)
     parser.add_argument("--signer-sha256")
@@ -165,6 +173,19 @@ def main():
         if args.action == "alarm-enable": command["enabled"] = args.enabled == "true"
     if args.action in ("alarm-stop", "alarm-snooze") and args.id: command["id"] = args.id
     if args.action == "alarm-snooze" and args.minutes is not None: command["minutes"] = args.minutes
+    if args.action == "dnd-set":
+        required = (args.manual, args.schedule_enabled, args.start_hour, args.start_minute,
+                    args.end_hour, args.end_minute, args.alarms_allowed)
+        if any(value is None for value in required):
+            parser.error("dnd-set requires manual, schedule, start/end and alarms options")
+        if args.start_hour == args.end_hour and args.start_minute == args.end_minute:
+            parser.error("dnd-set start and end must differ")
+        command.update({"manual": args.manual == "true",
+                        "schedule_enabled": args.schedule_enabled == "true",
+                        "start_hour": args.start_hour, "start_minute": args.start_minute,
+                        "end_hour": args.end_hour, "end_minute": args.end_minute,
+                        "alarms_allowed": args.alarms_allowed == "true",
+                        "expected_version": args.expected_version})
     if args.action == "start": command["listen"] = args.listen
     if args.action == "update-submit":
         if (not args.operation_id or not args.sha256 or args.to_version is None

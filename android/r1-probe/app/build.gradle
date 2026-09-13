@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("124")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.24-system-control-recovery")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("125")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.25-dnd-schedule-validation")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

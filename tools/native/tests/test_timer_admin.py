@@ -19,6 +19,10 @@ class TimerAdminTests(unittest.TestCase):
                        "alarm-stop", "alarm-snooze"):
             self.assertIn(action, admin.ADMIN_ACTIONS)
 
+    def test_shell_only_dnd_actions_are_exposed(self):
+        self.assertIn("dnd-status", admin.ADMIN_ACTIONS)
+        self.assertIn("dnd-set", admin.ADMIN_ACTIONS)
+
 
 if __name__ == "__main__":
     unittest.main()
