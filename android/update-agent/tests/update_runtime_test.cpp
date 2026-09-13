@@ -150,10 +150,24 @@ void controller_persists_every_transition() {
   require(empty.recover(&restored, &error) && !restored,
           "completed controller left active transaction");
 
-  require(empty.stage(value.candidate, current, target, &error), "success stage failed");
-  require(empty.begin_install(2000, kBootId, &error), "success begin failed");
-  require(empty.installed(target, &error), "success install verification failed");
-  require(empty.confirm_health(target, {true, true, true, true}, &error),
+  require(empty.stage(value.candidate, current, target, &error),
+          "interrupted stage setup failed");
+  TransactionController staged_recovery(directory);
+  require(staged_recovery.recover(&restored, &error) && restored
+          && staged_recovery.state().phase == Phase::kIdle,
+          "interrupted stage did not recover to idle");
+  TransactionController after_staged_recovery(directory);
+  require(after_staged_recovery.recover(&restored, &error) && !restored,
+          "interrupted stage left active transaction");
+
+  require(after_staged_recovery.stage(value.candidate, current, target, &error),
+          "success stage failed");
+  require(after_staged_recovery.begin_install(2000, kBootId, &error),
+          "success begin failed");
+  require(after_staged_recovery.installed(target, &error),
+          "success install verification failed");
+  require(after_staged_recovery.confirm_health(
+          target, {true, true, true, true}, &error),
           "success health confirmation failed");
   TransactionController committed(directory);
   require(committed.recover(&restored, &error) && !restored,

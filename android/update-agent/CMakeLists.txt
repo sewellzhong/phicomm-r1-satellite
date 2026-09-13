@@ -82,7 +82,7 @@ if(ANDROID)
     "-Wl,--hash-style=both" "-Wl,--gc-sections")
 
   add_executable(r1-update-backend-probe tests/android_backend_probe_main.cpp)
-  target_link_libraries(r1-update-backend-probe PRIVATE r1-update-policy)
+  target_link_libraries(r1-update-backend-probe PRIVATE r1-update-policy log)
   target_compile_features(r1-update-backend-probe PRIVATE cxx_std_17)
   target_compile_options(r1-update-backend-probe PRIVATE -Wall -Wextra -Werror)
   target_link_options(r1-update-backend-probe PRIVATE

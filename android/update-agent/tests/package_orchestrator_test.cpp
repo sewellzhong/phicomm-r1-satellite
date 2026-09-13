@@ -1,5 +1,6 @@
 #include "package_orchestrator.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <iostream>
@@ -7,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -68,9 +70,19 @@ StagedArchive archive(const std::string& directory) {
 }
 
 void cleanup(const std::string& directory) {
+  unlink(candidate_path(directory).c_str());
+  unlink(previous_path(directory).c_str());
   unlink((directory + "/transaction.v1").c_str());
   unlink((directory + "/transaction.v1.tmp").c_str());
   require(rmdir(directory.c_str()) == 0, "temp cleanup failed");
+}
+
+void write_private_file(const std::string& path) {
+  int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+  require(fd >= 0, "archive fixture open failed");
+  const char byte = 'x';
+  require(write(fd, &byte, 1) == 1 && close(fd) == 0,
+          "archive fixture write failed");
 }
 
 class FakeBackend final : public PackageManagerBackend {
@@ -81,6 +93,7 @@ class FakeBackend final : public PackageManagerBackend {
   bool fail_backup = false;
   bool corrupt_backup = false;
   bool fail_upgrade = false;
+  bool mutate_on_upgrade_failure = false;
   bool fail_rollback = false;
   bool expose_store_on_upgrade_failure = false;
   bool corrupt_upgrade = false;
@@ -128,6 +141,7 @@ class FakeBackend final : public PackageManagerBackend {
                        std::string* error) override {
     calls.push_back(allow_downgrade ? "install_downgrade" : "install_upgrade");
     if ((!allow_downgrade && fail_upgrade) || (allow_downgrade && fail_rollback)) {
+      if (!allow_downgrade && mutate_on_upgrade_failure) current = new_package();
       if (!allow_downgrade && expose_store_on_upgrade_failure) {
         const size_t separator = path.rfind('/');
         if (separator != std::string::npos) chmod(path.substr(0, separator).c_str(), 0755);
@@ -204,8 +218,10 @@ void install_failure_rolls_back_and_verifies() {
           && error == "update_package_install_failed", "install failure was hidden");
   require(orchestrator.state().phase == Phase::kIdle && backend.current.version == 117,
           "install failure did not restore old package");
-  require(backend.calls[backend.calls.size() - 2] == "install_downgrade"
-          && backend.calls.back() == "read_installed", "rollback was not verified");
+  require(backend.calls.back() == "read_installed"
+          && std::find(backend.calls.begin(), backend.calls.end(),
+                       "install_downgrade") == backend.calls.end(),
+          "unchanged old package triggered downgrade");
   cleanup(directory);
 }
 
@@ -246,14 +262,15 @@ void restart_during_install_resumes_rollback_only() {
           "interrupted install recovery failed");
   require(recovered.state().phase == Phase::kIdle && backend.current.version == 117,
           "interrupted install did not finish rollback");
-  require(backend.calls.size() == 2 && backend.calls[0] == "install_downgrade"
-          && backend.calls[1] == "read_installed", "recovery retried upgrade");
+  require(backend.calls.size() == 1 && backend.calls[0] == "read_installed",
+          "recovery replaced an already restored package");
   cleanup(directory);
 }
 
 void rollback_failure_is_fail_closed() {
   std::string directory = temporary_directory();
   FakeBackend backend; prepare(&backend, directory); backend.fail_upgrade = true;
+  backend.mutate_on_upgrade_failure = true;
   backend.fail_rollback = true;
   PackageOrchestrator orchestrator(directory, kBootId, &backend);
   std::string error;
@@ -261,6 +278,16 @@ void rollback_failure_is_fail_closed() {
           && error == "update_package_rollback_failed", "rollback failure was hidden");
   require(orchestrator.state().phase == Phase::kFailed,
           "rollback failure did not remain failed closed");
+
+  // A later restart may clear the failed transaction only after an exact
+  // independent read proves the old package is already restored.
+  backend.fail_rollback = false;
+  backend.current = old_package();
+  PackageOrchestrator recovered(directory, kBootId, &backend);
+  bool restored = false;
+  require(recovered.recover(&restored, &error) && restored
+          && recovered.state().phase == Phase::kIdle,
+          "verified old package did not clear failed rollback");
   cleanup(directory);
 }
 
@@ -279,6 +306,29 @@ void rollback_side_effect_requires_durable_transition() {
   cleanup(directory);
 }
 
+void recovery_removes_orphaned_archives() {
+  std::string directory = temporary_directory();
+  const std::string orphan_id = "abcdefabcdefabcdefabcdefabcdefab";
+  const std::string orphan_candidate = directory + "/candidate-" + orphan_id + ".apk";
+  const std::string orphan_previous = directory + "/previous-" + orphan_id + ".apk";
+  write_private_file(orphan_candidate);
+  write_private_file(orphan_previous);
+  write_private_file(directory + "/unrelated.apk");
+  FakeBackend backend;
+  PackageOrchestrator orchestrator(directory, kBootId, &backend);
+  bool restored = false;
+  std::string error;
+  require(orchestrator.recover(&restored, &error) && !restored,
+          "idle recovery cleanup failed");
+  require(access(orphan_candidate.c_str(), F_OK) != 0
+          && access(orphan_previous.c_str(), F_OK) != 0,
+          "orphaned transaction archives were retained");
+  require(access((directory + "/unrelated.apk").c_str(), F_OK) == 0,
+          "non-transaction file was removed");
+  unlink((directory + "/unrelated.apk").c_str());
+  cleanup(directory);
+}
+
 }  // namespace
 
 int main() {
@@ -290,5 +340,6 @@ int main() {
   restart_during_install_resumes_rollback_only();
   rollback_failure_is_fail_closed();
   rollback_side_effect_requires_durable_transition();
+  recovery_removes_orphaned_archives();
   std::cout << "update orchestrator tests passed\n";
 }

@@ -36,7 +36,12 @@ bool reject(const char* reason, std::string* error) {
 }  // namespace
 
 Policy::Policy(State state) : state_(std::move(state)) {
-  if (state_.phase == Phase::kInstalling) {
+  if (state_.phase == Phase::kStaged) {
+    // begin_install() is durably persisted before PackageManager is invoked.
+    // Therefore an interrupted staged state proves the installed package was
+    // never mutated and can be discarded without a downgrade attempt.
+    state_ = {};
+  } else if (state_.phase == Phase::kInstalling) {
     // A supervisor restart during package replacement is ambiguous. The old package is
     // already retained, so fail closed into rollback instead of retrying installation.
     state_.phase = Phase::kRollingBack;
@@ -167,7 +172,7 @@ bool Policy::tick(uint64_t now, bool same_boot, std::string* error) {
 }
 
 bool Policy::rollback_finished(const Installed& installed, std::string* error) {
-  if (state_.phase != Phase::kRollingBack)
+  if (state_.phase != Phase::kRollingBack && state_.phase != Phase::kFailed)
     return reject("update_not_rolling_back", error);
   if (installed.package_name != state_.candidate.package_name
       || installed.version != state_.candidate.from_version

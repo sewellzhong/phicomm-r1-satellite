@@ -8,10 +8,12 @@ allow r1_update_supervisor self:file { entrypoint open read execute getattr crea
 allow init r1_update_supervisor:unix_stream_socket { create bind listen setopt getattr };
 allow init r1_update_supervisor:sock_file { create open write getattr setattr unlink };
 allow init r1_update_supervisor:dir { create open read search getattr setattr relabelto };
+allow init shell_data_file:dir { search write add_name };
 allow r1_update_supervisor init:fd use;
 allow r1_update_supervisor kernel:fd use;
 allow r1_update_supervisor init:process sigchld;
-allow r1_update_supervisor self:process { fork signal sigchld sigkill setpgid };
+allow r1_update_supervisor self:process { fork signal sigchld sigkill setpgid getcap setcap };
+allow r1_update_supervisor self:capability { setuid setgid };
 allow r1_update_supervisor self:fifo_file { read write getattr };
 
 allow r1_update_supervisor rootfs:dir { open read search getattr };
@@ -51,19 +53,30 @@ allow servicemanager r1_update_supervisor:process getattr;
 allow servicemanager r1_update_supervisor:binder transfer;
 allow r1_update_supervisor system_server:binder { call transfer };
 allow system_server r1_update_supervisor:binder { call transfer };
+allow r1_update_supervisor system_server:fd use;
+allow system_server r1_update_supervisor:fd use;
+allow system_server r1_update_supervisor:dir search;
+allow system_server r1_update_supervisor:file { open read getattr };
 allow r1_update_supervisor system_data_file:dir { open read search getattr };
 allow r1_update_supervisor apk_data_file:dir { open read search getattr };
-allow r1_update_supervisor apk_data_file:file { open read getattr };
+allow r1_update_supervisor apk_data_file:file { open read write getattr };
 allow r1_update_supervisor dalvikcache_data_file:dir { open read write search add_name remove_name getattr };
 allow r1_update_supervisor dalvikcache_data_file:file { create open read write execute getattr setattr lock unlink };
+allow r1_update_supervisor resourcecache_data_file:dir search;
+allow r1_update_supervisor shell_data_file:dir { create open read write search add_name remove_name getattr setattr };
+allow r1_update_supervisor shell_data_file:file { create open read write getattr setattr unlink };
 allow r1_update_supervisor tmpfs:file read;
 
 allow r1_update_supervisor self:dir { create open read write search add_name remove_name getattr setattr };
+allow r1_update_supervisor self:file { create open read write getattr setattr rename link unlink };
 allow r1_update_supervisor self:sock_file { open read write getattr };
 allow r1_update_supervisor self:unix_stream_socket { create connect listen accept read write getattr getopt setopt shutdown };
 allow untrusted_app r1_update_supervisor:sock_file { open read write getattr };
 allow untrusted_app r1_update_supervisor:unix_stream_socket connectto;
 allow r1_update_supervisor untrusted_app:unix_stream_socket { accept read write getattr getopt setopt };
+# The APK archive is supplied only as an SCM_RIGHTS descriptor by the authenticated app.
+allow r1_update_supervisor untrusted_app:fd use;
+allow r1_update_supervisor app_data_file:file { read getattr };
 
 allow r1_update_supervisor self:unix_dgram_socket { create connect write };
 allow r1_update_supervisor logdw_socket:sock_file { open write getattr };

@@ -63,4 +63,13 @@ public final class UpdateSupervisorClientTest {
         }
         throw new AssertionError("partial health accepted");
     }
+
+    @Test public void diagnosticsExposeOnlyWhitelistedTokens() {
+        assertEquals("update_socket_connect_failed", UpdateSupervisorClient.safeDiagnostic(
+                new IOException("update_socket_connect_failed")));
+        assertEquals("update_io_failed", UpdateSupervisorClient.safeDiagnostic(
+                new IOException("secret=/data/user/0/private.apk")));
+        assertEquals("update_runtime_failed", UpdateSupervisorClient.safeDiagnostic(
+                new IllegalStateException("credential-value")));
+    }
 }

@@ -11,7 +11,9 @@ installed package. After replacement it independently rechecks package,
 version, bytes, and signer. Health requires the service, persistent state,
 factory-audio agent, and original-package isolation boundary. Timeout,
 supervisor restart during installation, reboot before health, identity drift,
-or partial health all enter rollback. A rollback is complete only after the old
+or partial health all enter rollback. A restart from the durably staged phase
+returns to idle because package replacement has not started; an interrupted
+install still enters rollback. A rollback is complete only after the old
 version and signer are read back.
 
 The host runtime adds an exact-UID admission primitive, an owner-only transaction

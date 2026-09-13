@@ -42,6 +42,8 @@ class PackageOrchestrator {
   bool rollback_after(const std::string& failure, std::string* error);
   bool fail_install_and_rollback(const std::string& failure, std::string* error);
   bool identities_equal(const Installed& left, const Installed& right) const;
+  bool cleanup_archives(const std::string& retained_operation_id,
+                        std::string* error) const;
 
   std::string directory_;
   std::string boot_id_;

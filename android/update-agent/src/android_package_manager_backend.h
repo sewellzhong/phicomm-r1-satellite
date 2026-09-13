@@ -18,12 +18,14 @@ struct CommandResult {
 using CommandRunner = std::function<bool(
     const std::vector<std::string>& arguments,
     const std::vector<std::string>& environment,
+    const std::string& standard_input_path,
     uint32_t timeout_seconds, CommandResult* result, std::string* error)>;
 
 // Executes one fixed argv without a shell. Output is bounded and a timeout
 // kills the entire direct child before returning.
 bool run_fixed_command(const std::vector<std::string>& arguments,
                        const std::vector<std::string>& environment,
+                       const std::string& standard_input_path,
                        uint32_t timeout_seconds, CommandResult* result,
                        std::string* error);
 
@@ -47,9 +49,12 @@ class AndroidPackageManagerBackend final : public PackageManagerBackend {
   bool read_identity(const std::string& mode, const std::string& value,
                      Installed* installed, std::string* apk_path,
                      std::string* error);
+  bool install_archive_legacy(const std::string& archive_path,
+                              bool allow_downgrade, std::string* error);
   bool transaction_archive_path(const std::string& path) const;
 
   std::string transaction_directory_;
+  std::string install_bridge_directory_;
   std::string helper_jar_;
   CommandRunner runner_;
 };

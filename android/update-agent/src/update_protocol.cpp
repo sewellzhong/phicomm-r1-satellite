@@ -521,7 +521,13 @@ bool serve_protocol_request_once(int listener_fd, uid_t satellite_uid,
                             success ? "" : operation_error};
   bool replied = send_protocol_response(connected, response, error);
   close(connected);
-  if (!replied) return false;
+  if (!replied) {
+    // Apply callers may be killed by PackageManager or deliberately close
+    // after handing off the archive. Preserve the bounded operation error in
+    // the supervisor log instead of masking it with a response write failure.
+    if (!success && error != nullptr) *error = operation_error;
+    return false;
+  }
   *operation_succeeded = success;
   return true;
 }

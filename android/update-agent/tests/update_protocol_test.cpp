@@ -286,6 +286,36 @@ void listener_dispatches_and_returns_fixed_response() {
   cleanup(directory);
 }
 
+void closed_apply_client_preserves_operation_failure() {
+  std::string directory = temporary_directory();
+  std::string path = directory + "/update.sock";
+  int listener = -1;
+  std::string error;
+  require(r1_update::open_private_update_listener(path, geteuid(), &listener, &error),
+          "closed client listener creation failed");
+  int client = -1;
+  require(r1_update::connect_private_update_socket(path, &client, &error),
+          "closed client connect failed");
+  int archive = create_archive(directory);
+  Candidate invalid = candidate();
+  invalid.from_version = 116;
+  require(r1_update::send_apply_request(client, invalid, archive, &error),
+          "closed client apply send failed");
+  close(archive);
+  close(client);
+
+  FakeBackend backend(directory);
+  PackageOrchestrator orchestrator(directory, kBootId, &backend);
+  bool operation_succeeded = false;
+  require(!r1_update::serve_protocol_request_once(listener, geteuid(), directory,
+                                                   &orchestrator, 1000,
+                                                   &operation_succeeded, &error)
+          && !operation_succeeded && error == "update_source_version_mismatch",
+          "closed client masked operation failure");
+  close(listener);
+  cleanup(directory);
+}
+
 void apply_requires_descriptor_and_exact_uid() {
   int pair[2];
   require(socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, pair) == 0,
@@ -315,6 +345,7 @@ int main() {
   listener_is_private_and_checks_kernel_peer();
   listener_rejects_replaceable_parent();
   listener_dispatches_and_returns_fixed_response();
+  closed_apply_client_preserves_operation_failure();
   apply_requires_descriptor_and_exact_uid();
   std::cout << "update protocol tests passed\n";
 }

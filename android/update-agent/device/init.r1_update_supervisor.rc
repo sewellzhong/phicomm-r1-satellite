@@ -11,4 +11,5 @@ service r1_update /sbin/r1-update-supervisor
     disabled
 
 on property:sys.boot_completed=1
+    mkdir /data/local/tmp/r1_update_install_v2 0711 root root
     start r1_update

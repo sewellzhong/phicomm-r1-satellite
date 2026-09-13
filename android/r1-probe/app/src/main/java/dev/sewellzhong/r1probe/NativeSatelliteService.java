@@ -22,6 +22,7 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.util.Log;
 import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
 import dev.sewellzhong.r1probe.esphome.NativeAlarmController;
 import dev.sewellzhong.r1probe.esphome.NativeDndController;
@@ -42,6 +43,7 @@ import org.json.JSONObject;
 
 /** Single authenticated HA owner, persistent opt-in, and shell-only local administration. */
 public final class NativeSatelliteService extends Service {
+    private static final String UPDATE_LOG_TAG = "R1UpdateClient";
     private NativeSettings settings;
     private AudioDiagnostic diagnostic;
     private HardwareInputMonitor hardware;
@@ -448,24 +450,38 @@ public final class NativeSatelliteService extends Service {
                         case "stop": settings.enable(false, false); closeClient(); closeServer(); break;
                         case "rotate": settings.rotate(); break;
                         case "update-submit":
-                            String operationId = command.getString("operation_id");
-                            UpdateSupervisorClient updateClient = UpdateSupervisorClient.create(this);
-                            java.io.File candidateFile = updateClient.candidateFile(operationId);
-                            android.content.pm.PackageInfo currentPackage = getPackageManager()
-                                    .getPackageInfo(getPackageName(), 0);
-                            UpdateSupervisorClient.Candidate candidate =
-                                    new UpdateSupervisorClient.Candidate(operationId,
-                                            currentPackage.versionCode,
-                                            command.getInt("to_version"), candidateFile.length(),
-                                            UpdateSupervisorClient.decodeDigest(
-                                                    command.getString("apk_sha256")),
-                                            UpdateSupervisorClient.decodeDigest(
-                                                    command.getString("signer_sha256")),
-                                            command.optInt("health_timeout_seconds", 180));
-                            updateClient.submitExisting(candidate);
-                            actionResponse = new JSONObject().put("update", "submitted")
-                                    .put("operation_id", operationId)
-                                    .put("install_result_deferred", true);
+                            String updateStage = "request";
+                            try {
+                                String operationId = command.getString("operation_id");
+                                UpdateSupervisorClient updateClient =
+                                        UpdateSupervisorClient.create(this);
+                                java.io.File candidateFile =
+                                        updateClient.candidateFile(operationId);
+                                updateStage = "package";
+                                android.content.pm.PackageInfo currentPackage =
+                                        getPackageManager().getPackageInfo(getPackageName(), 0);
+                                updateStage = "candidate";
+                                UpdateSupervisorClient.Candidate candidate =
+                                        new UpdateSupervisorClient.Candidate(operationId,
+                                                currentPackage.versionCode,
+                                                command.getInt("to_version"),
+                                                candidateFile.length(),
+                                                UpdateSupervisorClient.decodeDigest(
+                                                        command.getString("apk_sha256")),
+                                                UpdateSupervisorClient.decodeDigest(
+                                                        command.getString("signer_sha256")),
+                                                command.optInt("health_timeout_seconds", 180));
+                                updateStage = "transport";
+                                updateClient.submitExisting(candidate);
+                                actionResponse = new JSONObject().put("update", "submitted")
+                                        .put("operation_id", operationId)
+                                        .put("install_result_deferred", true);
+                            } catch (Exception failure) {
+                                Log.e(UPDATE_LOG_TAG, "update_submit_failed:"
+                                        + updateStage + ":"
+                                        + UpdateSupervisorClient.safeDiagnostic(failure));
+                                throw failure;
+                            }
                             break;
                         case "hardware-reset": hardware.reset(); break;
                         case "button-short": buttonActions.shortPress(); break;

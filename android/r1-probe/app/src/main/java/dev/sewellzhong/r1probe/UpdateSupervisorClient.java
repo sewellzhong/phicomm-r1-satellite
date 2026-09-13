@@ -12,6 +12,16 @@ import java.util.Locale;
 
 /** APK-side client. Package replacement remains owned by the independent supervisor. */
 final class UpdateSupervisorClient {
+    private static final String[] SAFE_DIAGNOSTICS = {
+            "update_candidate_file_invalid",
+            "update_candidate_hash_mismatch",
+            "update_candidate_digest_invalid",
+            "update_socket_create_failed",
+            "update_socket_timeout_failed",
+            "update_socket_connect_failed",
+            "update_protocol_apply_invalid",
+            "update_protocol_send_failed"
+    };
     static final int PHASE_IDLE = 1;
     static final int PHASE_STAGED = 2;
     static final int PHASE_INSTALLING = 3;
@@ -147,6 +157,18 @@ final class UpdateSupervisorClient {
         if (health == null || !health.complete())
             throw new IOException("update_health_incomplete");
         return transport.health(health);
+    }
+
+    /** Returns a bounded diagnostic token; never propagates exception text to logs. */
+    static String safeDiagnostic(Throwable failure) {
+        if (failure instanceof IOException) {
+            String message = failure.getMessage();
+            for (String allowed : SAFE_DIAGNOSTICS) {
+                if (allowed.equals(message)) return allowed;
+            }
+            return "update_io_failed";
+        }
+        return "update_runtime_failed";
     }
 
     static byte[] decodeDigest(String value) {
