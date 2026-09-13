@@ -59,6 +59,7 @@ public final class NativeSatelliteService extends Service {
     private NativeDndController dnd;
     private NativeTimerAlarm timerAlarm;
     private NativeSystemManager systemManager;
+    private TrustedWallClock civilClock;
     private long serviceStartedElapsed;
     private volatile boolean destroyed;
     private volatile Socket client;
@@ -155,11 +156,7 @@ public final class NativeSatelliteService extends Service {
             closeClient();
         }, privacyLed);
         privacy.applyPersistedState();
-        NativeDndController.Clock civilClock = new NativeDndController.Clock() {
-            @Override public long wallMillis() { return System.currentTimeMillis(); }
-            @Override public boolean wallTrusted() { return wallMillis() >= 1577836800000L; }
-            @Override public String timeZoneId() { return java.util.TimeZone.getDefault().getID(); }
-        };
+        civilClock = new TrustedWallClock();
         dnd = new NativeDndController(new NativeDndStore(this), civilClock);
         timerAlarm = new NativeTimerAlarm(this, settings, new NativeTimerAlarm.Gate() {
             @Override public void requestRelease() {
@@ -171,16 +168,8 @@ public final class NativeSatelliteService extends Service {
                 return current == null || current.localPlaybackTerminated();
             }
         });
-        timers = new NativeTimerController(new NativeTimerStore(this), new NativeTimerController.Clock() {
-            @Override public long elapsedMillis() { return android.os.SystemClock.elapsedRealtime(); }
-            @Override public long wallMillis() { return System.currentTimeMillis(); }
-            @Override public boolean wallTrusted() { return wallMillis() >= 1577836800000L; }
-        }, timerAlarm);
-        alarms = new NativeAlarmController(new NativeAlarmStore(this), new NativeAlarmController.Clock() {
-            @Override public long wallMillis() { return System.currentTimeMillis(); }
-            @Override public boolean wallTrusted() { return wallMillis() >= 1577836800000L; }
-            @Override public String timeZoneId() { return java.util.TimeZone.getDefault().getID(); }
-        }, new NativeAlarmController.Ringer() {
+        timers = new NativeTimerController(new NativeTimerStore(this), civilClock, timerAlarm);
+        alarms = new NativeAlarmController(new NativeAlarmStore(this), civilClock, new NativeAlarmController.Ringer() {
             @Override public void start() { timerAlarm.startAlarm(); }
             @Override public void start(String ringtone, int volumePercent, String promptText) {
                 timerAlarm.startAlarm(ringtone, volumePercent, promptText);
@@ -326,7 +315,7 @@ public final class NativeSatelliteService extends Service {
                             boolean permitted = audioPermitted();
                             NativeAudioRuntime current = new NativeAudioRuntime(this,
                                     settings.listening() && permitted && !privacy.muted(),
-                                    this::audioPermitted, timers, alarms, dnd, systemManager);
+                                    this::audioPermitted, timers, alarms, dnd, systemManager, civilClock);
                             current.diagnostic(diagnostic);
                             audio = current;
                             byte[] key = settings.key();
@@ -705,7 +694,7 @@ public final class NativeSatelliteService extends Service {
         info.setAttribute("version", "2026.8.0"); info.setAttribute("mac", settings.mac().replace(":", "").toLowerCase(java.util.Locale.ROOT));
         info.setAttribute("platform", "R1"); info.setAttribute("network", "wifi");
         info.setAttribute("api_encryption", "Noise_NNpsk0_25519_ChaChaPoly_SHA256");
-        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.21-media-prepare-timeout");
+        info.setAttribute("project_name", "sewellzhong.r1-satellite"); info.setAttribute("project_version", "1.22-ha-trusted-clock");
         registration = new NsdManager.RegistrationListener() {
             @Override public void onServiceRegistered(NsdServiceInfo serviceInfo) { }
             @Override public void onRegistrationFailed(NsdServiceInfo serviceInfo, int code) { error = "discovery_registration_failed"; }

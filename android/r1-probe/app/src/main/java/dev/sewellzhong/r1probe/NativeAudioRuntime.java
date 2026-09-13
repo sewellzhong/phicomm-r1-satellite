@@ -263,6 +263,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private final AtomicBoolean stopping = new AtomicBoolean();
     private final NativeAudioCoordinator coordinator;
     private final NativeTimerController timers;
+    private final TrustedWallClock civilClock;
     private volatile boolean playbackRequested;
     private volatile AudioRecord recorder;
     private volatile long lastRead;
@@ -296,10 +297,16 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
             NativeTimerController timers, NativeAlarmController alarms, NativeDndController dnd,
             NativeSystemManager system) {
+        this(context, listen, permission, timers, alarms, dnd, system, null);
+    }
+    NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
+            NativeTimerController timers, NativeAlarmController alarms, NativeDndController dnd,
+            NativeSystemManager system, TrustedWallClock civilClock) {
         this.context = context.getApplicationContext();
         this.listen = listen;
         this.permission = permission;
         this.timers = timers;
+        this.civilClock = civilClock;
         this.alarms = alarms;
         alarmProtocol = alarms == null ? null : new NativeAlarmProtocol(alarms);
         this.dnd = dnd;
@@ -340,6 +347,9 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
             }
         }, () -> coordinator.ready() && !announcements.active()
                 && (NativeAudioRuntime.this.timers == null || !NativeAudioRuntime.this.timers.ringing()));
+    }
+    @Override public void synchronizedTime(long epochSeconds) {
+        if (civilClock != null) civilClock.synchronize(epochSeconds);
     }
     boolean cancelAudio(NativeAudioCoordinator.CancelReason reason) { return coordinator.requestCancel(reason); }
     void timerAlarmStarting() {

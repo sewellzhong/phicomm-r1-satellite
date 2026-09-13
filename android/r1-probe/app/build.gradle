@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("121")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.21-media-prepare-timeout")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("122")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.22-ha-trusted-clock")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

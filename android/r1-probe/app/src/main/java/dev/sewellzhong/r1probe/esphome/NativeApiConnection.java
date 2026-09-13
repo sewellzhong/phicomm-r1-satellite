@@ -14,6 +14,7 @@ public final class NativeApiConnection {
     public interface Handler {
         void connected(NativeVoiceSession.Sender sender);
         default void listEntities(NativeVoiceSession.Sender sender) throws IOException { }
+        default void synchronizedTime(long epochSeconds) { }
         void message(int type, byte[] payload) throws IOException;
         void tick() throws IOException;
         void closed();
@@ -108,6 +109,7 @@ public final class NativeApiConnection {
                     initialized=true;
                     if (handler != null) {
                         handler.connected(this::send);
+                        send(MessageIds.GetTimeRequest, EsphomeApi.GetTimeRequest.getDefaultInstance());
                         ready=true;
                         socket.setSoTimeout(1000);
                     }
@@ -117,12 +119,15 @@ public final class NativeApiConnection {
                     send(MessageIds.DeviceInfoResponse,EsphomeApi.DeviceInfoResponse.newBuilder().setName(name)
                             .setFriendlyName(satellite ? "R1 原生语音" : "R1 Native Foundation").setMacAddress(mac).setManufacturer("Phicomm")
                             .setModel("R1 API22").setEsphomeVersion("2026.8.0").setProjectName("sewellzhong.r1-satellite")
-                            .setProjectVersion(satellite ? "1.17-system-management" : "0.43-foundation")
+                            .setProjectVersion(satellite ? "1.22-ha-trusted-clock" : "0.43-foundation")
                             .setVoiceAssistantFeatureFlags(satellite ? SATELLITE_FEATURES : 0).build());
                 } else if(type==MessageIds.DeviceCapabilitiesRequest) {
                     send(MessageIds.DeviceCapabilitiesResponse,satellite ? EsphomeApi.DeviceCapabilitiesResponse.newBuilder()
                             .setVoiceAssistant(EsphomeApi.VoiceAssistantCapabilities.newBuilder().setFeatureFlags(SATELLITE_FEATURES)).build()
                             : EsphomeApi.DeviceCapabilitiesResponse.getDefaultInstance());
+                } else if(satellite && type==MessageIds.GetTimeResponse) {
+                    EsphomeApi.GetTimeResponse timeResponse = EsphomeApi.GetTimeResponse.parseFrom(payload);
+                    handler.synchronizedTime(timeResponse.getEpochSeconds() & 0xffffffffL);
                 } else if(type==MessageIds.ListEntitiesRequest) {
                     if (satellite) handler.listEntities(this::send);
                     send(MessageIds.ListEntitiesDoneResponse,EsphomeApi.ListEntitiesDoneResponse.getDefaultInstance());
