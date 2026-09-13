@@ -44,7 +44,7 @@ allow r1_update_supervisor dalvikcache_data_file:file { create open read write g
 
 allow r1_update_supervisor self:dir { create open read write search add_name remove_name getattr setattr };
 allow r1_update_supervisor self:sock_file { open read write getattr };
-allow r1_update_supervisor self:unix_stream_socket { accept read write getattr getopt setopt shutdown };
+allow r1_update_supervisor self:unix_stream_socket { listen accept read write getattr getopt setopt shutdown };
 allow untrusted_app r1_update_supervisor:sock_file { open read write getattr };
 allow untrusted_app r1_update_supervisor:unix_stream_socket connectto;
 allow r1_update_supervisor untrusted_app:unix_stream_socket { accept read write getattr getopt setopt };

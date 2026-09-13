@@ -65,7 +65,7 @@ RULES = (
     ("r1_update_supervisor", "r1_update_supervisor", "dir", "create,open,read,write,search,add_name,remove_name,getattr,setattr"),
     ("r1_update_supervisor", "r1_update_supervisor", "file", "create,open,read,write,getattr,setattr,rename,unlink"),
     ("r1_update_supervisor", "r1_update_supervisor", "sock_file", "open,read,write,getattr"),
-    ("r1_update_supervisor", "r1_update_supervisor", "unix_stream_socket", "accept,read,write,getattr,getopt,setopt,shutdown"),
+    ("r1_update_supervisor", "r1_update_supervisor", "unix_stream_socket", "listen,accept,read,write,getattr,getopt,setopt,shutdown"),
     ("untrusted_app", "r1_update_supervisor", "sock_file", "open,read,write,getattr"),
     ("untrusted_app", "r1_update_supervisor", "unix_stream_socket", "connectto"),
     ("r1_update_supervisor", "untrusted_app", "unix_stream_socket", "accept,read,write,getattr,getopt,setopt"),

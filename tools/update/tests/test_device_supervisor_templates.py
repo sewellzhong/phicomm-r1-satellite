@@ -46,6 +46,7 @@ class DeviceSupervisorTemplateTest(unittest.TestCase):
         self.assertIn("__android_log_write", value)
         self.assertIn('"R1UpdateSupervisor"', value)
         self.assertIn("r1-update-policy log", cmake)
+        self.assertIn("listen(fd, 4)", value)
 
 
 if __name__ == "__main__":

@@ -62,6 +62,10 @@ bool inherited_listener(int* listener, std::string* error) {
     if (error != nullptr) *error = "update_init_socket_invalid";
     return false;
   }
+  if (listen(fd, 4) != 0) {
+    if (error != nullptr) *error = "update_init_socket_listen_failed";
+    return false;
+  }
   *listener = fd;
   return true;
 }
