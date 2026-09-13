@@ -183,6 +183,14 @@ public final class NativeMediaController {
         if (reason != null) interruptions.remove(reason);
     }
 
+    /** Drop only connection-scoped owners while preserving independent URL playback. */
+    public synchronized void disconnected() {
+        sender = null; subscribed = false;
+        interruptions.remove(Interruption.VOICE);
+        interruptions.remove(Interruption.ANNOUNCEMENT);
+        reportedState = null; reportedVolume = Float.NaN; reportedMuted = false;
+    }
+
     public synchronized void closed() {
         backend.stop(); sender = null; subscribed = false; interruptions.clear(); resumePending = false;
         prepareStartedMs = -1;

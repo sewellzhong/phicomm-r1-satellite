@@ -26,6 +26,7 @@ import android.util.Log;
 import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
 import dev.sewellzhong.r1probe.esphome.NativeAlarmController;
 import dev.sewellzhong.r1probe.esphome.NativeDndController;
+import dev.sewellzhong.r1probe.esphome.NativeMediaController;
 import dev.sewellzhong.r1probe.esphome.NativeSystemManager;
 import dev.sewellzhong.r1probe.esphome.NativeTimerController;
 import java.io.BufferedReader;
@@ -59,6 +60,7 @@ public final class NativeSatelliteService extends Service {
     private NativeDndController dnd;
     private NativeTimerAlarm timerAlarm;
     private NativeSystemManager systemManager;
+    private NativeMediaController mediaController;
     private TrustedWallClock civilClock;
     private long serviceStartedElapsed;
     private volatile boolean destroyed;
@@ -186,6 +188,17 @@ public final class NativeSatelliteService extends Service {
             @Override public boolean allowed() { return dnd.alarmsAllowed(); }
             @Override public void suppressed() { dnd.suppressedAlarm(); }
         });
+        mediaController = new NativeMediaController(new NativeUrlMediaPlayer(this),
+                new NativeMediaController.Volume() {
+                    @Override public float level() { return settings.volumePercent() / 100f; }
+                    @Override public void level(float value) {
+                        settings.setting("volume", Math.round(value * 100));
+                        new NativeVolume(NativeSatelliteService.this, settings).prepareOutput();
+                    }
+                }, () -> {
+                    NativeAudioRuntime current = audio;
+                    return current == null || current.mediaCanStart();
+                });
         persistentStateLoaded = true;
         updateHealthStore = new UpdateHealthReporter.PreferencesStore(this);
         updateBootIdentity = UpdateHealthReporter.bootIdentity();
@@ -320,7 +333,8 @@ public final class NativeSatelliteService extends Service {
                             boolean permitted = audioPermitted();
                             NativeAudioRuntime current = new NativeAudioRuntime(this,
                                     settings.listening() && permitted && !privacy.muted(),
-                                    this::audioPermitted, timers, alarms, dnd, systemManager, civilClock);
+                                    this::audioPermitted, timers, alarms, dnd, systemManager, civilClock,
+                                    mediaController);
                             current.diagnostic(diagnostic);
                             audio = current;
                             byte[] key = settings.key();
@@ -348,6 +362,8 @@ public final class NativeSatelliteService extends Service {
                                     Thread.sleep(100);
                                 }
                                 audio = null;
+                                try { mediaController.tick(); }
+                                catch (IOException ignored) { }
                             }
                             if (!destroyed) Thread.sleep(250);
                         } catch (SocketTimeoutException ignored) { }
@@ -757,6 +773,7 @@ public final class NativeSatelliteService extends Service {
         if (controller != null) {
             try { controller.join(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
+        if (mediaController != null) mediaController.closed();
         // Socket close wakes the owner; allow its cleanup/finally blocks to finish normally.
         stopForeground(true);
         super.onDestroy();

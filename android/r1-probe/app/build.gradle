@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("125")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.25-dnd-schedule-validation")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("126")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.26-media-reconnect-ownership")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

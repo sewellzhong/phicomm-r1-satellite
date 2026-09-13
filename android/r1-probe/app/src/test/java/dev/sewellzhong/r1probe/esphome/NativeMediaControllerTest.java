@@ -125,4 +125,18 @@ public final class NativeMediaControllerTest {
         controller.release(NativeMediaController.Interruption.VOICE);controller.tick();
         assertEquals(NativeMediaController.State.IDLE,backend.state);
     }
+
+    @Test public void voiceConnectionLossPreservesConditionalMediaResume() throws Exception {
+        connect(); backend.state=NativeMediaController.State.PLAYING;
+        controller.interrupt(NativeMediaController.Interruption.VOICE);
+        assertEquals(NativeMediaController.State.PAUSED,backend.state);
+        controller.disconnected();controller.tick();
+        assertEquals(NativeMediaController.State.PLAYING,backend.state);
+
+        controller.interrupt(NativeMediaController.Interruption.VOICE);
+        controller.message(MessageIds.MediaPlayerCommandRequest,
+                request(EsphomeApi.MediaPlayerCommand.MEDIA_PLAYER_COMMAND_STOP));
+        controller.disconnected();controller.tick();
+        assertEquals(NativeMediaController.State.IDLE,backend.state);
+    }
 }

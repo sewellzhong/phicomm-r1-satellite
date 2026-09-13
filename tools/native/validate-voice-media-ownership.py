@@ -65,7 +65,8 @@ def cancel_voice(device, cancels_before):
     return wait_state(
         device,
         lambda value: (value.get("status") == "listening"
-                       and audio(value).get("fixed_pcm_cancels") == cancels_before + 1),
+                       and isinstance(value.get("audio"), dict)
+                       and value["audio"].get("fixed_pcm_cancels") == cancels_before + 1),
         "voice_cancel_release_not_confirmed", 15)
 
 

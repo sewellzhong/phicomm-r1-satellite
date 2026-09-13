@@ -269,39 +269,46 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private volatile long lastRead;
     private volatile String failure;
     private volatile String status = "waiting_subscription";
+    private final boolean ownsMedia;
     private Thread capture;
     private volatile Thread recorderStopper;
     private AudioRecord stopTarget;
 
     public NativeAudioRuntime(Context context) {
-        this(context, true, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null, null, null, null);
+        this(context, true, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null, null, null, null, null, null);
     }
     public NativeAudioRuntime(Context context, boolean listen) {
-        this(context, listen, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null, null, null, null);
+        this(context, listen, () -> FactoryAudioIsolation.permitsAudio(FactoryAudioIsolation.inspect(context)), null, null, null, null, null, null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission) {
-        this(context, listen, permission, null, null, null, null);
+        this(context, listen, permission, null, null, null, null, null, null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
             NativeTimerController timers) {
-        this(context, listen, permission, timers, null, null, null);
+        this(context, listen, permission, timers, null, null, null, null, null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
             NativeTimerController timers, NativeAlarmController alarms) {
-        this(context, listen, permission, timers, alarms, null, null);
+        this(context, listen, permission, timers, alarms, null, null, null, null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
             NativeTimerController timers, NativeAlarmController alarms, NativeDndController dnd) {
-        this(context, listen, permission, timers, alarms, dnd, null);
+        this(context, listen, permission, timers, alarms, dnd, null, null, null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
             NativeTimerController timers, NativeAlarmController alarms, NativeDndController dnd,
             NativeSystemManager system) {
-        this(context, listen, permission, timers, alarms, dnd, system, null);
+        this(context, listen, permission, timers, alarms, dnd, system, null, null);
     }
     NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
             NativeTimerController timers, NativeAlarmController alarms, NativeDndController dnd,
             NativeSystemManager system, TrustedWallClock civilClock) {
+        this(context, listen, permission, timers, alarms, dnd, system, civilClock, null);
+    }
+    NativeAudioRuntime(Context context, boolean listen, AudioPermission permission,
+            NativeTimerController timers, NativeAlarmController alarms, NativeDndController dnd,
+            NativeSystemManager system, TrustedWallClock civilClock,
+            NativeMediaController sharedMedia) {
         this.context = context.getApplicationContext();
         this.listen = listen;
         this.permission = permission;
@@ -338,16 +345,21 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         });
         coordinator = new NativeAudioCoordinator(playback, () -> System.nanoTime() / 1_000_000L,
                 this::diagnosticEvent);
-        NativeUrlMediaPlayer mediaBackend = new NativeUrlMediaPlayer(this.context);
-        media = new NativeMediaController(mediaBackend, new NativeMediaController.Volume() {
-            @Override public float level() { return settings.volumePercent() / 100f; }
-            @Override public void level(float value) {
-                settings.setting("volume", Math.round(value * 100));
-                new NativeVolume(NativeAudioRuntime.this.context, settings).prepareOutput();
-            }
-        }, () -> coordinator.ready() && !announcements.active()
-                && (NativeAudioRuntime.this.timers == null || !NativeAudioRuntime.this.timers.ringing()));
+        ownsMedia = sharedMedia == null;
+        if (sharedMedia != null) media = sharedMedia;
+        else {
+            NativeUrlMediaPlayer mediaBackend = new NativeUrlMediaPlayer(this.context);
+            media = new NativeMediaController(mediaBackend, new NativeMediaController.Volume() {
+                @Override public float level() { return settings.volumePercent() / 100f; }
+                @Override public void level(float value) {
+                    settings.setting("volume", Math.round(value * 100));
+                    new NativeVolume(NativeAudioRuntime.this.context, settings).prepareOutput();
+                }
+            }, this::mediaCanStart);
+        }
     }
+    boolean mediaCanStart() { return coordinator.ready() && !announcements.active()
+            && (timers == null || !timers.ringing()); }
     @Override public void synchronizedTime(long epochSeconds) {
         if (civilClock != null) civilClock.synchronize(epochSeconds);
     }
@@ -490,7 +502,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     @Override public void closed() {
         if (!stopping.compareAndSet(false, true)) return;
         if(diagnostic!=null) diagnostic.stop("connection_closed");
-        stopRecorder(); announcements.closed(); media.closed(); coordinator.closed();
+        stopRecorder(); announcements.closed(); coordinator.closed();
+        if (ownsMedia) media.closed(); else media.disconnected();
         new NativeVolume(context, settings).restoreOutput();
         if (capture != null) capture.interrupt();
         status = "closed";
