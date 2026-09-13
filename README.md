@@ -60,6 +60,8 @@ U9已完成[包管理变更有界执行器](docs/2026-09-13-r1-update-mutation-e
 
 U9实机取证现已完成：首个计划实际观察到v118并恢复v102，但因3448成功输出包含固定`pkg: <路径>`前缀而保守记为失败；旧证据原样保留。解析器收紧为只接受单行`Success`或与本次固定APK路径逐字匹配的两行格式，修正提交`5522b10`通过完整门禁。基于新v6只读证据的第二计划`ab082fad…a3c6ed0`随后通过：v102→v118→v102均有返回、版本和APK哈希独立证据，未触发紧急回退，最终Enforcing、监听、音频打开、Noise和原包隔离恢复。固定argv后端据此接入独立API22/ARMv7监督器；Java helper已在首台用只读原生探针实际回读v102/v118的包名、版本、哈希和相同单一签名。init/专用Enforcing模板尚未部署，独立健康门闩和自动失败回滚仍待boot候选与实机验证。详见[包管理实机记录](docs/2026-09-13-r1-update-package-manager-device.md)和[设备后端记录](docs/2026-09-13-r1-update-device-backend-host.md)。
 
+U11已完成独立监督器的首台 Enforcing boot 部署。最终 candidate 18 boot 为`ae593541…9f380c`，每轮均执行当前boot双读、单写、复位前完整读回；candidate 8～17的ART、socket和Binder权限失败全部保留并逐轮精确回退。当前监督器在专用域运行，UID 10010/0600 SEQPACKET socket已监听，真实PackageManager只读身份自检出现`update_supervisor_identity_ready`；普通整机重启后再次通过。设备仍为精确v102 APK哈希`3ab44785…98f0f4`，Enforcing、原厂音频代理、`listening/audio_opened`、Noise连接和原包隔离恢复。该结果只通过监督器部署/身份门槛，尚未验证v118候选提交、四项健康、失败注入与自动回滚，R0仍为pending。详见[U11实机记录](docs/2026-09-13-r1-update-supervisor-boot-device.md)。下一步先构建同签名统一候选，再在该监督器上自动验证成功更新和失败回滚；之后统一执行v103～v118核心功能实机回归，网络/IP恢复与72小时稳定性仍留到最终候选。
+
 必要配置和状态统一支持语音与 HA 管理：可写配置查询/修改，只读状态查询/展示，共用确认结果并明确失败、离线和待同步状态。闹钟通过语音或 HA 创建/设置，全部已有闹钟在 HA 显示，R1 本地保存并执行；语音管理仍依赖 HA 中文链路。
 
 2026-09-07 已完成[功能盘点与需求合并](docs/2026-09-07-r1-feature-requirements.md)文档。WAN 阻断下的可回退原厂链窗口已经完成；Android布局盘点及Loader可见7.814 GB image空间的双读、逐块和整体校验均已完成。免拆软件Maskrom可达，但三枚不同官方RAM Loader候选均未进入Loader，且已禁止重发；设备已恢复Android。共同失败离线审计排除主机工具核心传输算法差异。只有以后取得缺失首4 MiB、合成完整eMMC副本并复读，且验证不依赖Android的恢复入口后，才能把R0写成通过并进行受控完整回刷。后续开发按2026-09-11免拆分级授权，可在R0 pending时依据最小必要证据推进精确命名的boot/system/recovery操作；这不改变R0状态，也不授权Loader、分区表、首4 MiB、擦除或格式化。热点网页配网保留 v79 待复测状态，不因权限放宽自动绕过配网安全门槛。
