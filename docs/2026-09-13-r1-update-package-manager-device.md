@@ -30,3 +30,17 @@ Git忽略目录`test-results/2026-09-13-r1-sample01-update/mutation-execution-81
 首次计划及失败证据不覆盖、不删除、不重复消费。重新只读采集的v6证据仍确认v102/3448/Enforcing，
 并据此封存新的`mutation-plan-v2.json`。只有解析修正完成统一主机门禁并提交后，才允许用新计划再执行
 一次v102→v118→v102；该结果仍只是固定argv后端取证，不是独立监督器自动更新/回滚交付。
+
+## 修正后第二次执行
+
+解析修正提交`5522b10`通过完整主机门禁后，基于v6只读证据的新计划
+`ab082fadb2b0886640428edcfc2d3cf5b06b60fe4c7c4a5dbca53e749a3c6ed0`执行通过：
+
+- 升级返回精确两行格式，独立回读v118及APK SHA-256 `d9262dbd…d890`；
+- `-d`显式降级返回相同有界格式，独立回读v102及精确原哈希；
+- `emergency_rollback_attempted=false`、`rollback_restored=true`，暂存文件清理成功；
+- 最终再次独立确认Enforcing、`listening`、`audio_opened=true`、原包隔离和Noise连接恢复。
+
+0600结果保存在Git忽略目录
+`test-results/2026-09-13-r1-sample01-update/mutation-execution-ab082fadb2b08866.json`。
+结论仅为3448固定argv升级/显式降级后端证据通过；监督器独立健康门闩、失败注入和自动回滚仍待部署验证。

@@ -1,0 +1,28 @@
+type r1_update_supervisor, domain;
+type r1_update_supervisor_exec, exec_type, file_type;
+type r1_update_supervisor_helper, file_type;
+type r1_update_supervisor_socket, file_type;
+type r1_update_supervisor_data, file_type, data_file_type;
+
+init_daemon_domain(r1_update_supervisor)
+allow init r1_update_supervisor_socket:sock_file { create open write getattr setattr unlink };
+allow r1_update_supervisor init:fd use;
+allow r1_update_supervisor r1_update_supervisor_socket:sock_file { open read write getattr };
+allow r1_update_supervisor self:unix_seqpacket_socket { accept read write getattr getopt setopt shutdown };
+allow untrusted_app r1_update_supervisor_socket:sock_file { open read write getattr };
+allow untrusted_app r1_update_supervisor:unix_seqpacket_socket connectto;
+
+allow r1_update_supervisor r1_update_supervisor_data:dir { create open read write search add_name remove_name getattr setattr fsync };
+allow r1_update_supervisor r1_update_supervisor_data:file { create open read write getattr setattr rename unlink fsync };
+allow r1_update_supervisor r1_update_supervisor_helper:file { open read getattr };
+
+# app_process/pm.jar and immutable framework/runtime inputs. PackageManager Binder
+# and data-file rules are added only after a read-only boot probe records 3448 AVCs.
+allow r1_update_supervisor system_file:dir { open read search getattr };
+allow r1_update_supervisor system_file:file { open read execute execute_no_trans getattr };
+allow r1_update_supervisor rootfs:dir { open read search getattr };
+allow r1_update_supervisor rootfs:file { entrypoint open read execute getattr };
+allow r1_update_supervisor proc:file { open read getattr };
+allow r1_update_supervisor shell_exec:file { open read execute execute_no_trans getattr };
+
+# No unrelated device, transport, debugging, or permissive grant.

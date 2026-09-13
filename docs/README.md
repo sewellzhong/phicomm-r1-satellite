@@ -33,6 +33,7 @@
 
 ## 阶段与版本记录
 
+- [2026-09-13-r1-update-device-backend-host](2026-09-13-r1-update-device-backend-host.md)
 - [2026-09-13-r1-update-package-manager-device](2026-09-13-r1-update-package-manager-device.md)
 - [2026-09-13-r1-update-mutation-executor-host](2026-09-13-r1-update-mutation-executor-host.md)
 - [2026-09-13-r1-update-mutation-plan-host](2026-09-13-r1-update-mutation-plan-host.md)

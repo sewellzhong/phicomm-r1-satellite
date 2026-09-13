@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 project(r1_update_agent LANGUAGES CXX)
 
 add_library(r1-update-policy STATIC
+  src/android_package_manager_backend.cpp
   src/package_orchestrator.cpp
   src/update_protocol.cpp
   src/update_policy.cpp
@@ -48,6 +49,14 @@ if(NOT ANDROID)
   target_compile_options(r1-update-supervisor-test PRIVATE -Wall -Wextra -Werror)
   add_dependencies(r1-update-supervisor-test r1-update-supervisor-host)
   add_test(NAME r1-update-supervisor-test COMMAND r1-update-supervisor-test)
+
+  add_executable(r1-update-android-backend-test
+    tests/android_package_manager_backend_test.cpp)
+  target_link_libraries(r1-update-android-backend-test PRIVATE r1-update-policy)
+  target_compile_options(r1-update-android-backend-test PRIVATE
+    -Wall -Wextra -Werror)
+  add_test(NAME r1-update-android-backend-test
+    COMMAND r1-update-android-backend-test)
 endif()
 
 if(ANDROID)
@@ -64,4 +73,18 @@ if(ANDROID)
   target_link_options(r1_update_client PRIVATE "-Wl,--hash-style=both" "-Wl,--gc-sections")
   set_target_properties(r1_update_client PROPERTIES
     CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+
+  add_executable(r1-update-supervisor src/supervisor_main.cpp)
+  target_link_libraries(r1-update-supervisor PRIVATE r1-update-policy)
+  target_compile_features(r1-update-supervisor PRIVATE cxx_std_17)
+  target_compile_options(r1-update-supervisor PRIVATE -Wall -Wextra -Werror)
+  target_link_options(r1-update-supervisor PRIVATE
+    "-Wl,--hash-style=both" "-Wl,--gc-sections")
+
+  add_executable(r1-update-backend-probe tests/android_backend_probe_main.cpp)
+  target_link_libraries(r1-update-backend-probe PRIVATE r1-update-policy)
+  target_compile_features(r1-update-backend-probe PRIVATE cxx_std_17)
+  target_compile_options(r1-update-backend-probe PRIVATE -Wall -Wextra -Werror)
+  target_link_options(r1-update-backend-probe PRIVATE
+    "-Wl,--hash-style=both" "-Wl,--gc-sections")
 endif()

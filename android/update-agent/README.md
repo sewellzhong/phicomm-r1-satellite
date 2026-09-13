@@ -77,14 +77,16 @@ plan-derived one-shot report path; revalidates every local and live identity;
 stages only hash-derived fixed names; and accepts a package-manager return only
 with an independent installed APK readback. A failed operation first checks for
 the exact rollback state and permits at most one emergency downgrade attempt.
-Host tests exercise this contract, but the real sealed plan remains unconsumed.
+Host tests exercise this contract. The second sealed plan has now passed on the
+3448 device and proved the exact fixed-argv upgrade and explicit downgrade
+return shape; this remains backend evidence rather than OTA delivery.
 
-This directory still does **not** ship a device root daemon executable, a real
-Android PackageManager implementation, init service, or deployable SELinux
-policy. The read-only collector confirmed the v102 package baseline on the R1,
-but no exact v102 rollback APK has yet passed the mutation-plan gate and no
-install/downgrade return values have been collected. There is no authenticated remote candidate delivery path yet; the
+This directory now builds a device root daemon, a fixed Android PackageManager
+backend, a package-identity helper, and device-locked init/SELinux templates.
+The helper and backend read path have passed a temporary, read-only ARMv7 probe;
+the init and policy have not been installed or validated in their dedicated
+domain, and automatic rollback has not run on the device. There is no authenticated remote candidate delivery path yet; the
 app-private inbox is a maintenance boundary, not OTA download support. Device
 deployment still requires a root-owned non-writable socket parent, no network
 or block access, and real firmware-3448 AVC/package-manager evidence. Until
-then, this is host-validated groundwork and is not an OTA or R1 result.
+then, this is partial host/device groundwork and is not an OTA result.
