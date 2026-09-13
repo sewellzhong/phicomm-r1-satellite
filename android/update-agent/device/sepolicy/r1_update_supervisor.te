@@ -7,7 +7,7 @@ allow init r1_update_supervisor:process { transition rlimitinh siginh noatsecure
 allow r1_update_supervisor self:file { entrypoint open read execute getattr create write setattr rename unlink };
 allow init r1_update_supervisor:unix_stream_socket { create bind listen setopt getattr };
 allow init r1_update_supervisor:sock_file { create open write getattr setattr unlink };
-allow init r1_update_supervisor:dir { create getattr setattr };
+allow init r1_update_supervisor:dir { create open read search getattr setattr };
 allow r1_update_supervisor init:fd use;
 allow r1_update_supervisor kernel:fd use;
 allow r1_update_supervisor init:process sigchld;
@@ -18,6 +18,8 @@ allow r1_update_supervisor rootfs:file { entrypoint open read execute getattr };
 allow r1_update_supervisor rootfs:lnk_file { read getattr };
 allow r1_update_supervisor labeledfs:filesystem associate;
 allow r1_update_supervisor tmpfs:filesystem associate;
+allow r1_update_supervisor device:dir { search getattr };
+allow r1_update_supervisor socket_device:dir search;
 allow r1_update_supervisor system_file:dir { open read search getattr };
 allow r1_update_supervisor system_file:file { open read execute execute_no_trans getattr };
 allow r1_update_supervisor system_file:lnk_file { read getattr };
