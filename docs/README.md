@@ -33,6 +33,7 @@
 
 ## 阶段与版本记录
 
+- [2026-09-14-r1-v125-dnd-schedule-device](2026-09-14-r1-v125-dnd-schedule-device.md)
 - [2026-09-14-r1-v124-system-control-device](2026-09-14-r1-v124-system-control-device.md)
 - [2026-09-13-r1-v122-core-regression](2026-09-13-r1-v122-core-regression.md)
 - [2026-09-13-r1-update-supervisor-boot-device](2026-09-13-r1-update-supervisor-boot-device.md)
