@@ -33,6 +33,7 @@
 
 ## 阶段与版本记录
 
+- [2026-09-14-r1-v125-alarm-media-ownership-device](2026-09-14-r1-v125-alarm-media-ownership-device.md)
 - [2026-09-14-r1-v125-alarm-runtime-device](2026-09-14-r1-v125-alarm-runtime-device.md)
 - [2026-09-14-r1-v125-alarm-sync-device](2026-09-14-r1-v125-alarm-sync-device.md)
 - [2026-09-14-r1-v125-dnd-schedule-device](2026-09-14-r1-v125-dnd-schedule-device.md)
