@@ -12,6 +12,8 @@ JAVA = ROOT / (
 class DeviceSupervisorTemplateTest(unittest.TestCase):
     def test_init_is_device_uid_bound_and_uses_inherited_seqpacket(self):
         value = (DEVICE / "init.r1_update_supervisor.rc").read_text()
+        self.assertIn("service r1_update /sbin/r1-update-supervisor", value)
+        self.assertNotIn("service r1_update_supervisor ", value)
         self.assertIn("mkdir /data/misc/r1_update 0700 root root", value)
         self.assertIn("seclabel u:r:r1_update_supervisor:s0", value)
         self.assertIn("socket r1_update_supervisor seqpacket 0600 10010 10010", value)

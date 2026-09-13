@@ -32,6 +32,7 @@ RULES = (
     ("r1_update_supervisor", "r1_update_supervisor", "file", "entrypoint,open,read,execute,getattr"),
     ("init", "r1_update_supervisor", "unix_stream_socket", "create,bind,listen,setopt,getattr"),
     ("init", "r1_update_supervisor", "sock_file", "create,open,write,getattr,setattr,unlink"),
+    ("init", "r1_update_supervisor", "dir", "create,getattr,setattr"),
     ("r1_update_supervisor", "init", "fd", "use"),
     ("r1_update_supervisor", "kernel", "fd", "use"),
     ("r1_update_supervisor", "init", "process", "sigchld"),

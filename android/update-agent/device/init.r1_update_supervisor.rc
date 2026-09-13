@@ -1,9 +1,8 @@
 # Boot-ramdisk template for r1-sample01/3448. Deployment must revalidate UID 10010.
 on post-fs-data
     mkdir /data/misc/r1_update 0700 root root
-    restorecon_recursive /data/misc/r1_update
 
-service r1_update_supervisor /sbin/r1-update-supervisor
+service r1_update /sbin/r1-update-supervisor
     class main
     user root
     group root
@@ -12,6 +11,4 @@ service r1_update_supervisor /sbin/r1-update-supervisor
     disabled
 
 on property:sys.boot_completed=1
-    restorecon /sbin/r1-update-supervisor
-    restorecon /sbin/r1-update-helper.jar
-    start r1_update_supervisor
+    start r1_update
