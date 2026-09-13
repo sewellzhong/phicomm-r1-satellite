@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("118")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.18-update-client")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("119")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.19-supervised-update")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 
