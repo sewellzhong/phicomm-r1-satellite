@@ -11,7 +11,7 @@ allow init r1_update_supervisor:dir { create open read search getattr setattr re
 allow r1_update_supervisor init:fd use;
 allow r1_update_supervisor kernel:fd use;
 allow r1_update_supervisor init:process sigchld;
-allow r1_update_supervisor self:process { fork signal sigchld sigkill };
+allow r1_update_supervisor self:process { fork signal sigchld sigkill setpgid };
 allow r1_update_supervisor self:fifo_file { read write getattr };
 
 allow r1_update_supervisor rootfs:dir { open read search getattr };
@@ -25,6 +25,7 @@ allow r1_update_supervisor system_file:dir { open read search getattr };
 allow r1_update_supervisor system_file:file { open read execute execute_no_trans getattr };
 allow r1_update_supervisor system_file:lnk_file { read getattr };
 allow r1_update_supervisor zygote_exec:file { open read execute execute_no_trans getattr };
+allow r1_update_supervisor dex2oat_exec:file { open read execute execute_no_trans getattr };
 allow r1_update_supervisor proc:dir { open read search getattr };
 allow r1_update_supervisor proc:file { open read getattr };
 allow r1_update_supervisor proc:lnk_file read;
