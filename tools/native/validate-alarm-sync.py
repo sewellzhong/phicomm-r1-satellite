@@ -32,7 +32,7 @@ def require(condition, failure):
         raise RuntimeError(failure)
 
 
-def consume_token(path):
+def read_token(path):
     path = Path(path)
     info = path.lstat()
     require(stat.S_ISREG(info.st_mode) and not path.is_symlink(), "token_file_not_regular")
@@ -44,7 +44,6 @@ def consume_token(path):
     token = token[:-1]
     require(1 <= len(token) <= 4095 and not any(char.isspace() for char in token),
             "token_file_format_invalid")
-    path.unlink()
     return token
 
 
@@ -419,7 +418,7 @@ def main():
     parser.add_argument("--token-file", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    token = consume_token(args.token_file)
+    token = read_token(args.token_file)
     try:
         ha = HomeAssistant(args.ha_url, token)
         device = admin.Device(args.serial)

@@ -44,18 +44,18 @@ def page(request_id, offset, items, count, complete, version=7):
 
 
 class AlarmSyncValidationTests(unittest.TestCase):
-    def test_token_file_is_consumed_only_with_strict_private_mode(self):
+    def test_token_file_is_retained_only_with_strict_private_mode(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "token"
             path.write_text("secret-token\n")
             path.chmod(0o600)
-            self.assertEqual("secret-token", validation.consume_token(path))
-            self.assertFalse(path.exists())
+            self.assertEqual("secret-token", validation.read_token(path))
+            self.assertTrue(path.exists())
             loose = Path(directory) / "loose"
             loose.write_text("secret-token\n")
             loose.chmod(0o644)
             with self.assertRaisesRegex(RuntimeError, "token_file_mode_invalid"):
-                validation.consume_token(loose)
+                validation.read_token(loose)
             self.assertTrue(loose.exists())
 
     def test_token_symlink_is_rejected_without_deleting_target(self):
@@ -64,7 +64,7 @@ class AlarmSyncValidationTests(unittest.TestCase):
             target.write_text("secret-token\n"); target.chmod(0o600)
             link = Path(directory) / "link"; link.symlink_to(target)
             with self.assertRaisesRegex(RuntimeError, "token_file_not_regular"):
-                validation.consume_token(link)
+                validation.read_token(link)
             self.assertTrue(target.exists())
 
     def test_discovers_only_unique_alarm_entity_and_service(self):
