@@ -88,6 +88,7 @@ def main():
     for name in ('microfrontend', 'vad', 'noise'):
         run('bash', f'tools/build-r1-{name}.sh')
     run('bash', 'tools/build-r1-update-client.sh')
+    run('bash', 'tools/build-r1-system-control.sh')
     # Original synthetic development fixture, not licensed third-party speech.
     audio = io.BytesIO()
     with wave.open(audio, 'wb') as wav:

@@ -7,7 +7,7 @@ readonly COMMIT=e38bff264913e5bc2c8f18f67ec9f1017ace3982
 readonly BASE_PATCH="$ROOT_DIR/tools/factory_audio/patches/setools-android-e38-policy-v26-new-domain.patch"
 readonly REINDEX_PATCH="$ROOT_DIR/tools/update/patches/setools-android-reindex-new-types.patch"
 readonly OUTPUT="$SOURCE/libs/armeabi-v7a/sepolicy-inject"
-readonly EXPECTED=f004860e65f95d8444104de74464bae67fd3052ad624d9f598fa3b42479e3054
+readonly EXPECTED=c289bcf5f0011bdbfaa520d813b0103f1d878285f6750e1972a6089321ade055
 
 if [[ ! -d "$SOURCE/.git" ]]; then
   git clone https://github.com/xmikos/setools-android.git "$SOURCE"

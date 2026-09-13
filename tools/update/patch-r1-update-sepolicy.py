@@ -15,7 +15,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 DEVICE = "r1-sample01"
 FINGERPRINT = "Android/rk322x_echo/rk322x_echo:5.1.1/LMY49F/3448:user/release-keys"
-PATCHER_SHA256 = "f004860e65f95d8444104de74464bae67fd3052ad624d9f598fa3b42479e3054"
+PATCHER_SHA256 = "c289bcf5f0011bdbfaa520d813b0103f1d878285f6750e1972a6089321ade055"
 SOURCE_COMMIT = "e38bff264913e5bc2c8f18f67ec9f1017ace3982"
 BASE_POLICY_SHA256 = "96fa3164741296482362fe9e0d126c9f55b8316421ec0cf9e79939b6cf5f269a"
 FACTORY_PATCHER = ROOT / "tools/factory_audio/patch-device-sepolicy.py"

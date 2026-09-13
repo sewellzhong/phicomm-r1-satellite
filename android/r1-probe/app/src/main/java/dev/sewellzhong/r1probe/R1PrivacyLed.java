@@ -1,10 +1,6 @@
 package dev.sewellzhong.r1probe;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -12,16 +8,22 @@ import org.json.JSONObject;
 final class R1PrivacyLed implements R1PrivacyController.Indicator {
     enum State { OFF, DISCONNECTED, LISTENING, PROCESSING, PLAYING, PROVISIONING, MUTED }
     interface Node { int read() throws IOException; void write(int value) throws IOException; }
-    private static final String LED0 = "/sys/class/leds/multi_leds0/brightness";
-    private static final String LED1 = "/sys/class/leds/multi_leds1/brightness";
-    private final Node first, second;
+    interface Driver { int[] setAndRead(int first, int second) throws IOException; }
+    private final Driver driver;
     private String failure;
     private State confirmedState;
     private State requestedState;
     private boolean requestedDimmed;
+    private int actualFirst = -1, actualSecond = -1;
 
-    R1PrivacyLed() { this(fileNode(LED0), fileNode(LED1)); }
-    R1PrivacyLed(Node first, Node second) { this.first = first; this.second = second; }
+    R1PrivacyLed() { this(new SystemControlClient()); }
+    R1PrivacyLed(Driver driver) { this.driver = driver; }
+    R1PrivacyLed(final Node first, final Node second) {
+        this((requestedFirst, requestedSecond) -> {
+            first.write(requestedFirst); second.write(requestedSecond);
+            return new int[]{first.read(), second.read()};
+        });
+    }
 
     @Override public synchronized boolean showMuted(boolean muted) {
         return show(muted ? State.MUTED : State.OFF, false);
@@ -34,8 +36,10 @@ final class R1PrivacyLed implements R1PrivacyController.Indicator {
         requestedDimmed = dimmed;
         int[] levels = levels(state, dimmed);
         try {
-            first.write(levels[0]); second.write(levels[1]);
-            if (first.read() != levels[0] || second.read() != levels[1])
+            int[] actual = driver.setAndRead(levels[0], levels[1]);
+            if (actual == null || actual.length != 2) throw new IOException("led_reply_invalid");
+            actualFirst = actual[0]; actualSecond = actual[1];
+            if (actualFirst != levels[0] || actualSecond != levels[1])
                 throw new IOException("led_readback_mismatch");
             failure = null;
             confirmedState = state;
@@ -56,10 +60,8 @@ final class R1PrivacyLed implements R1PrivacyController.Indicator {
                         : confirmedState.name().toLowerCase(java.util.Locale.ROOT))
                 .put("confirmed", failure == null && requestedState == confirmedState)
                 .put("failure", failure == null ? JSONObject.NULL : failure);
-        try { result.put("led0", first.read()).put("led1", second.read()); }
-        catch (IOException | RuntimeException error) {
-            result.put("led0", JSONObject.NULL).put("led1", JSONObject.NULL);
-        }
+        result.put("led0", actualFirst < 0 ? JSONObject.NULL : actualFirst)
+                .put("led1", actualSecond < 0 ? JSONObject.NULL : actualSecond);
         return result;
     }
 
@@ -81,22 +83,4 @@ final class R1PrivacyLed implements R1PrivacyController.Indicator {
         return result;
     }
 
-    private static Node fileNode(final String path) {
-        return new Node() {
-            @Override public int read() throws IOException {
-                byte[] bytes = new byte[16];
-                try (FileInputStream input = new FileInputStream(new File(path))) {
-                    int count = input.read(bytes);
-                    if (count <= 0) throw new IOException("empty_led_state");
-                    return Integer.parseInt(new String(bytes, 0, count, StandardCharsets.US_ASCII).trim());
-                }
-            }
-            @Override public void write(int value) throws IOException {
-                try (FileOutputStream output = new FileOutputStream(new File(path))) {
-                    output.write(Integer.toString(value).getBytes(StandardCharsets.US_ASCII));
-                    output.flush();
-                }
-            }
-        };
-    }
 }

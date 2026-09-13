@@ -1,0 +1,26 @@
+# Dedicated domain: fixed LED nodes and whole-device reboot only.
+type r1_system_control, domain, exec_type, file_type;
+
+init_daemon_domain(r1_system_control)
+allow init r1_system_control:process { transition rlimitinh siginh noatsecure };
+allow r1_system_control init:fd use;
+allow r1_system_control kernel:fd use;
+allow r1_system_control init:process sigchld;
+allow r1_system_control rootfs:dir { search getattr };
+allow r1_system_control rootfs:file { entrypoint open read execute getattr };
+allow r1_system_control device:dir { search getattr };
+allow r1_system_control socket_device:dir search;
+allow r1_system_control sysfs:dir { open read search getattr };
+allow r1_system_control sysfs:file { open read write getattr };
+allow r1_system_control self:capability sys_boot;
+
+allow init r1_system_control:unix_stream_socket { create bind listen setopt getattr };
+allow init r1_system_control:sock_file { create open write getattr setattr unlink };
+allow r1_system_control self:unix_stream_socket { accept read write getattr getopt setopt shutdown };
+allow untrusted_app r1_system_control:sock_file { open read write getattr };
+allow untrusted_app r1_system_control:unix_stream_socket connectto;
+allow r1_system_control untrusted_app:unix_stream_socket { accept read write getattr getopt setopt };
+
+allow r1_system_control self:unix_dgram_socket { create connect write };
+allow r1_system_control logdw_socket:sock_file { open write getattr };
+allow r1_system_control logd:unix_dgram_socket sendto;

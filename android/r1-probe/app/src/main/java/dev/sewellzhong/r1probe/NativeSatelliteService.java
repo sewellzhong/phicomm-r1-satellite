@@ -577,9 +577,10 @@ public final class NativeSatelliteService extends Service {
         stopSelf();
     }
     private void rebootDevice() {
-        PowerManager power = (PowerManager) getSystemService(POWER_SERVICE);
-        if (power == null) throw new IllegalStateException("system_power_manager_unavailable");
-        power.reboot("r1_system_management");
+        try { new SystemControlClient().reboot(); }
+        catch (java.io.IOException error) {
+            throw new IllegalStateException("system_control_reboot_failed", error);
+        }
     }
     private JSONObject systemSnapshot() throws Exception {
         android.content.pm.PackageInfo packageInfo = getPackageManager().getPackageInfo(getPackageName(), 0);

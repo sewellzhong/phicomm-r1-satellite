@@ -1,0 +1,12 @@
+# r1-sample01/3448 only. Deployment must revalidate package UID 10010.
+service r1_system_control /sbin/r1-system-control-agent
+    class main
+    user root
+    group root
+    seclabel u:r:r1_system_control:s0
+    socket r1_system_control seqpacket 0600 10010 10010 u:object_r:r1_system_control:s0
+    disabled
+
+on property:sys.boot_completed=1
+    restorecon /sbin/r1-system-control-agent
+    start r1_system_control

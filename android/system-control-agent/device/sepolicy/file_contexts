@@ -1,0 +1,2 @@
+/sbin/r1-system-control-agent        u:object_r:r1_system_control:s0
+/dev/socket/r1_system_control        u:object_r:r1_system_control:s0
