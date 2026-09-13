@@ -69,6 +69,7 @@ RULES = (
     ("servicemanager", "r1_update_supervisor", "dir", "search"),
     ("servicemanager", "r1_update_supervisor", "file", "open,read"),
     ("servicemanager", "r1_update_supervisor", "process", "getattr"),
+    ("servicemanager", "r1_update_supervisor", "binder", "transfer"),
     ("r1_update_supervisor", "system_server", "binder", "call,transfer"),
     ("system_server", "r1_update_supervisor", "binder", "call,transfer"),
     ("r1_update_supervisor", "system_data_file", "dir", "open,read,search,getattr"),

@@ -48,6 +48,7 @@ allow r1_update_supervisor servicemanager:binder call;
 allow servicemanager r1_update_supervisor:dir search;
 allow servicemanager r1_update_supervisor:file { open read };
 allow servicemanager r1_update_supervisor:process getattr;
+allow servicemanager r1_update_supervisor:binder transfer;
 allow r1_update_supervisor system_server:binder { call transfer };
 allow system_server r1_update_supervisor:binder { call transfer };
 allow r1_update_supervisor system_data_file:dir { open read search getattr };
