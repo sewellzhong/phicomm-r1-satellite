@@ -78,6 +78,9 @@ final class NativeUrlMediaPlayer implements NativeMediaController.Backend {
 
     @Override public synchronized NativeMediaController.State state() { return state; }
     @Override public synchronized String failure() { return failure; }
+    @Override public synchronized boolean waitingForPreparation() {
+        return player != null && !prepared;
+    }
 
     private synchronized void prepared(long expected, MediaPlayer value) {
         if (expected != generation || value != player) { release(value); return; }

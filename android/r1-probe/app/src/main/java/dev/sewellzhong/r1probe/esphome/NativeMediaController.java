@@ -24,6 +24,7 @@ public final class NativeMediaController {
         void volume(float value);
         State state();
         String failure();
+        default boolean waitingForPreparation() { return state() == State.PREPARING; }
     }
 
     public interface Volume {
@@ -32,10 +33,14 @@ public final class NativeMediaController {
     }
 
     public interface Policy { boolean canStart(); }
+    interface Clock { long nowMs(); }
+
+    static final long PREPARE_TIMEOUT_MS = 15_000;
 
     private final Backend backend;
     private final Volume volume;
     private final Policy policy;
+    private final Clock clock;
     private NativeVoiceSession.Sender sender;
     private boolean subscribed;
     private State reportedState;
@@ -47,11 +52,16 @@ public final class NativeMediaController {
     private String lastFailure = "none";
     private final EnumSet<Interruption> interruptions = EnumSet.noneOf(Interruption.class);
     private boolean resumePending;
+    private long prepareStartedMs = -1;
 
     public NativeMediaController(Backend backend, Volume volume, Policy policy) {
-        if (backend == null || volume == null || policy == null)
+        this(backend, volume, policy, () -> System.nanoTime() / 1_000_000L);
+    }
+
+    NativeMediaController(Backend backend, Volume volume, Policy policy, Clock clock) {
+        if (backend == null || volume == null || policy == null || clock == null)
             throw new IllegalArgumentException("media_dependencies_required");
-        this.backend = backend; this.volume = volume; this.policy = policy;
+        this.backend = backend; this.volume = volume; this.policy = policy; this.clock = clock;
     }
 
     public void connected(NativeVoiceSession.Sender sender) { this.sender = sender; }
@@ -92,7 +102,10 @@ public final class NativeMediaController {
                 volume.level(requestedVolume);
                 backend.volume(requestedVolume);
             }
-            if (requestedUrl != null) backend.open(requestedUrl, volume.level());
+            if (requestedUrl != null) {
+                backend.open(requestedUrl, volume.level());
+                prepareStartedMs = backend.waitingForPreparation() ? clock.nowMs() : -1;
+            }
             if (command.getHasCommand()) apply(command.getCommand());
             if (requestedUrl == null && requestedVolume == null && !command.getHasCommand())
                 throw new IOException("media_empty_command");
@@ -132,6 +145,13 @@ public final class NativeMediaController {
     }
 
     public synchronized void tick() throws IOException {
+        if (prepareStartedMs >= 0) {
+            if (!backend.waitingForPreparation()) prepareStartedMs = -1;
+            else if (clock.nowMs() - prepareStartedMs >= PREPARE_TIMEOUT_MS) {
+                backend.stop(); prepareStartedMs = -1; resumePending = false;
+                failures++; lastFailure = "media_prepare_timeout";
+            }
+        }
         if (resumePending && interruptions.isEmpty() && policy.canStart()) {
             if (backend.state() == State.PAUSED) {
                 try { backend.play(); resumePending = false; }
@@ -165,6 +185,7 @@ public final class NativeMediaController {
 
     public synchronized void closed() {
         backend.stop(); sender = null; subscribed = false; interruptions.clear(); resumePending = false;
+        prepareStartedMs = -1;
         reportedState = null; reportedVolume = Float.NaN; reportedMuted = false;
     }
 

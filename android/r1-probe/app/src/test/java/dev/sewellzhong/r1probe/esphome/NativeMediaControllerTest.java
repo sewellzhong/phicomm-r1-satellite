@@ -32,7 +32,9 @@ public final class NativeMediaControllerTest {
     private final List<Integer> ids=new ArrayList<>();
     private final List<MessageLite> sent=new ArrayList<>();
     private boolean allowed=true;
-    private final NativeMediaController controller=new NativeMediaController(backend,volume,()->allowed);
+    private long nowMs;
+    private final NativeMediaController controller=
+            new NativeMediaController(backend,volume,()->allowed,()->nowMs);
 
     private void connect() { controller.connected((id,message)->{ids.add(id);sent.add(message);}); }
     private byte[] request(EsphomeApi.MediaPlayerCommand command) {
@@ -82,6 +84,19 @@ public final class NativeMediaControllerTest {
         controller.message(MessageIds.MediaPlayerCommandRequest,busy);
         assertNull(backend.url);assertEquals(NativeMediaController.State.IDLE,backend.state);
         assertEquals(5,controller.rejected());assertEquals("media_audio_busy",controller.lastFailure());
+    }
+
+    @Test public void preparationTimeoutFailsClosedAndReleasesBackend() throws Exception {
+        connect(); controller.message(MessageIds.SubscribeStatesRequest,new byte[0]);
+        byte[] start=EsphomeApi.MediaPlayerCommandRequest.newBuilder().setKey(NativeMediaController.KEY)
+                .setHasMediaUrl(true).setMediaUrl("http://ha.local/missing.wav").build().toByteArray();
+        controller.message(MessageIds.MediaPlayerCommandRequest,start);
+        nowMs=NativeMediaController.PREPARE_TIMEOUT_MS-1;controller.tick();
+        assertEquals(NativeMediaController.State.PREPARING,backend.state);
+        nowMs=NativeMediaController.PREPARE_TIMEOUT_MS;controller.tick();
+        assertEquals(NativeMediaController.State.IDLE,backend.state);
+        assertEquals(1,controller.failures());
+        assertEquals("media_prepare_timeout",controller.lastFailure());
     }
 
     @Test public void foreignKeyAndUnsupportedCommandsCannotControlBackend() throws Exception {
