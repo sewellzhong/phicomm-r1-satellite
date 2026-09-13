@@ -5,6 +5,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
 import android.os.IBinder;
+import android.util.Log;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -15,6 +16,7 @@ import java.security.MessageDigest;
 /** Fixed app_process helper used only by the independent root supervisor. */
 public final class PackageIdentityHelper {
     private static final String PACKAGE = "dev.sewellzhong.r1probe";
+    private static final String LOG_TAG = "R1UpdateIdentity";
     private static final long MIN_APK = 4096L;
     private static final long MAX_APK = 64L * 1024L * 1024L;
 
@@ -131,7 +133,11 @@ public final class PackageIdentityHelper {
             }
             emit(info, path);
         } catch (Throwable error) {
-            System.err.println("R1_PACKAGE_IDENTITY_FAILED:" + error.getClass().getSimpleName());
+            String failure = error.getClass().getSimpleName();
+            Throwable cause = error.getCause();
+            if (cause != null) failure += ":" + cause.getClass().getSimpleName();
+            Log.e(LOG_TAG, "R1_PACKAGE_IDENTITY_FAILED:" + failure);
+            System.err.println("R1_PACKAGE_IDENTITY_FAILED:" + failure);
             System.exit(2);
         }
     }
