@@ -57,6 +57,7 @@ void test_reads_identity_with_fixed_helper() {
         environment.begin(), environment.end(), "CLASSPATH=/sbin/helper.jar"));
     result->exit_code = 0;
     result->stdout_text = fixture.identity("/data/app/dev.sewellzhong.r1probe-1/base.apk");
+    result->stderr_text = "bounded ART diagnostic\n";
     return true;
   };
   r1_update::AndroidPackageManagerBackend backend(

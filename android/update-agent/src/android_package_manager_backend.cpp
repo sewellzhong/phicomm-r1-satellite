@@ -275,7 +275,10 @@ bool AndroidPackageManagerBackend::read_identity(
       kAppProcess, "/system/bin", kHelperClass, mode, value};
   if (!runner_(arguments, fixed_environment(helper_jar_), 30, &result, error))
     return false;
-  if (result.exit_code != 0 || !result.stderr_text.empty())
+  // ART and dex2oat may emit bounded diagnostics on stderr even when the
+  // fixed helper exits successfully. Identity remains authoritative only when
+  // the exit code and the complete, strictly parsed stdout record both pass.
+  if (result.exit_code != 0)
     return reject("update_identity_helper_failed", error);
   std::vector<std::string> lines;
   if (!split_lines(result.stdout_text, &lines) || lines.size() != 6
