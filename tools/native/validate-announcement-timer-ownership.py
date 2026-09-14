@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -50,14 +51,28 @@ def start_timer(ha, device, device_id, text, before, pause=time.sleep):
 
 
 def start_announcement(ha, device, entity_id, media_url, before, pause=time.sleep):
-    ha.announce(entity_id, media_url)
-    return wait_state(
+    outcome = {"error": None}
+    def request():
+        try:
+            ha.announce(entity_id, media_url)
+        except BaseException as error:
+            outcome["error"] = error
+    worker = threading.Thread(target=request, name="ha-announcement-request", daemon=True)
+    worker.start()
+    observed = wait_state(
         device,
         lambda state: (audio(state).get("announcement_active") is True
                        and audio(state).get("announcement_requests", 0)
                        > before.get("announcement_requests", 0)
                        and audio(state).get("media_state") == "paused"),
         "announcement_nested_owner_not_observed", 30, pause)
+    return observed, worker, outcome
+
+
+def finish_announcement_request(worker, outcome):
+    worker.join(10)
+    require(not worker.is_alive(), "ha_announcement_request_not_released")
+    require(outcome.get("error") is None, "ha_announcement_request_failed")
 
 
 def wait_timer_preemption(device, timer_before, announcement_before,
@@ -94,10 +109,11 @@ def run_round(device, ha, media_entity_id, media_url, satellite_entity_id,
                    "media_play_not_confirmed")
     start_timer(ha, device, device_id, start_text, timer_before, pause)
     before_announcement = audio(device.control({"action": "status"}))
-    nested = start_announcement(ha, device, satellite_entity_id, media_url,
-                                before_announcement, pause)
+    nested, announcement_worker, announcement_outcome = start_announcement(
+        ha, device, satellite_entity_id, media_url, before_announcement, pause)
     preempted = wait_timer_preemption(device, timer_before, before_announcement,
                                       90, pause)
+    finish_announcement_request(announcement_worker, announcement_outcome)
     if user_stops_media:
         timer_media.media_command(ha, media_entity_id, "media_stop")
         wait_state(device, lambda state: audio(state).get("media_state") == "idle",

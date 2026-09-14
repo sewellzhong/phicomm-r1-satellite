@@ -42,11 +42,23 @@ class AnnouncementTimerOwnershipValidationTests(unittest.TestCase):
         ha = HA()
         state = {"audio": {"announcement_active": True,
                            "announcement_requests": 2, "media_state": "paused"}}
-        observed = ownership.start_announcement(
+        observed, worker, outcome = ownership.start_announcement(
             ha, Device([state]), "assist_satellite.r1", "http://ha/a.wav",
             {"announcement_requests": 1}, pause=lambda _: None)
+        ownership.finish_announcement_request(worker, outcome)
         self.assertTrue(ownership.audio(observed)["announcement_active"])
         self.assertEqual("assist_satellite.r1", ha.announcements[0][0])
+
+    def test_announcement_request_failure_is_not_hidden(self):
+        class FailedHA(HA):
+            def announce(self, entity_id, media_url): raise RuntimeError("service_failed")
+        state = {"audio": {"announcement_active": True,
+                           "announcement_requests": 2, "media_state": "paused"}}
+        _, worker, outcome = ownership.start_announcement(
+            FailedHA(), Device([state]), "assist_satellite.r1", "http://ha/a.wav",
+            {"announcement_requests": 1}, pause=lambda _: None)
+        with self.assertRaisesRegex(RuntimeError, "ha_announcement_request_failed"):
+            ownership.finish_announcement_request(worker, outcome)
 
     def test_timer_preemption_requires_announcement_failure_and_paused_media(self):
         state = {"audio": {"timers": {"ringing_count": 1, "alarm_active": True},
