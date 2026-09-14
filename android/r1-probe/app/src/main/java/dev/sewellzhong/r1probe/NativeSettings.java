@@ -8,7 +8,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 /** Credentials live only in MODE_PRIVATE storage; Android backup is disabled. */
-final class NativeSettings {
+public final class NativeSettings {
     private final SharedPreferences prefs;
     NativeSettings(Context context) {
         prefs = context.getSharedPreferences("native-satellite", Context.MODE_PRIVATE);
@@ -47,12 +47,16 @@ final class NativeSettings {
         String value = prefs.getString("timer_ringtone", "classic");
         return "gentle".equals(value) || "urgent".equals(value) ? value : "classic";
     }
+    public String timerSoundId() {
+        String value = prefs.getString("timer_sound_id", "");
+        return value != null && value.matches("[a-z0-9][a-z0-9_-]{0,63}") ? value : "";
+    }
     synchronized void initializeVolume(int percent) {
         if (!prefs.contains("volume")) setting("volume", Math.max(0, Math.min(100, percent)));
     }
     float speechSpeed() { return prefs.getFloat("speech_speed", .85f); }
     synchronized void setting(String key, float value) { commit(prefs.edit().putFloat(key, value)); }
-    synchronized void setting(String key, String value) { commit(prefs.edit().putString(key, value)); }
+    public synchronized void setting(String key, String value) { commit(prefs.edit().putString(key, value)); }
     synchronized int adjustVolume(int delta) {
         int target = Math.max(0, Math.min(100, volumePercent() + delta));
         if (target != volumePercent()) commit(prefs.edit().putFloat("volume", target));

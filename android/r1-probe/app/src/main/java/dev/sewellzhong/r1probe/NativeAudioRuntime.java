@@ -12,6 +12,7 @@ import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
 import dev.sewellzhong.r1probe.esphome.NativeAnnouncementController;
 import dev.sewellzhong.r1probe.esphome.NativeAlarmController;
 import dev.sewellzhong.r1probe.esphome.NativeAlarmProtocol;
+import dev.sewellzhong.r1probe.esphome.NativeAlertAudioProtocol;
 import dev.sewellzhong.r1probe.esphome.NativeAudioCoordinator;
 import dev.sewellzhong.r1probe.esphome.NativeDndController;
 import dev.sewellzhong.r1probe.esphome.NativeDndProtocol;
@@ -168,6 +169,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     @Override public void listEntities(NativeVoiceSession.Sender sender) throws IOException {
         controls.list(sender);
         if (alarmProtocol != null) alarmProtocol.list(sender);
+        alertAudioProtocol.list(sender);
         if (dndProtocol != null) dndProtocol.list(sender);
         if (systemProtocol != null) systemProtocol.list(sender);
         media.list(sender);
@@ -176,6 +178,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private final NativePcmPlayback playback;
     private final NativeAnnouncementController announcements;
     private final NativeAlarmProtocol alarmProtocol;
+    private final NativeAlertAudioProtocol alertAudioProtocol;
     private final NativeAlarmController alarms;
     private final NativeDndController dnd;
     private final NativeDndProtocol dndProtocol;
@@ -320,6 +323,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         dndProtocol = dnd == null ? null : new NativeDndProtocol(dnd);
         systemProtocol = system == null ? null : new NativeSystemProtocol(system);
         settings = new NativeSettings(context);
+        alertAudioProtocol = new NativeAlertAudioProtocol(new NativeAlertAudioStore(context), settings, alarms);
         controls = new NativeControls(context, settings);
         wakeEnabled = settings.wakeEnabled();
         playback = new NativePcmPlayback(() -> {
@@ -438,6 +442,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         }
         if (controls.message(type, payload, sender)) return;
         if (alarmProtocol != null && alarmProtocol.message(type, payload, sender)) return;
+        if (alertAudioProtocol.message(type, payload, sender)) return;
         if (dndProtocol != null && dndProtocol.message(type, payload, sender)) return;
         if (systemProtocol != null && systemProtocol.message(type, payload, sender)) return;
         if (timers != null && timers.message(type, payload)) return;

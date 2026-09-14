@@ -1,13 +1,14 @@
 """Persistent, conflict-safe desired state for HA alarm writes made while R1 is offline."""
 from collections import OrderedDict
 from datetime import date
+import re
 
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.storage import Store
 
 
 EDITABLE_FIELDS = ('id', 'name', 'date', 'hour', 'minute', 'weekdays', 'enabled', 'snooze_minutes',
-                   'ringtone', 'volume_percent')
+                   'ringtone', 'volume_percent', 'sound_id')
 MAX_PENDING = 32
 
 
@@ -18,6 +19,7 @@ def editable(value):
     result = {key: value[key] for key in EDITABLE_FIELDS if key in value}
     result.setdefault('ringtone', 'classic')
     result.setdefault('volume_percent', 100)
+    result.setdefault('sound_id', '')
     return result
 
 
@@ -46,6 +48,8 @@ def valid_editable(value):
             and 0 <= value['weekdays'] <= 127 and 1 <= value['snooze_minutes'] <= 60
             and isinstance(value['enabled'], bool)
             and value['ringtone'] in ('classic', 'gentle', 'urgent')
+            and isinstance(value['sound_id'], str)
+            and (not value['sound_id'] or re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', value['sound_id']))
             and 1 <= value['volume_percent'] <= 100
             and bool(value['date']) != bool(value['weekdays']))
 
@@ -64,13 +68,13 @@ class AlarmPending:
             return
         try:
             items = value['items']
-            if value.get('schema') not in (1, 2) or not isinstance(items, list) or len(items) > MAX_PENDING:
+            if value.get('schema') not in (1, 2, 3) or not isinstance(items, list) or len(items) > MAX_PENDING:
                 raise ValueError
             restored = OrderedDict()
             for item in items:
                 alarm_id = item['id']
                 base, desired = item['base'], item['desired']
-                if value.get('schema') == 1:
+                if value.get('schema') in (1, 2):
                     base = editable(base)
                     desired = editable(desired)
                 if not isinstance(alarm_id, str) or not alarm_id or alarm_id in restored:
@@ -92,7 +96,7 @@ class AlarmPending:
             raise HomeAssistantError('r1_alarm_pending_store_invalid')
 
     async def _save(self):
-        await self._store.async_save({'schema': 2, 'items': list(self._items.values())})
+        await self._store.async_save({'schema': 3, 'items': list(self._items.values())})
 
     def items(self):
         return list(self._items.values())
@@ -124,6 +128,7 @@ class AlarmPending:
                     'snooze_minutes': values.get('snooze_minutes', 10),
                     'ringtone': values.get('ringtone', 'classic'),
                     'volume_percent': values.get('volume_percent', 100),
+                    'sound_id': values.get('sound_id', ''),
                 })
             except KeyError:
                 raise HomeAssistantError('r1_alarm_pending_request_invalid')

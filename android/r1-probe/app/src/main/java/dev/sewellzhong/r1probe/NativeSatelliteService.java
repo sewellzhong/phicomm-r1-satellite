@@ -181,6 +181,10 @@ public final class NativeSatelliteService extends Service {
             @Override public void start(String ringtone, int volumePercent, String promptText) {
                 timerAlarm.startAlarm(ringtone, volumePercent, promptText);
             }
+            @Override public void start(String ringtone, int volumePercent, String promptText,
+                    String soundId) {
+                timerAlarm.startAlarm(ringtone, volumePercent, promptText, soundId);
+            }
             @Override public void stop() { timerAlarm.stopAlarm(); }
             @Override public boolean active() { return timerAlarm.alarmActive(); }
             @Override public String failure() { return timerAlarm.failure(); }
@@ -503,6 +507,9 @@ public final class NativeSatelliteService extends Service {
                                     command.optString("date", ""), command.getInt("hour"),
                                     command.getInt("minute"), command.optInt("weekdays", 0),
                                     command.optBoolean("enabled", true), command.optInt("snooze_minutes", 10),
+                                    command.optString("ringtone", "classic"),
+                                    command.optInt("volume_percent", 100),
+                                    command.optString("sound_id", ""),
                                     command.optLong("expected_version", -1));
                             break;
                         case "alarm-delete":

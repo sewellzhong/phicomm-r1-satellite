@@ -27,6 +27,8 @@ public final class NativeTimerController {
         void stop();
         boolean active();
         String failure();
+        default String mode() { return "tone"; }
+        default long customFallbacks() { return 0; }
     }
     private static final int SCHEMA = 1;
     private static final int MAX_TIMERS = 32;
@@ -155,6 +157,7 @@ public final class NativeTimerController {
         return new JSONObject().put("active_count", active.size()).put("ringing_count", ringing.size())
                 .put("alarm_active", alarm.active()).put("alarm_failure",
                         alarm.failure() == null ? JSONObject.NULL : alarm.failure())
+                .put("alarm_mode", alarm.mode()).put("custom_audio_fallbacks", alarm.customFallbacks())
                 .put("timers", values).put("events", events).put("started", started)
                 .put("updated", updated).put("cancelled", cancelled).put("finished", finished)
                 .put("local_finished", localFinished).put("local_stops", localStops)

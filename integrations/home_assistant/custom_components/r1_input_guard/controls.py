@@ -73,6 +73,12 @@ def parse_control(text):
     text = re.sub(r'^(?:把|将)', '', text)
     wait = parse_wait(text)
     if wait: return wait
+    match = re.fullmatch(r'计时器(?:的)?(?:提示音|播放内容|声音)(?:设置为|设为|调成|改成)([a-z0-9][a-z0-9_-]{0,63})', text)
+    if match: return Control('timer_sound', 'choice', match[1])
+    if re.fullmatch(r'计时器(?:的)?(?:提示音|播放内容|声音)(?:恢复|改回)(?:默认|内置)(?:铃声)?', text):
+        return Control('timer_sound', 'choice', '')
+    if re.fullmatch(r'(?:现在|当前)?计时器(?:的)?(?:提示音|播放内容)(?:是)?(?:什么|哪个)', text):
+        return Control('timer_sound', 'query')
     match = re.fullmatch(r'计时器(?:的)?铃声(?:设置为|设为|调成|改成)(经典|柔和|紧急)(?:铃声)?', text)
     if match:
         return Control('timer_ringtone', 'choice', {'经典':'classic','柔和':'gentle','紧急':'urgent'}[match[1]])

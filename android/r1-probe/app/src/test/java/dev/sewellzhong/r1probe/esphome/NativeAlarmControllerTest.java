@@ -30,12 +30,15 @@ public final class NativeAlarmControllerTest {
         boolean active;
         int starts, stops;
         String failure;
-        String ringtone, promptText;
+        String ringtone, promptText, soundId;
         int volumePercent;
         public void start() { starts++; active = failure == null; }
         public void start(String ringtone, int volumePercent, String promptText) {
             this.ringtone = ringtone; this.volumePercent = volumePercent; this.promptText = promptText;
             start();
+        }
+        public void start(String ringtone, int volumePercent, String promptText, String soundId) {
+            this.soundId = soundId; start(ringtone, volumePercent, promptText);
         }
         public void stop() { stops++; active = false; }
         public boolean active() { return active; }
@@ -67,7 +70,7 @@ public final class NativeAlarmControllerTest {
                 "urgent", 45, -1);
         NativeAlarmController restored = new NativeAlarmController(store, clock, ringer);
         JSONObject configured = restored.snapshot().getJSONArray("alarms").getJSONObject(0);
-        assertEquals(2, restored.snapshot().getInt("schema"));
+        assertEquals(3, restored.snapshot().getInt("schema"));
         assertEquals("urgent", configured.getString("ringtone"));
         assertEquals(45, configured.getInt("volume_percent"));
         assertEquals("吃药时间到了", configured.getString("prompt_text"));
@@ -75,6 +78,30 @@ public final class NativeAlarmControllerTest {
         clock.advance(60_000); restored.tick();
         assertEquals("urgent", ringer.ringtone); assertEquals(45, ringer.volumePercent);
         assertEquals("吃药时间到了", ringer.promptText);
+    }
+
+    @Test public void localMusicIdIsPersistedAndAppliedWithoutChangingFallbackTone() throws Exception {
+        alarms.put("wake", "晨曲", "2026-09-12", 7, 1, 0, true, 10,
+                "gentle", 35, "morning-music", -1);
+        NativeAlarmController restored = new NativeAlarmController(store, clock, ringer);
+        JSONObject configured = restored.snapshot().getJSONArray("alarms").getJSONObject(0);
+        assertEquals("morning-music", configured.getString("sound_id"));
+        assertEquals("local_audio", configured.getString("prompt_mode"));
+        assertEquals("gentle", configured.getString("ringtone"));
+        clock.advance(60_000); restored.tick();
+        assertEquals("morning-music", ringer.soundId);
+        assertEquals("gentle", ringer.ringtone);
+    }
+
+    @Test public void schemaTwoAlarmRestoresWithNoCustomMusic() throws Exception {
+        alarms.put("wake", "旧闹钟", "2026-09-12", 7, 1, 0, true, 10,
+                "urgent", 50, -1);
+        store.value = store.value.replace("\"schema\":3", "\"schema\":2")
+                .replace(",\"sound_id\":\"\"", "");
+        NativeAlarmController restored = new NativeAlarmController(store, clock, ringer);
+        JSONObject configured = restored.snapshot().getJSONArray("alarms").getJSONObject(0);
+        assertEquals("", configured.getString("sound_id"));
+        assertEquals("tone_only", configured.getString("prompt_mode"));
     }
 
     @Test public void invalidSoundSettingsDoNotReplaceAlarm() throws Exception {

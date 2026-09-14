@@ -233,13 +233,26 @@ class NativeConversation(conversation.ConversationEntity):
                 return answer('请说明要调节音量还是语速，以及要调到多少。')
             label = {'volume':'音量','speech_speed':'语速','wait_seconds':'首次唤醒等待开口时间',
                      'followup_wait_seconds':'持续对话等待开口时间','timer_volume':'计时器铃声音量',
-                     'timer_ringtone':'计时器铃声'}[target]
-            current = owner.select(target) if target == 'timer_ringtone' else owner.number(target)
+                     'timer_ringtone':'计时器铃声','timer_sound':'计时器提示音'}[target]
+            current = ((owner.alert_audio_state or {}).get('timer_sound_id')
+                       if target == 'timer_sound' else
+                       owner.select(target) if target == 'timer_ringtone' else owner.number(target))
+            if target == 'timer_sound' and current is None:
+                return answer(f'{label}暂时不可用，没有修改设置。')
             if current is None: return answer(f'{label}暂时不可用，没有修改设置。')
             self._busy.add(key)
             try:
                 if command.operation == 'query':
                     value = current
+                elif target == 'timer_sound':
+                    if command.operation == 'query': value = current
+                    else:
+                        available = {item['id'] for item in (owner.alert_audio_state or {}).get('items', [])}
+                        if command.value and command.value not in available:
+                            return answer(f'没有找到本地音频{command.value}，没有修改。')
+                        state = await owner.alert_audio_request('timer_bind', id=command.value,
+                                                                context=user_input.context)
+                        value = state['timer_sound_id']; self._controls[key] = (target, now)
                 elif target == 'timer_ringtone':
                     value = await owner.set_timer_ringtone(command.value, user_input.context)
                     self._controls[key] = (target, now)
@@ -274,6 +287,8 @@ class NativeConversation(conversation.ConversationEntity):
                 if target == 'timer_ringtone':
                     shown = {'classic':'经典','gentle':'柔和','urgent':'紧急'}[value]
                     return answer(f'{label}现在是{shown}铃声。')
+                if target == 'timer_sound':
+                    return answer(f'{label}现在是{value}。' if value else f'{label}现在使用内置铃声。')
                 if target in time_targets:
                     return answer(f'{label}现在是{round(value)}秒。' + ('' if command.operation == 'query' else '下一轮收音生效。'))
                 percent = round(value if target in ('volume', 'timer_volume') else value * 100)

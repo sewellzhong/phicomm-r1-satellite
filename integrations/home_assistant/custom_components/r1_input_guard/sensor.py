@@ -21,6 +21,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         vol.Optional('snooze_minutes', default=10): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
         vol.Optional('ringtone', default='classic'): vol.In(('classic', 'gentle', 'urgent')),
         vol.Optional('volume_percent', default=100): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+        vol.Optional('sound_id', default=''): cv.string,
         vol.Optional('expected_version'): vol.All(vol.Coerce(int), vol.Range(min=0)),
     }, 'async_alarm_put')
     platform.async_register_entity_service('alarm_delete', {
@@ -38,6 +39,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
     platform.async_register_entity_service('alarm_pending_discard', {
         vol.Optional('id', default=''): cv.string,
     }, 'async_alarm_pending_discard')
+    platform.async_register_entity_service('alert_audio_upload', {
+        vol.Required('audio_id'): cv.string, vol.Required('file_name'): cv.string,
+        vol.Optional('bind_timer', default=False): cv.boolean,
+    }, 'async_alert_audio_upload')
+    platform.async_register_entity_service('alert_audio_delete', {
+        vol.Required('audio_id'): cv.string,
+    }, 'async_alert_audio_delete')
+    platform.async_register_entity_service('timer_audio_bind', {
+        vol.Optional('audio_id', default=''): cv.string,
+    }, 'async_timer_audio_bind')
     platform.async_register_entity_service('dnd_refresh', None, 'async_dnd_refresh')
     platform.async_register_entity_service('dnd_set', {
         vol.Required('manual'): cv.boolean,
@@ -80,6 +91,11 @@ class R1Alarms(SensorEntity):
         state['sync_status'] = self.owner.alarm_sync_status
         state['last_error'] = self.owner.alarm_last_error
         state['pending_changes'] = self.owner.alarm_pending.public()
+        audio = dict(getattr(self.owner, 'alert_audio_state', None) or {})
+        audio.pop('request_id', None); audio.pop('operation', None)
+        state['alert_audio'] = audio
+        state['alert_audio_sync_status'] = getattr(self.owner, 'alert_audio_sync_status', 'connecting')
+        state['alert_audio_last_error'] = getattr(self.owner, 'alert_audio_last_error', None)
         return state
 
     async def async_added_to_hass(self):
@@ -103,6 +119,12 @@ class R1Alarms(SensorEntity):
     async def async_alarm_stop(self, **values): await self.owner.alarm_request('stop', **values)
     async def async_alarm_snooze(self, **values): await self.owner.alarm_request('snooze', **values)
     async def async_alarm_pending_discard(self, **values): await self.owner.discard_alarm_pending(**values)
+    async def async_alert_audio_upload(self, audio_id, file_name, bind_timer=False):
+        await self.owner.upload_alert_audio(audio_id, file_name, bind_timer=bind_timer)
+    async def async_alert_audio_delete(self, audio_id):
+        await self.owner.alert_audio_request('delete', id=audio_id)
+    async def async_timer_audio_bind(self, audio_id=''):
+        await self.owner.alert_audio_request('timer_bind', id=audio_id)
 
 
 class R1DoNotDisturb(SensorEntity):

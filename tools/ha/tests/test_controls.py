@@ -25,7 +25,10 @@ class GrammarTest(unittest.TestCase):
         cases.update({'计时器铃声设为柔和':Control('timer_ringtone','choice','gentle'),
           '当前计时器铃声是什么':Control('timer_ringtone','query'),
           '计时器铃声音量调到百分之四十五':Control('timer_volume','percent',45),
-          '计时器音量是多少':Control('timer_volume','query')})
+          '计时器音量是多少':Control('timer_volume','query'),
+          '计时器提示音设置为tea-ready':Control('timer_sound','choice','tea-ready'),
+          '当前计时器提示音是什么':Control('timer_sound','query'),
+          '计时器提示音恢复默认铃声':Control('timer_sound','choice','')})
         for text, expected in cases.items():
             with self.subTest(text=text): self.assertEqual(expected,parse_control(text))
 
@@ -35,7 +38,8 @@ class ControlTest(unittest.IsolatedAsyncioTestCase):
                      'timer_volume':100,'timer_ringtone':'classic'}
         async def write(key, value, context): self.values[key]=value;return value
         self.owner=SimpleNamespace(device_id='r1',number=self.values.get,select=self.values.get,
-            set_volume=AsyncMock(side_effect=lambda v,c: None),set_speed=AsyncMock())
+            set_volume=AsyncMock(side_effect=lambda v,c: None),set_speed=AsyncMock(),
+            alert_audio_state={'timer_sound_id':'','items':[{'id':'tea-ready'}]})
         async def volume(v,c):return await write('volume',v,c)
         async def speed(v,c):return await write('speech_speed',v,c)
         async def timer_volume(v,c):return await write('timer_volume',v,c)
@@ -44,6 +48,10 @@ class ControlTest(unittest.IsolatedAsyncioTestCase):
         self.owner.set_wait=AsyncMock(side_effect=write)
         self.owner.set_timer_volume=AsyncMock(side_effect=timer_volume)
         self.owner.set_timer_ringtone=AsyncMock(side_effect=timer_ringtone)
+        async def alert_audio(operation, **values):
+            self.owner.alert_audio_state['timer_sound_id']=values['id']
+            return self.owner.alert_audio_state
+        self.owner.alert_audio_request=AsyncMock(side_effect=alert_audio)
         self.agent=NativeConversation(SimpleNamespace(entry_id='test',data={'conversation_registry_id':'router'}))
         self.agent.hass=SimpleNamespace(data={'r1_input_guard_interaction':{'test':self.owner}})
     async def ask(self,text,device='r1',session='same'):
@@ -76,6 +84,9 @@ class ControlTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn('45',await self.ask('计时器铃声音量调到百分之四十五'))
         self.assertEqual(45,self.values['timer_volume'])
         self.assertIn('范围',await self.ask('计时器铃声音量调到0%'))
+        self.assertIn('tea-ready',await self.ask('计时器提示音设置为tea-ready'))
+        self.assertEqual('tea-ready',self.owner.alert_audio_state['timer_sound_id'])
+        self.assertIn('内置铃声',await self.ask('计时器提示音恢复默认铃声'))
 
 class TtsCacheTest(unittest.TestCase):
     def test_speed_changes_default_options_used_by_ha_cache_key(self):

@@ -28,6 +28,7 @@ class AlarmVoiceCommand:
     enabled: bool | None = None
     ringtone: str | None = None
     volume_percent: int | None = None
+    sound_id: str | None = None
     issue: str | None = None
 
 
@@ -156,6 +157,12 @@ def parse_alarm_voice(text, today=None):
     """Return only fully anchored local-alarm commands; unrelated language stays delegated."""
     text = _normalize(text)
     today = today or date.today()
+    match = re.fullmatch(r"(?:把|将)?(.+?)闹钟(?:的)?(?:音乐|提示音)(?:设置为|设为|改成|调成)([a-z0-9][a-z0-9_-]{0,63})", text)
+    if match:
+        return AlarmVoiceCommand("sound", name=match[1].removeprefix("我的"), sound_id=match[2])
+    match = re.fullmatch(r"(?:把|将)?(.+?)闹钟(?:的)?(?:音乐|提示音)(?:恢复|改回)(?:默认|内置)(?:铃声)?", text)
+    if match:
+        return AlarmVoiceCommand("sound", name=match[1].removeprefix("我的"), sound_id="")
     match = re.fullmatch(r"(?:把|将)?(.+?)闹钟(?:的)?铃声(?:设置为|设为|改成|调成)(经典|柔和|紧急)(?:铃声)?", text)
     if match:
         return AlarmVoiceCommand("sound", name=match[1].removeprefix("我的"),
@@ -264,8 +271,9 @@ async def execute_alarm_voice(owner, command, context=None):
                       "待同步" if item['id'] in pending_states else
                       "已启用" if item.get('enabled') else "已停用")
             tone = {"classic": "经典", "gentle": "柔和", "urgent": "紧急"}.get(item.get('ringtone'), "未知")
+            custom = f"，本地音乐{item['sound_id']}" if item.get('sound_id') else ""
             details.append(f"{item.get('name') or '未命名闹钟'}，{_schedule_text(item)}，{status}，"
-                           f"{tone}铃声，音量百分之{item.get('volume_percent', 100)}")
+                           f"{tone}铃声{custom}，音量百分之{item.get('volume_percent', 100)}")
         summaries = []
         if pending_states:
             conflicts = sum(bool(item.get('blocked')) for item in pending_states.values())
@@ -283,6 +291,7 @@ async def execute_alarm_voice(owner, command, context=None):
                   'date': command.date_value or '', 'hour': command.hour, 'minute': command.minute,
                   'weekdays': command.weekdays or 0, 'enabled': True, 'snooze_minutes': 10,
                   'ringtone': 'classic', 'volume_percent': 100,
+                  'sound_id': '',
                   'expected_version': owner.alarm_state['version']}
         action = "创建"
     else:
@@ -315,8 +324,13 @@ async def execute_alarm_voice(owner, command, context=None):
                 values['ringtone'] = command.ringtone
             if command.volume_percent is not None:
                 values['volume_percent'] = command.volume_percent
+            if command.sound_id is not None:
+                available = {item['id'] for item in (owner.alert_audio_state or {}).get('items', [])}
+                if command.sound_id and command.sound_id not in available:
+                    return f"没有找到本地音频{command.sound_id}，没有修改。"
+                values['sound_id'] = command.sound_id
             values['expected_version'] = owner.alarm_state['version']
-            action = "铃声和音量设置"
+            action = "播放内容设置" if command.sound_id is not None else "铃声和音量设置"
     try:
         operation = 'delete' if command.operation == 'delete' else \
             'enable' if command.operation == 'enable' else 'put'

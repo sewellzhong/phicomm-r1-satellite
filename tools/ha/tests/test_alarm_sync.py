@@ -14,11 +14,12 @@ def state(request, version=3, alarms=None, total=None):
         'id': 'wake', 'name': '起床', 'date': '', 'hour': 7, 'minute': 30,
         'weekdays': 31, 'enabled': True, 'snooze_minutes': 10,
         'ringtone': 'classic', 'volume_percent': 100,
+        'sound_id': '',
         'next_wall_ms': 1789171200000, 'snooze_wall_ms': None,
         'ringing': False, 'revision': version, 'prompt_text': '起床时间到了', 'prompt_mode': 'tone_only',
     }]
     offset=request.get('page_offset',0);total=len(alarms) if total is None else total
-    return {'schema': 2, 'request_id': request['request_id'], 'operation': request['operation'],
+    return {'schema': 3, 'request_id': request['request_id'], 'operation': request['operation'],
             'version': version, 'alarm_count': total, 'ringing_count': 0,
             'ringer_active': False, 'clock_pending': False, 'time_zone': 'Asia/Hong_Kong',
             'alarms': alarms, 'page_offset': offset, 'page_complete': offset+len(alarms)==total}
@@ -164,7 +165,7 @@ class AlarmSyncTest(unittest.IsolatedAsyncioTestCase):
         await self.owner.replay_alarm_pending()
         self.assertEqual([('put', {'id':'wake','name':'起床','date':'','hour':7,'minute':30,
             'weekdays':31,'enabled':False,'snooze_minutes':10,'ringtone':'classic',
-            'volume_percent':100,'expected_version':8})],calls)
+                'volume_percent':100,'sound_id':'','expected_version':8})],calls)
         self.assertEqual([],self.owner.alarm_pending.items())
         self.assertEqual('synced',self.owner.alarm_sync_status)
 

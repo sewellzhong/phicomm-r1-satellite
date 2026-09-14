@@ -1,8 +1,11 @@
 """Device-bound HA 2026.8.2 compatibility bridge."""
 import asyncio
+import base64
 from datetime import timedelta
+import hashlib
 import json
 import math
+from pathlib import Path
 import re
 from uuid import uuid4
 from zoneinfo import ZoneInfoNotFoundError
@@ -46,6 +49,10 @@ class Interaction:
         self.system_sync_status = 'connecting'
         self.system_last_error = None
         self._system_lock = asyncio.Lock()
+        self.alert_audio_state = None
+        self.alert_audio_sync_status = 'connecting'
+        self.alert_audio_last_error = None
+        self._alert_audio_lock = asyncio.Lock()
         self.resolve()
         self.cancel = async_track_time_interval(hass, self.refresh, timedelta(seconds=5))
         self.task = entry.async_create_background_task(hass, self._initialize(), 'r1-interaction-config')
@@ -198,6 +205,114 @@ class Interaction:
         if not name or not re.fullmatch(r'[a-z][a-z0-9-]{0,30}', name): return None
         service = name.replace('-', '_') + '_system_management'
         return service if self.hass.services.has_service('esphome', service) else None
+
+    def alert_audio_service(self):
+        entries = [item for item in self.hass.config_entries.async_entries('esphome')
+                   if (item.unique_id or '').lower() == self.mac]
+        if len(entries) != 1: return None
+        info = getattr(getattr(entries[0], 'runtime_data', None), 'device_info', None)
+        name = getattr(info, 'name', None)
+        if not name or not re.fullmatch(r'[a-z][a-z0-9-]{0,30}', name): return None
+        service = name.replace('-', '_') + '_alert_audio'
+        return service if self.hass.services.has_service('esphome', service) else None
+
+    async def _alert_audio_call(self, operation, *, context=None, **values):
+        service = self.alert_audio_service()
+        if service is None: raise HomeAssistantError('r1_alert_audio_unavailable')
+        request_id = uuid4().hex
+        request = {'request_id': request_id, 'operation': operation, **values}
+        encoded = json.dumps(request, ensure_ascii=False, separators=(',', ':'))
+        if len(encoded.encode()) > 40 * 1024: raise HomeAssistantError('r1_alert_audio_request_too_large')
+        response = await self.hass.services.async_call('esphome', service, {'request': encoded},
+            blocking=True, return_response=True, context=context)
+        return self._validated_alert_audio_state(response, request_id, operation)
+
+    async def alert_audio_request(self, operation, *, context=None, **values):
+        if operation not in ('status', 'delete', 'timer_bind'):
+            raise HomeAssistantError('r1_alert_audio_operation_invalid')
+        async with self._alert_audio_lock:
+            try:
+                state = await self._alert_audio_call(operation, context=context, **values)
+            except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError):
+                self.alert_audio_sync_status = 'offline'; self.alert_audio_last_error = 'request_failed'
+                for listener in tuple(self.listeners): listener()
+                raise HomeAssistantError('r1_alert_audio_not_confirmed')
+            self.alert_audio_state = state; self.alert_audio_sync_status = 'synced'; self.alert_audio_last_error = None
+            for listener in tuple(self.listeners): listener()
+            return state
+
+    async def upload_alert_audio(self, audio_id, file_name, *, bind_timer=False, context=None):
+        if not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', audio_id):
+            raise HomeAssistantError('r1_alert_audio_id_invalid')
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_. -]{0,127}\.wav', file_name):
+            raise HomeAssistantError('r1_alert_audio_file_invalid')
+        root = Path(self.hass.config.path('r1-alert-audio')).resolve()
+        candidate = root / file_name
+        if candidate.is_symlink(): raise HomeAssistantError('r1_alert_audio_file_invalid')
+        path = candidate.resolve()
+        if path.parent != root: raise HomeAssistantError('r1_alert_audio_file_invalid')
+        def read():
+            try: data = path.read_bytes()
+            except OSError: raise HomeAssistantError('r1_alert_audio_file_invalid')
+            if not 44 <= len(data) <= 16 * 1024 * 1024: raise HomeAssistantError('r1_alert_audio_file_invalid')
+            return data
+        data = await self.hass.async_add_executor_job(read)
+        digest = hashlib.sha256(data).hexdigest()
+        async with self._alert_audio_lock:
+            try:
+                await self._alert_audio_call('begin', context=context, id=audio_id,
+                                             size=len(data), sha256=digest)
+                for offset in range(0, len(data), 24 * 1024):
+                    encoded = base64.b64encode(data[offset:offset + 24 * 1024]).decode('ascii')
+                    await self._alert_audio_call('chunk', context=context, id=audio_id,
+                                                 offset=offset, data=encoded)
+                state = await self._alert_audio_call('commit', context=context, id=audio_id)
+                item = next((item for item in state['items'] if item['id'] == audio_id), None)
+                if item is None or item['sha256'] != digest or item['size'] != len(data):
+                    raise HomeAssistantError('r1_alert_audio_commit_not_confirmed')
+                if bind_timer:
+                    state = await self._alert_audio_call('timer_bind', context=context, id=audio_id)
+                    if state['timer_sound_id'] != audio_id:
+                        raise HomeAssistantError('r1_alert_audio_bind_not_confirmed')
+            except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError):
+                try: await self._alert_audio_call('abort', context=context, id=audio_id)
+                except Exception: pass
+                self.alert_audio_sync_status = 'offline'; self.alert_audio_last_error = 'upload_failed'
+                for listener in tuple(self.listeners): listener()
+                raise HomeAssistantError('r1_alert_audio_not_confirmed')
+            finally:
+                data = b''
+            self.alert_audio_state = state; self.alert_audio_sync_status = 'synced'; self.alert_audio_last_error = None
+            for listener in tuple(self.listeners): listener()
+            return state
+
+    @staticmethod
+    def _validated_alert_audio_state(value, request_id, operation):
+        if not isinstance(value, dict) or value.get('schema') != 1 or value.get('request_id') != request_id \
+                or value.get('operation') != operation \
+                or not isinstance(value.get('items'), list) or len(value['items']) > 64 \
+                or not isinstance(value.get('upload_active'), bool):
+            raise HomeAssistantError('r1_alert_audio_response_invalid')
+        timer = value.get('timer_sound_id')
+        if not isinstance(timer, str) or timer and not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', timer):
+            raise HomeAssistantError('r1_alert_audio_response_invalid')
+        upload_id = value.get('upload_id')
+        received = value.get('upload_received')
+        if not isinstance(upload_id, str) or upload_id and not re.fullmatch(
+                r'[a-z0-9][a-z0-9_-]{0,63}', upload_id) \
+                or type(received) is not int or not 0 <= received <= 16 * 1024 * 1024 \
+                or value['upload_active'] != bool(upload_id) \
+                or not value['upload_active'] and received != 0:
+            raise HomeAssistantError('r1_alert_audio_response_invalid')
+        seen = set()
+        for item in value['items']:
+            if not isinstance(item, dict) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', item.get('id', '')) \
+                    or item['id'] in seen or type(item.get('size')) is not int \
+                    or not 44 <= item['size'] <= 16 * 1024 * 1024 \
+                    or not re.fullmatch(r'[a-f0-9]{64}', item.get('sha256', '')):
+                raise HomeAssistantError('r1_alert_audio_response_invalid')
+            seen.add(item['id'])
+        return value
 
     async def _system_call(self, operation, request_id, context=None):
         service = self.system_service()
@@ -473,7 +588,7 @@ class Interaction:
     @staticmethod
     def _validated_alarm_state(value, request_id, operation):
         if not isinstance(value, dict) or value.get('request_id') != request_id \
-                or value.get('operation') != operation or value.get('schema') != 2:
+                or value.get('operation') != operation or value.get('schema') not in (2, 3):
             raise HomeAssistantError('r1_alarm_response_invalid')
         version, alarms = value.get('version'), value.get('alarms')
         offset, complete = value.get('page_offset'), value.get('page_complete')
@@ -506,7 +621,8 @@ class Interaction:
                     or alarm['revision'] < 0 or alarm['revision'] > version:
                 raise HomeAssistantError('r1_alarm_response_invalid')
             expected_prompt = (alarm_fields['name'] + '时间到了') if alarm_fields['name'] else '闹钟时间到了'
-            if alarm.get('prompt_mode') != 'tone_only' or alarm.get('prompt_text') != expected_prompt:
+            expected_mode = 'local_audio' if alarm_fields['sound_id'] else 'tone_only'
+            if alarm.get('prompt_mode') != expected_mode or alarm.get('prompt_text') != expected_prompt:
                 raise HomeAssistantError('r1_alarm_response_invalid')
         return value
 
@@ -600,6 +716,8 @@ class Interaction:
             try: await self.dnd_request('status')
             except HomeAssistantError: pass
             try: await self.system_request('status')
+            except HomeAssistantError: pass
+            try: await self.alert_audio_request('status')
             except HomeAssistantError: pass
             for listener in tuple(self.listeners): listener()
         except (TimeoutError, HomeAssistantError, ConnectionError, APIConnectionError):

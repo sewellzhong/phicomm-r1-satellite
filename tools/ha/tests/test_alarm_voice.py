@@ -18,6 +18,7 @@ def alarm(alarm_id='wake', name='起床', hour=7, minute=30, date_value='', week
     return {'id': alarm_id, 'name': name, 'date': date_value, 'hour': hour, 'minute': minute,
             'weekdays': weekdays, 'enabled': enabled, 'snooze_minutes': 10,
             'ringtone': 'classic', 'volume_percent': 100,
+            'sound_id': '',
             'next_wall_ms': 1, 'snooze_wall_ms': None, 'ringing': False, 'revision': 3}
 
 
@@ -77,13 +78,18 @@ class AlarmVoiceGrammarTest(unittest.TestCase):
         self.assertEqual(AlarmVoiceCommand('sound','起床',volume_percent=45),
                          parse_alarm_voice('起床闹钟音量调到百分之四十五',today))
         self.assertEqual('volume_invalid',parse_alarm_voice('起床闹钟音量设为0',today).issue)
+        self.assertEqual(AlarmVoiceCommand('sound','起床',sound_id='morning-music'),
+                         parse_alarm_voice('把起床闹钟音乐设置为morning-music',today))
+        self.assertEqual(AlarmVoiceCommand('sound','起床',sound_id=''),
+                         parse_alarm_voice('把起床闹钟音乐恢复默认铃声',today))
 
 
 class AlarmVoiceExecutionTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         pending=SimpleNamespace(items=lambda:[])
         self.owner=SimpleNamespace(alarm_state={'version':3,'alarms':[alarm()]},
-            alarm_sync_status='synced',alarm_pending=pending,alarm_write=AsyncMock())
+            alarm_sync_status='synced',alarm_pending=pending,alarm_write=AsyncMock(),
+            alert_audio_state={'items':[{'id':'morning-music'}]})
         self.context=Context(user_id='user1')
 
     async def test_success_uses_shared_write_path_and_context(self):
@@ -123,6 +129,16 @@ class AlarmVoiceExecutionTest(unittest.IsolatedAsyncioTestCase):
         values=self.owner.alarm_write.await_args.kwargs
         self.assertEqual('urgent',values['ringtone']);self.assertEqual(45,values['volume_percent'])
         self.assertEqual(7,values['hour']);self.assertEqual(31,values['weekdays'])
+
+    async def test_music_setting_requires_cached_content_and_uses_shared_write(self):
+        result=await execute_alarm_voice(self.owner,
+            AlarmVoiceCommand('sound','起床',sound_id='morning-music'),self.context)
+        self.assertIn('R1确认播放内容设置',result)
+        self.assertEqual('morning-music',self.owner.alarm_write.await_args.kwargs['sound_id'])
+        self.owner.alarm_write.reset_mock()
+        result=await execute_alarm_voice(self.owner,
+            AlarmVoiceCommand('sound','起床',sound_id='missing'),self.context)
+        self.assertIn('没有找到本地音频',result);self.owner.alarm_write.assert_not_awaited()
 
     async def test_query_exposes_effective_pending_without_claiming_sync(self):
         desired={key:value for key,value in alarm('later','吃药',20,0,'',127).items()

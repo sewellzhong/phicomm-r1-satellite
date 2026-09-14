@@ -121,6 +121,9 @@ def main():
                         help="Monday=bit0 through Sunday=bit6")
     parser.add_argument("--enabled", choices=("true", "false"), default="true")
     parser.add_argument("--snooze-minutes", type=int, choices=range(1, 61), default=10)
+    parser.add_argument("--ringtone", choices=("classic", "gentle", "urgent"), default="classic")
+    parser.add_argument("--volume-percent", type=int, choices=range(1, 101), default=100)
+    parser.add_argument("--sound-id", default="")
     parser.add_argument("--expected-version", type=int, default=-1)
     parser.add_argument("--minutes", type=int, choices=range(1, 61))
     parser.add_argument("--manual", choices=("true", "false"))
@@ -166,6 +169,8 @@ def main():
         command.update({"id": args.id, "name": args.name, "date": args.date,
                         "hour": args.hour, "minute": args.minute, "weekdays": args.weekdays,
                         "enabled": args.enabled == "true", "snooze_minutes": args.snooze_minutes,
+                        "ringtone": args.ringtone, "volume_percent": args.volume_percent,
+                        "sound_id": args.sound_id,
                         "expected_version": args.expected_version})
     if args.action in ("alarm-delete", "alarm-enable"):
         if not args.id: parser.error(args.action + " requires --id")
