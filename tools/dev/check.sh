@@ -10,6 +10,7 @@ if [[ "${R1_GRADLE_OFFLINE:-0}" == "1" ]]; then
 fi
 python3 tools/dev/audit-public.py
 python3 tools/dev/scan-secrets.py
+python3 -m unittest discover -s tools/validation/tests -v
 android/r1-probe/gradlew -p android/r1-probe --no-daemon "${gradle_network_args[@]}" -PhostCheck=true \
   -Pandroid.aapt2FromMavenOverride="$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt2" \
   testDebugUnitTest lintDebug assembleDebug
