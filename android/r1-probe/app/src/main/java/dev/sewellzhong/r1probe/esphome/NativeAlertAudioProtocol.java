@@ -37,7 +37,7 @@ public final class NativeAlertAudioProtocol {
             if (call.getCallId() == 0 || !call.getReturnResponse() || call.getArgsCount() != 1)
                 throw new IOException("alert_audio_response_required");
             String encoded = call.getArgs(0).getString();
-            if (encoded.getBytes(StandardCharsets.UTF_8).length > 40 * 1024)
+            if (encoded.getBytes(StandardCharsets.UTF_8).length > 7 * 1024)
                 throw new IOException("alert_audio_request_too_large");
             JSONObject request = new JSONObject(encoded);
             String requestId = request.getString("request_id");

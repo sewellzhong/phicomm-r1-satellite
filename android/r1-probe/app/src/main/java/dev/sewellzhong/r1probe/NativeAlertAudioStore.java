@@ -20,7 +20,9 @@ public final class NativeAlertAudioStore {
     static final int MAX_BYTES = 16 * 1024 * 1024;
     static final int MAX_TOTAL_BYTES = 64 * 1024 * 1024;
     static final int MAX_ITEMS = 64;
-    static final int MAX_CHUNK_BYTES = 24 * 1024;
+    // NativeApiConnection's encrypted frame is capped at 8192 bytes. Keep the
+    // base64 JSON service request comfortably below that transport boundary.
+    static final int MAX_CHUNK_BYTES = 4 * 1024;
     private final File root;
     private Upload upload;
 

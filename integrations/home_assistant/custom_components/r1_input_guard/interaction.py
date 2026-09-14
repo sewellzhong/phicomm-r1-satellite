@@ -222,7 +222,7 @@ class Interaction:
         request_id = uuid4().hex
         request = {'request_id': request_id, 'operation': operation, **values}
         encoded = json.dumps(request, ensure_ascii=False, separators=(',', ':'))
-        if len(encoded.encode()) > 40 * 1024: raise HomeAssistantError('r1_alert_audio_request_too_large')
+        if len(encoded.encode()) > 7 * 1024: raise HomeAssistantError('r1_alert_audio_request_too_large')
         response = await self.hass.services.async_call('esphome', service, {'request': encoded},
             blocking=True, return_response=True, context=context)
         return self._validated_alert_audio_state(response, request_id, operation)
@@ -262,8 +262,8 @@ class Interaction:
             try:
                 await self._alert_audio_call('begin', context=context, id=audio_id,
                                              size=len(data), sha256=digest)
-                for offset in range(0, len(data), 24 * 1024):
-                    encoded = base64.b64encode(data[offset:offset + 24 * 1024]).decode('ascii')
+                for offset in range(0, len(data), 4 * 1024):
+                    encoded = base64.b64encode(data[offset:offset + 4 * 1024]).decode('ascii')
                     await self._alert_audio_call('chunk', context=context, id=audio_id,
                                                  offset=offset, data=encoded)
                 state = await self._alert_audio_call('commit', context=context, id=audio_id)

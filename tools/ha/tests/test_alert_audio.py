@@ -34,10 +34,11 @@ class AlertAudioTest(unittest.IsolatedAsyncioTestCase):
         owner._alert_audio_call = AsyncMock(side_effect=call)
         result = await owner.upload_alert_audio('tea-ready','tea.wav',bind_timer=True)
         self.assertEqual('tea-ready',result['timer_sound_id'])
-        self.assertEqual(['begin','chunk','chunk','chunk','commit','timer_bind'],[item[0] for item in calls])
+        self.assertEqual(['begin'] + ['chunk'] * 15 + ['commit','timer_bind'],
+                         [item[0] for item in calls])
         chunks=[item[1] for item in calls if item[0]=='chunk']
-        self.assertEqual([0,24576,49152],[item['offset'] for item in chunks])
-        self.assertTrue(all(len(item['data']) <= 32768 for item in chunks))
+        self.assertEqual(list(range(0, 60004, 4096)),[item['offset'] for item in chunks])
+        self.assertTrue(all(len(item['data']) <= 5464 for item in chunks))
 
     def test_response_validation_rejects_duplicate_or_unbounded_items(self):
         request='a'*32
