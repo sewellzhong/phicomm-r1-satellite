@@ -45,11 +45,24 @@ class MicArrayTapExportTest(unittest.TestCase):
             result = export.main([
                 "serial", "--output-dir", str(output),
                 "--expected-apk-sha256", "a" * 64,
+                "--expected-version-code", "145",
                 "--confirm-device", "r1-sample01", "--confirm-recording",
             ])
         self.assertEqual(1, result)
-        verify.assert_called_once()
+        verify.assert_called_once_with("a" * 64, 145)
         shell.assert_not_called()
+
+    def test_playback_requires_existing_regular_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "new"
+            with self.assertRaises(SystemExit):
+                export.main([
+                    "serial", "--output-dir", str(output),
+                    "--expected-apk-sha256", "a" * 64,
+                    "--expected-version-code", "145",
+                    "--confirm-device", "r1-sample01", "--confirm-recording",
+                    "--playback-wav", str(Path(directory) / "missing.wav"),
+                ])
 
     def test_parses_v88_package_identity(self):
         dump = "  codePath=/data/app/dev.sewellzhong.r1probe-1\n  versionCode=88 targetSdk=22\n"

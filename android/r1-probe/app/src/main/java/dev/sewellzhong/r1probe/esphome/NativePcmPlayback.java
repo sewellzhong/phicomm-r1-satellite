@@ -13,6 +13,7 @@ import java.util.Arrays;
 
 /** Bounded PCM S16LE/16k mono player. Receiving bytes and draining the hardware are distinct. */
 public final class NativePcmPlayback implements NativeVoiceSession.Playback {
+    static final int STARTUP_PREBUFFER_BYTES = 6400; // 200 ms at PCM S16LE/16 kHz/mono.
     public interface Sink {
         void start() throws Exception;
         int write(byte[] bytes, int offset, int length) throws Exception;
@@ -51,6 +52,8 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
     private volatile long firstWriteMillis;
     private volatile long drainedMillis;
     private volatile long releasedMillis;
+    private volatile long startupWaitMillis;
+    private volatile int startupBufferedBytes;
 
     public synchronized int highWaterBytes() { return highWaterBytes; }
     public synchronized int underruns() { return underruns; }
@@ -58,6 +61,8 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
     public long firstWriteMillis() { return firstWriteMillis; }
     public long drainedMillis() { return drainedMillis; }
     public long releasedMillis() { return releasedMillis; }
+    public long startupWaitMillis() { return startupWaitMillis; }
+    public int startupBufferedBytes() { return startupBufferedBytes; }
     public String httpFailure() { return httpFailure; }
 
     public NativePcmPlayback(Factory factory, Gate gate) { this(factory, gate, NO_EVENTS); }
@@ -77,6 +82,7 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
         highWaterBytes = 0; underruns = 0; generation++;
         requestedMillis = System.nanoTime() / 1_000_000L;
         firstWriteMillis = drainedMillis = releasedMillis = 0;
+        startupWaitMillis = 0; startupBufferedBytes = 0;
         event("playback_requested,generation=" + generation);
         gate.request();
         worker = new Thread(this::play, "native-pcm-playback");
@@ -269,11 +275,24 @@ public final class NativePcmPlayback implements NativeVoiceSession.Playback {
                 Thread.sleep(10);
             }
             if (stopped) return;
+            synchronized (this) {
+                // A single network frame is only 20 ms. Starting AudioTrack from that frame
+                // makes ordinary HTTP/TTS scheduling jitter audible, so absorb 200 ms first.
+                // A completed short response is never padded or delayed waiting for more data.
+                while (!stopped && !ended && size < STARTUP_PREBUFFER_BYTES) {
+                    if (System.nanoTime() >= deadline) throw new IOException("playback_timeout");
+                    wait(10);
+                }
+                if (stopped) return;
+                startupBufferedBytes = size;
+                startupWaitMillis = Math.max(0, System.nanoTime() / 1_000_000L - requestedMillis);
+            }
             Sink current = factory.create();
             sink = current;
             if (stopped) return;
             current.start();
-            event("playback_sink_started,generation=" + generation);
+            event("playback_sink_started,generation=" + generation + ",startup_buffer_bytes="
+                    + startupBufferedBytes + ",startup_wait_ms=" + startupWaitMillis);
             long writtenFrames = 0;
             while (!stopped) {
                 if (System.nanoTime() >= deadline) throw new IOException("playback_timeout");

@@ -72,7 +72,53 @@ public class NativePcmPlaybackTest {
             assertTrue(player.drainedMillis() >= player.firstWriteMillis());
             assertTrue(player.releasedMillis() >= player.drainedMillis());
             assertEquals(1500, player.highWaterBytes());
+            assertEquals(1500, player.startupBufferedBytes());
+            assertTrue(player.startupWaitMillis() >= 0);
             assertTrue(player.underruns() >= 0);
+        } finally { player.stop(); }
+    }
+    @Test public void waitsForTwoHundredMillisecondsBeforeStartingLongStream() throws Exception {
+        Gate gate=new Gate();gate.ready=true;
+        CountDownLatch started=new CountDownLatch(1);
+        NativePcmPlayback player=new NativePcmPlayback(()->new NativePcmPlayback.Sink() {
+            int bytes;
+            public void start() { started.countDown(); }
+            public int write(byte[] b,int o,int n) { bytes+=n;return n; }
+            public long playedFrames() { return bytes/2; }
+            public void stop() { }
+            public void close() { }
+        },gate);
+        try {
+            player.start();player.audio(new byte[NativePcmPlayback.STARTUP_PREBUFFER_BYTES-640]);
+            assertFalse(started.await(100,TimeUnit.MILLISECONDS));
+            player.audio(new byte[640]);
+            assertTrue(started.await(2,TimeUnit.SECONDS));
+            assertEquals(NativePcmPlayback.STARTUP_PREBUFFER_BYTES,player.startupBufferedBytes());
+            player.end();completed(player);
+        } finally { player.stop(); }
+    }
+    @Test public void startupBufferAbsorbsOneHundredMillisecondSourceBursts() throws Exception {
+        Gate gate=new Gate();gate.ready=true;
+        java.util.List<Long> writes=java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        AtomicInteger accepted=new AtomicInteger();
+        NativePcmPlayback player=new NativePcmPlayback(()->new NativePcmPlayback.Sink() {
+            public void start() { }
+            public int write(byte[] b,int o,int n) throws Exception {
+                writes.add(System.nanoTime());Thread.sleep(20);accepted.addAndGet(n);return n;
+            }
+            public long playedFrames() { return accepted.get()/2; }
+            public void stop() { }
+            public void close() { }
+        },gate);
+        try {
+            player.start();player.audio(new byte[NativePcmPlayback.STARTUP_PREBUFFER_BYTES]);
+            for(int burst=0;burst<4;burst++) {
+                Thread.sleep(100);player.audio(new byte[5*640]);
+            }
+            player.end();completed(player);
+            assertEquals(30,writes.size());assertEquals(0,player.underruns());
+            for(int i=1;i<writes.size();i++)
+                assertTrue(TimeUnit.NANOSECONDS.toMillis(writes.get(i)-writes.get(i-1))<80);
         } finally { player.stop(); }
     }
     @Test public void streamingWavIsParsedAndDrainedWithoutWholeReplyBuffer() throws Exception {
@@ -122,7 +168,7 @@ public class NativePcmPlaybackTest {
             public void stop() { unblock.countDown(); }
             public void close() { closed.countDown(); }
         },gate);
-        player.start();player.audio(new byte[640]);
+        player.start();player.audio(new byte[NativePcmPlayback.STARTUP_PREBUFFER_BYTES]);
         assertTrue(entered.await(3,TimeUnit.SECONDS));player.stop();
         assertTrue(closed.await(3,TimeUnit.SECONDS));assertFalse(player.complete());
     }
@@ -144,7 +190,8 @@ public class NativePcmPlaybackTest {
         }, gate);
         java.util.concurrent.ExecutorService caller = java.util.concurrent.Executors.newSingleThreadExecutor();
         try {
-            player.start(); assertTrue(started.await(2, TimeUnit.SECONDS));
+            player.start(); player.audio(new byte[NativePcmPlayback.STARTUP_PREBUFFER_BYTES]);
+            assertTrue(started.await(2, TimeUnit.SECONDS));
             caller.submit(player::stop).get(1, TimeUnit.SECONDS);
             assertTrue(stopping.await(2, TimeUnit.SECONDS));
             assertFalse(player.terminated()); assertFalse(player.complete());

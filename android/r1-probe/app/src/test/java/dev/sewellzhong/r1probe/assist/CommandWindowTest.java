@@ -44,4 +44,19 @@ public final class CommandWindowTest {
         for (int i = 0; i < 995; i++) { assertEquals(CONTINUE, w.accept(true)); }
         assertEquals(END, w.accept(true));
     }
+    @Test public void followupRejectsShortTailButAcceptsClearShortReply() {
+        CommandWindow tail = new CommandWindow(10,1.8f,30,6,15,10);
+        for(int i=0;i<9;i++)assertEquals(WAIT,tail.acceptQualified(true,true));
+        for(int i=0;i<20;i++)assertEquals(WAIT,tail.acceptQualified(false,false));
+        CommandWindow clear = new CommandWindow(10,1.8f,30,6,15,10);
+        for(int i=0;i<9;i++)assertEquals(WAIT,clear.acceptQualified(true,true));
+        assertEquals(START,clear.acceptQualified(true,true));
+        assertEquals("strong_voice",clear.onsetReason());
+    }
+    @Test public void followupStillAcceptsSustainedQuietReply() {
+        CommandWindow quiet = new CommandWindow(10,1.8f,30,6,15,10);
+        for(int i=0;i<14;i++)assertEquals(WAIT,quiet.acceptQualified(true,false));
+        assertEquals(START,quiet.acceptQualified(true,false));
+        assertEquals("sustained_voice",quiet.onsetReason());
+    }
 }

@@ -53,6 +53,11 @@
             android:name=".ProbeCommandReceiver"
             android:exported="true"
             android:permission="android.permission.DUMP" />
+        <receiver
+            android:name=".VendorAecProbeReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:process=":vendor_aec_probe" />
         <receiver android:name=".NativeBootReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

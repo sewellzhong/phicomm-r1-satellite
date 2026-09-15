@@ -26,6 +26,7 @@ final class AlexaKwsEngine implements KwsEngine {
     private long maximum;
     private long inferences;
     private int maximumRawScore;
+    private int lastRawScore;
     private boolean closed;
 
     AlexaKwsEngine(AssetManager assets) throws Exception {
@@ -72,6 +73,7 @@ final class AlexaKwsEngine implements KwsEngine {
         nextSample = -1;
         samples = wall = cpu = maximum = inferences = 0;
         maximumRawScore = 0;
+        lastRawScore = 0;
     }
 
     @Override public KwsDetection acceptFrame(short[] pcm, int offset, int length,
@@ -103,6 +105,7 @@ final class AlexaKwsEngine implements KwsEngine {
                 output.rewind();
                 interpreter.run(input, output);
                 raw = output.get(0) & 0xff;
+                lastRawScore = raw;
                 maximumRawScore = Math.max(maximumRawScore, raw);
                 inferences++;
                 input.clear();
@@ -124,6 +127,7 @@ final class AlexaKwsEngine implements KwsEngine {
 
     long inferenceCount() { return inferences; }
     int maximumRawScore() { return maximumRawScore; }
+    int lastRawScore() { return lastRawScore; }
     @Override public KwsMetrics metrics() { return new KwsMetrics(samples, wall, cpu, maximum); }
 
     private void requireOpen() {

@@ -4,14 +4,24 @@ package dev.sewellzhong.r1probe.assist;
 public final class CommandWindow {
     public enum Decision { WAIT, START, CONTINUE, END, TIMEOUT, DONE }
     private final int waitLimit, quietLimit, commandLimit, onsetFrames;
+    private final int qualifiedVoicedFrames, qualifiedStrongFrames;
     /** Legacy WS profile; native runtime supplies its persisted configuration explicitly. */
     public CommandWindow() { this(6, 1.2f, 20); }
     public CommandWindow(float waitSeconds, float quietSeconds, float commandSeconds) {
         this(waitSeconds, quietSeconds, commandSeconds, 4);
     }
     public CommandWindow(float waitSeconds, float quietSeconds, float commandSeconds, int onsetFrames) {
+        this(waitSeconds, quietSeconds, commandSeconds, onsetFrames, 10, 6);
+    }
+    public CommandWindow(float waitSeconds, float quietSeconds, float commandSeconds, int onsetFrames,
+            int qualifiedVoicedFrames, int qualifiedStrongFrames) {
         if (onsetFrames < 4 || onsetFrames > 15) throw new IllegalArgumentException("invalid_onset");
+        if (qualifiedVoicedFrames < 10 || qualifiedVoicedFrames > 15
+                || qualifiedStrongFrames < 6 || qualifiedStrongFrames > 15)
+            throw new IllegalArgumentException("invalid_qualified_onset");
         this.onsetFrames = onsetFrames;
+        this.qualifiedVoicedFrames = qualifiedVoicedFrames;
+        this.qualifiedStrongFrames = qualifiedStrongFrames;
         if (!(!Float.isNaN(waitSeconds) && !Float.isInfinite(waitSeconds)) || !(!Float.isNaN(quietSeconds) && !Float.isInfinite(quietSeconds)) || !(!Float.isNaN(commandSeconds) && !Float.isInfinite(commandSeconds))
                 || waitSeconds < 1 || waitSeconds > 120 || quietSeconds < .2f || quietSeconds > 10
                 || commandSeconds < 5 || commandSeconds > 120) throw new IllegalArgumentException("invalid_window");
@@ -55,8 +65,10 @@ public final class CommandWindow {
         recentSpeech = ((recentSpeech << 1) | (speech ? 1 : 0)) & 0x7fff;
         consecutiveStrong = strong && speech ? consecutiveStrong + 1 : 0;
         int voiced = Integer.bitCount(recentSpeech);
-        boolean ready = voiced >= 10 || consecutiveStrong >= 6;
-        if (ready) onsetReason = consecutiveStrong >= 6 ? "strong_voice" : "sustained_voice";
+        boolean ready = voiced >= qualifiedVoicedFrames
+                || consecutiveStrong >= qualifiedStrongFrames;
+        if (ready) onsetReason = consecutiveStrong >= qualifiedStrongFrames
+                ? "strong_voice" : "sustained_voice";
         return advance(speech, ready, 32-Integer.numberOfLeadingZeros(recentSpeech), voiced);
     }
 

@@ -18,7 +18,6 @@ AUDITOR = ROOT / "tools/factory_audio/audit-validation-capture.py"
 PACKAGE = "dev.sewellzhong.r1probe"
 COMPONENT = PACKAGE + "/.ProbeCommandReceiver"
 DIAGNOSTIC_ROOT = "/mnt/internal_sd/Android/data/dev.sewellzhong.r1probe/files/diagnostics"
-EXPECTED_VERSION_CODE = 88
 OUTPUT_KEYS = (
     "wav_path", "diagnostic_wav_path", "metadata_path",
     "micarray_raw_wav_path", "micarray_echo_wav_path",
@@ -126,7 +125,7 @@ class Device:
     def shell(self, command, timeout=40, check=True):
         return self.adb("shell", command, timeout=timeout, check=check)
 
-    def verify(self, expected_apk_sha256):
+    def verify(self, expected_apk_sha256, expected_version_code):
         expected = {
             "ro.product.device": "rk322x_echo",
             "ro.build.version.sdk": "22",
@@ -141,7 +140,7 @@ class Device:
         if self.shell("getenforce") != "Enforcing":
             raise ExportError("selinux_not_enforcing")
         version, apk_path = parse_package_identity(self.shell("dumpsys package " + PACKAGE))
-        if version != EXPECTED_VERSION_CODE:
+        if version != expected_version_code:
             raise ExportError("installed_apk_version_mismatch")
         remote_digest = self.remote_sha256(apk_path)
         if remote_digest != expected_apk_sha256:
@@ -165,6 +164,9 @@ class Device:
     def pull(self, remote, local):
         self.adb("pull", remote, str(local), timeout=180)
 
+    def push(self, local, remote):
+        self.adb("push", str(local), remote, timeout=180)
+
     def remove(self, remote):
         self.shell("rm -f '" + remote + "'")
         if self.exists(remote):
@@ -185,7 +187,7 @@ def wait_for_capture(device, nonce, timeout_seconds=40):
     raise ExportError("micarray_capture_timeout")
 
 
-def audit_capture(output, local_paths):
+def audit_capture(output, local_paths, playback_wav=None):
     report = output / "audit.json"
     command = [
         sys.executable, str(AUDITOR), "--device", "r1-sample01",
@@ -198,6 +200,8 @@ def audit_capture(output, local_paths):
         "--micarray-vad-wav", str(local_paths["micarray_vad_wav_path"]),
         "--output", str(report),
     ]
+    if playback_wav is not None:
+        command.extend(["--playback-reference-wav", str(playback_wav)])
     result = subprocess.run(command, capture_output=True, text=True, timeout=60, check=False)
     if result.returncode != 0:
         raise ExportError("offline_capture_audit_failed:" + result.stderr.strip())
@@ -209,9 +213,11 @@ def main(argv=None):
     parser.add_argument("serial")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--expected-apk-sha256", required=True)
+    parser.add_argument("--expected-version-code", required=True, type=int)
     parser.add_argument("--confirm-device", required=True)
     parser.add_argument("--confirm-recording", action="store_true")
     parser.add_argument("--duration-seconds", type=int, default=5)
+    parser.add_argument("--playback-wav")
     args = parser.parse_args(argv)
     if args.confirm_device != "r1-sample01":
         parser.error("--confirm-device must be r1-sample01")
@@ -221,6 +227,14 @@ def main(argv=None):
         parser.error("--expected-apk-sha256 must be lowercase SHA-256")
     if not 1 <= args.duration_seconds <= 30:
         parser.error("--duration-seconds must be in 1..30")
+    if args.expected_version_code <= 0:
+        parser.error("--expected-version-code must be positive")
+    playback_wav = None
+    if args.playback_wav is not None:
+        playback_candidate = Path(args.playback_wav)
+        if playback_candidate.is_symlink() or not playback_candidate.is_file():
+            parser.error("--playback-wav must be a regular file")
+        playback_wav = playback_candidate.resolve(strict=True)
 
     output = validate_output(args.output_dir)
     output.mkdir(mode=0o700, parents=True)
@@ -234,8 +248,10 @@ def main(argv=None):
     native_was_listening = False
     capture_started = False
     remote_paths = {}
+    remote_playback = None
     try:
-        result["identity"] = device.verify(args.expected_apk_sha256)
+        result["identity"] = device.verify(
+            args.expected_apk_sha256, args.expected_version_code)
         status = run_manager("status", args.serial)
         if not native_runtime_ready(status):
             raise ExportError("native_runtime_baseline_required")
@@ -243,14 +259,31 @@ def main(argv=None):
         run_manager("stop", args.serial)
         capture_started = True
         device.shell("am force-stop " + PACKAGE)
+        if playback_wav is not None:
+            if (len(playback_wav.name) > 64
+                    or re.fullmatch(r"[A-Za-z0-9._-]+", playback_wav.name) is None):
+                raise ExportError("playback_filename_invalid")
+            remote_playback = DIAGNOSTIC_ROOT + "/" + playback_wav.name
+            if device.exists(remote_playback):
+                raise ExportError("remote_playback_already_exists")
+            device.push(playback_wav, remote_playback)
+            if device.remote_sha256(remote_playback) != sha256(playback_wav):
+                raise ExportError("remote_playback_hash_mismatch")
+            result["playback_reference"] = {
+                "bytes": playback_wav.stat().st_size,
+                "sha256": sha256(playback_wav),
+            }
         device.adb("logcat", "-c")
         nonce = "micarray-sidecar-export-" + str(time.time_ns())
+        playback_argument = (" --es playback_reference_path "
+                             + remote_playback) if remote_playback else ""
         broadcast = device.shell(
             "am broadcast -n " + COMPONENT
             + " --es probe_action factory_audio_validate"
             + " --ei duration_seconds " + str(args.duration_seconds)
             + " --es sample_id controlled-micarray-export"
             + " --ez micarray_diagnostic_tap true"
+            + playback_argument
             + " --es probe_nonce " + nonce
         )
         if "Broadcast completed: result=0" not in broadcast:
@@ -274,7 +307,7 @@ def main(argv=None):
             local_paths[key] = local
             exported[key] = {"name": local.name, "bytes": local.stat().st_size,
                              "sha256": local_digest}
-        result["audit"] = audit_capture(output, local_paths)
+        result["audit"] = audit_capture(output, local_paths, playback_wav)
         for remote in remote_paths.values():
             device.remove(remote)
         result["exported"] = exported
@@ -293,6 +326,12 @@ def main(argv=None):
             try:
                 if device.exists(remote):
                     device.remove(remote)
+            except (ExportError, OSError, subprocess.SubprocessError) as error:
+                cleanup_failures.append(str(error))
+        if remote_playback is not None:
+            try:
+                if device.exists(remote_playback):
+                    device.remove(remote_playback)
             except (ExportError, OSError, subprocess.SubprocessError) as error:
                 cleanup_failures.append(str(error))
         if cleanup_failures:

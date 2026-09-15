@@ -2,8 +2,8 @@ plugins {
     id "com.android.application"
 }
 
-def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("128")
-def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.28-local-alert-audio-frame-fix")
+def probeVersionCode = providers.gradleProperty("probeVersionCode").orElse("149")
+def probeVersionName = providers.gradleProperty("probeVersionName").orElse("1.49-vendor-aec-mic-echo-layout")
 
 def hostCheck = providers.gradleProperty("hostCheck").orElse("false").get().toBoolean()
 

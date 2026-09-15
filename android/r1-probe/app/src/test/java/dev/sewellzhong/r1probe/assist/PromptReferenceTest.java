@@ -18,6 +18,15 @@ public class PromptReferenceTest {
         }
         assertEquals(3,p.matchedFrames);assertEquals(333,p.delaySamples);
     }
+    @Test public void moderatelyDistortedPlaybackTailIsStillSuppressed() {
+        short[] ref=source();PromptReference p=prepared(ref);Random noise=new Random(123);
+        for(int n=0;n<6;n++) {
+            int end=1920+n*320,offset=end-320-333;short[] frame=new short[320];
+            for(int i=0;i<320;i++) frame[i]=(short)Math.round(ref[offset+i]*.25+noise.nextInt(401)-200);
+            long now=1_000_000_000L+n*20_000_000L;p.position(end,now);p.process(frame,now);
+        }
+        assertTrue(p.matchedFrames>0);assertTrue(p.lastFrameMatched());
+    }
     @Test public void unrelatedInputIsNeverErased() {
         short[] ref=source();PromptReference p=prepared(ref);Random r=new Random(91);
         for(int n=0;n<5;n++) {short[] f=new short[320];for(int i=0;i<320;i++)f[i]=(short)(r.nextInt(500)-250);short[] original=f.clone();p.position(3000+n*320,1_000_000_000L);p.process(f,1_000_000_000L);assertArrayEquals(original,f);}
@@ -30,6 +39,21 @@ public class PromptReferenceTest {
             p.position(1600+n*320,1_000_000_000L);p.process(f,1_000_000_000L);
             if(n>=2){for(int i=0;i<320;i++){double delta=f[i]-40*Math.sin(i*.12);error+=delta*delta;}assertTrue(error<wanted*.1);}
         }
+    }
+    @Test public void lockedReferenceIsHeldThroughSuddenDoubleTalk() {
+        short[] ref=source();PromptReference p=prepared(ref);
+        for(int n=0;n<3;n++) {
+            int end=1600+n*320,offset=end-320-333;short[] frame=new short[320];
+            for(int i=0;i<320;i++)frame[i]=(short)Math.round(ref[offset+i]*.25);
+            long now=1_000_000_000L+n*20_000_000L;p.position(end,now);p.process(frame,now);
+        }
+        int n=3,end=1600+n*320,offset=end-320-333;short[] mixed=new short[320];
+        for(int i=0;i<320;i++)mixed[i]=(short)Math.round(ref[offset+i]*.25+1400*Math.sin(i*.12));
+        p.position(end,1_060_000_000L);p.process(mixed,1_060_000_000L);
+        assertTrue(p.lastFrameMatched());assertEquals(1,p.heldMatchedFrames);
+        double error=0,wanted=0;
+        for(int i=0;i<320;i++){double speech=1400*Math.sin(i*.12);error+=(mixed[i]-speech)*(mixed[i]-speech);wanted+=speech*speech;}
+        assertTrue(error<wanted*.1);
     }
     @Test public void echoCannotQualifyDirectBargeButIndependentSpeechCan() {
         short[] ref=source(); PromptReference echoOnly=prepared(ref);

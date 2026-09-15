@@ -7,12 +7,13 @@ public final class PromptReference {
     private final short[] ring = new short[32000];
     private long written, head, headAt, endedAt;
     private boolean active;
-    private int consecutive, previousDelay = -1;
+    private volatile boolean lastFrameMatched;
+    private int consecutive, previousDelay = -1, lockedDelay = -1, lockRemaining;
     public volatile double correlation, beforeRms, afterRms;
-    public volatile int delaySamples, matchedFrames, processedFrames, overBudgetFrames;
+    public volatile int delaySamples, matchedFrames, heldMatchedFrames, processedFrames, overBudgetFrames;
     public volatile long maxProcessNanos;
     public synchronized void start() {
-        clear(); active=true; matchedFrames=processedFrames=overBudgetFrames=0;maxProcessNanos=0;
+        clear(); active=true; matchedFrames=heldMatchedFrames=processedFrames=overBudgetFrames=0;maxProcessNanos=0;
         correlation=beforeRms=afterRms=0; delaySamples=0;
     }
     public synchronized void append(byte[] bytes,int offset,int length,float gain) {
@@ -26,7 +27,9 @@ public final class PromptReference {
     public synchronized void finish(long now) { if(active) {head=written;headAt=now;endedAt=now;} }
     public synchronized void clear() {
         Arrays.fill(ring,(short)0);written=head=headAt=endedAt=0;active=false;consecutive=0;previousDelay=-1;
+        lastFrameMatched=false;lockedDelay=-1;lockRemaining=0;
     }
+    public boolean lastFrameMatched() { return lastFrameMatched; }
     public synchronized void expire(long now) {
         if(active && endedAt!=0 && now-endedAt>1_000_000_000L) clear();
     }
@@ -49,6 +52,7 @@ public final class PromptReference {
     }
     public synchronized void process(short[] frame,long now) {
         if(frame.length!=320) throw new IllegalArgumentException("reference_frame_size");
+        lastFrameMatched=false;
         if(!active) return;
         if(endedAt!=0 && now-endedAt>1_000_000_000L) {clear();return;}
         if(headAt==0 || written<320) return;
@@ -83,21 +87,43 @@ public final class PromptReference {
         double mean=0,power=0;for(short sample:frame){mean+=sample;power+=(double)sample*sample;}
         mean/=320;beforeRms=Math.sqrt(Math.max(0,power/320-mean*mean));afterRms=beforeRms;
         // Confidence must persist at a consistent delay; mismatches never erase user speech.
-        if(exact>=.85 && (previousDelay<0 || Math.abs(delaySamples-previousDelay)<=320)) consecutive++;
-        else consecutive=exact>=.85 ? 1 : 0;
-        previousDelay=exact>=.85 ? delaySamples : -1;
+        // The R1 room path and streamed AudioTrack scheduling vary slightly between frames.
+        // Keep the candidate threshold below the final three-frame, stable-delay gate; real
+        // device behavior still has to be verified before this is treated as an acoustic pass.
+        if(exact>=.72 && (previousDelay<0 || Math.abs(delaySamples-previousDelay)<=320)) consecutive++;
+        else consecutive=exact>=.72 ? 1 : 0;
+        previousDelay=exact>=.72 ? delaySamples : -1;
+        long subtractionStart=-1;
+        boolean heldMatch=false;
         if(consecutive>=3 && exactStart>=0) {
+            lockedDelay=delaySamples;lockRemaining=25;subtractionStart=exactStart;
+        } else if(lockedDelay>=0 && lockRemaining>0) {
+            // Once the loudspeaker path is locked, retain it briefly through double-talk.
+            // Requiring correlation on the mixed speech frame would disable subtraction at
+            // exactly the point where the wake word needs it. The reference is subtracted;
+            // the independent microphone component is never gated or replaced.
+            long heldStart=expected-lockedDelay;
+            long oldest=Math.max(0,written-ring.length);
+            if(heldStart>=oldest && heldStart<=written-320) {
+                subtractionStart=heldStart;delaySamples=lockedDelay;lockRemaining--;heldMatch=true;
+            } else {
+                lockedDelay=-1;lockRemaining=0;
+            }
+        }
+        if(subtractionStart>=0) {
             double rm=0,rr=0,rx=0;
-            for(int i=0;i<320;i++) rm+=ring[(int)((exactStart+i)%ring.length)];rm/=320;
-            for(int i=0;i<320;i++) {double v=ring[(int)((exactStart+i)%ring.length)]-rm;rr+=v*v;rx+=v*(frame[i]-mean);}
+            for(int i=0;i<320;i++) rm+=ring[(int)((subtractionStart+i)%ring.length)];rm/=320;
+            for(int i=0;i<320;i++) {double v=ring[(int)((subtractionStart+i)%ring.length)]-rm;rr+=v*v;rx+=v*(frame[i]-mean);}
             double gain=rr>0 ? rx/rr : 0;
             double sum=0,square=0;
             for(int i=0;i<320;i++) {
-                double residual=frame[i]-gain*(ring[(int)((exactStart+i)%ring.length)]-rm);
+                double residual=frame[i]-gain*(ring[(int)((subtractionStart+i)%ring.length)]-rm);
                 frame[i]=(short)Math.max(-32768,Math.min(32767,Math.round(residual)));
                 sum+=frame[i];square+=(double)frame[i]*frame[i];
             }
-            afterRms=Math.sqrt(Math.max(0,square/320-(sum/320)*(sum/320)));matchedFrames++;
+            afterRms=Math.sqrt(Math.max(0,square/320-(sum/320)*(sum/320)));
+            if(heldMatch) heldMatchedFrames++; else matchedFrames++;
+            lastFrameMatched=true;
         }
         processedFrames++;long elapsed=System.nanoTime()-started;
         maxProcessNanos=Math.max(maxProcessNanos,elapsed);if(elapsed>20_000_000L)overBudgetFrames++;

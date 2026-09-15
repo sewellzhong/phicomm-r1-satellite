@@ -64,7 +64,11 @@ public final class NativeSettings {
     }
     dev.sewellzhong.r1probe.assist.CommandWindow window() { return window(false); }
     dev.sewellzhong.r1probe.assist.CommandWindow window(boolean followup) {
-        return new dev.sewellzhong.r1probe.assist.CommandWindow(followup ? followupWaitSeconds() : waitSeconds(), quietSeconds(), commandSeconds(), 6);
+        return followup
+                ? new dev.sewellzhong.r1probe.assist.CommandWindow(
+                        followupWaitSeconds(), quietSeconds(), commandSeconds(), 6, 15, 10)
+                : new dev.sewellzhong.r1probe.assist.CommandWindow(
+                        waitSeconds(), quietSeconds(), commandSeconds(), 6);
     }
     boolean wakeEnabled() { return prefs.getBoolean("wake_enabled", true); }
     String name() { return prefs.getString("name", ""); }
