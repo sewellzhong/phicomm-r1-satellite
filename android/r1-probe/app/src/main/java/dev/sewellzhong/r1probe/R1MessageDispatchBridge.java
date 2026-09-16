@@ -52,7 +52,8 @@ final class R1MessageDispatchBridge {
         settings = new NativeSettings(context);
         handoff = new ProvisioningHandoffStore(context);
         lastResult = settings.provisioningResult();
-        web = new ProvisioningWebServer(context, this::scanWifi, this::configureWifi);
+        web = new ProvisioningWebServer(context, this::scanWifi, this::configureWifi,
+                this::provisioningStatus);
         expireWindow = this::recoverWifi;
         stopOriginal = () -> {
             try { send(TURN_OFF); } catch (Exception ignored) { }
@@ -153,6 +154,16 @@ final class R1MessageDispatchBridge {
     String lastResult() { return settings.provisioningResult(); }
     boolean pending() { return settings.provisioningPending(); }
     String stage() { return settings.provisioningStage(); }
+
+    private JSONObject provisioningStatus() throws Exception {
+        WifiInfo info = wifi.getConnectionInfo();
+        boolean connected = info != null
+                && info.getSupplicantState() == SupplicantState.COMPLETED;
+        return new JSONObject().put("result", settings.provisioningResult())
+                .put("stage", settings.provisioningStage())
+                .put("pending", settings.provisioningPending())
+                .put("wifi_connected", connected);
+    }
 
     JSONObject probeHandoff() throws Exception {
         if (settings.provisioningPending() || WIFI_TRANSITION.get())

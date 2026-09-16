@@ -19,21 +19,29 @@ import org.json.JSONObject;
 final class ProvisioningWebServer {
     interface Configurator { void configure(JSONObject request) throws Exception; }
     interface Scanner { byte[] scan() throws Exception; }
+    interface StatusProvider { JSONObject status() throws Exception; }
 
     private static final int MAX_HEADERS = 8192;
     private static final int MAX_BODY = 4096;
     private final Context context;
     private final Scanner scanner;
     private final Configurator configurator;
+    private final StatusProvider statusProvider;
     private volatile boolean running;
     private ServerSocket server;
     private Thread worker;
     private final Sessions sessions = new Sessions();
 
     ProvisioningWebServer(Context context, Scanner scanner, Configurator configurator) {
+        this(context, scanner, configurator, () -> new JSONObject());
+    }
+
+    ProvisioningWebServer(Context context, Scanner scanner, Configurator configurator,
+            StatusProvider statusProvider) {
         this.context = context.getApplicationContext();
         this.scanner = scanner;
         this.configurator = configurator;
+        this.statusProvider = statusProvider;
     }
 
     synchronized void start() throws IOException {
@@ -71,6 +79,15 @@ final class ProvisioningWebServer {
             if (!sessions.authorized(cookie(headers, "R1SESSION"))) { respond(socket, 403, "application/json", "{\"error\":\"invalid_session\"}".getBytes(StandardCharsets.UTF_8)); return; }
             try { respond(socket, 200, "application/json; charset=utf-8", scanner.scan()); }
             catch (Exception error) { respond(socket, 503, "application/json", "{\"error\":\"scan_unavailable\"}".getBytes(StandardCharsets.UTF_8)); }
+        } else if ("GET".equals(method) && "/api/status".equals(path)) {
+            if (!sessions.authorized(cookie(headers, "R1SESSION"))) {
+                respond(socket, 403, "application/json", "{\"error\":\"invalid_session\"}".getBytes(StandardCharsets.UTF_8));
+                return;
+            }
+            try { respond(socket, 200, "application/json; charset=utf-8",
+                    statusProvider.status().toString().getBytes(StandardCharsets.UTF_8)); }
+            catch (Exception error) { respond(socket, 503, "application/json",
+                    "{\"error\":\"status_unavailable\"}".getBytes(StandardCharsets.UTF_8)); }
         } else if ("POST".equals(method) && "/api/configwifi".equals(path)) {
             String token = cookie(headers, "R1SESSION");
             if (!sessions.authorized(token)) { respond(socket, 403, "application/json", "{\"error\":\"invalid_session\"}".getBytes(StandardCharsets.UTF_8)); return; }
@@ -82,8 +99,16 @@ final class ProvisioningWebServer {
                 R1MessageDispatchBridge.validate(command.getString("ssid"),
                         command.optString("secure", "INSECURE"), command.optString("password", ""));
                 if (!sessions.submit(token)) { respond(socket, 409, "application/json", "{\"error\":\"already_submitted\"}".getBytes(StandardCharsets.UTF_8)); return; }
-                respond(socket, 202, "application/json", "{\"accepted\":true}".getBytes(StandardCharsets.UTF_8));
-                try { configurator.configure(command); } catch (Exception ignored) { }
+                respond(socket, 202, "application/json",
+                        "{\"accepted\":true,\"status_url\":\"/api/status\"}".getBytes(StandardCharsets.UTF_8));
+                // The Wi-Fi transition can take several seconds and may drop the
+                // AP connection. Keep the HTTP accept loop available for status
+                // polling after the phone returns to its station network.
+                Thread transition = new Thread(() -> {
+                    try { configurator.configure(command); } catch (Exception ignored) { }
+                }, "r1-provisioning-transition");
+                transition.setDaemon(true);
+                transition.start();
             } catch (Exception ignored) {
                 respond(socket, 400, "application/json", "{\"error\":\"invalid_wifi_configuration\"}".getBytes(StandardCharsets.UTF_8));
             }

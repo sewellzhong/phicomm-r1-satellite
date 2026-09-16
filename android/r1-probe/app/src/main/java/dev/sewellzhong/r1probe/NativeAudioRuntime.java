@@ -8,6 +8,7 @@ import dev.sewellzhong.r1probe.assist.BargeInCapture;
 import dev.sewellzhong.r1probe.assist.CommandWindow;
 import dev.sewellzhong.r1probe.assist.DiagnosticWindowRequest;
 import dev.sewellzhong.r1probe.assist.PcmPrebuffer;
+import dev.sewellzhong.r1probe.assist.PlaybackBargeInGate;
 import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
 import dev.sewellzhong.r1probe.esphome.NativeAnnouncementController;
 import dev.sewellzhong.r1probe.esphome.NativeAlarmController;
@@ -31,9 +32,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * The service owns authentication, wake locks, connection recovery and stalled-backend protection. */
 public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     // r1-sample01 v129 reproduced speaker echo as DIRECT_SPEECH at 10% volume.
-    // v133 also proved that using the same candidate for stop-only truncates TTS.
-    // Keep the entire unverified path failed closed.
-    private static final boolean DIRECT_BARGE_IN_ENABLED = false;
+    // v133 also proved that using the same candidate for stop-only truncates TTS;
+    // PlaybackBargeInGate now requires an AEC-clean, stable speech candidate.
+    // Direct speech is still gated by PlaybackBargeInGate below. The flag only
+    // enables the guarded state-machine branch; it does not bypass AEC checks.
+    private static final boolean DIRECT_BARGE_IN_ENABLED = true;
     // Experimental playback-only path. Normal idle Alexa remains at 229/255;
     // only the vendor-AEC reply model may cancel a reply, after VAD confirms speech.
     private static final boolean REPLY_WAKE_CANCEL_ENABLED = true;
@@ -226,6 +229,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private volatile long frames, wakes, replyWakeInterruptions, announcementWakeInterruptions,
             directBargeInterruptions,
             directBargeRejections, commands, transcripts, replies, completed, noInputs;
+    private volatile String directBargeBlockReason = "awaiting_aec";
     private volatile long replyContinuousObservedDetections, replyReplayAttempts,
             replyReplayDetections, replyReplayMaxMicros;
     private volatile int replyReplayPeakRaw;
@@ -362,7 +366,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("direct_barge_in_enabled", DIRECT_BARGE_IN_ENABLED)
                 .put("direct_barge_rejections", directBargeRejections)
                 .put("direct_barge_block_reason", DIRECT_BARGE_IN_ENABLED
-                        ? "none" : "playback_echo_guard_unverified")
+                        ? directBargeBlockReason : "disabled")
                 .put("automatic_followup_enabled", AUTOMATIC_FOLLOWUP_ENABLED)
                 .put("automatic_followup_block_reason", AUTOMATIC_FOLLOWUP_ENABLED
                         ? "none" : "playback_tail_echo_unverified")
@@ -741,6 +745,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
             long followupNotBefore = 0;
             int replyReplayDelayFrames = -1;
             boolean bargePending = false, bargeEnded = false;
+            PlaybackBargeInGate directBargeGate = new PlaybackBargeInGate();
             CommandWindow window = settings.window(following);
             CommandWindow bargeWindow = null;
             while (!stopping.get()) {
@@ -890,6 +895,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 // announcement bypassed AEC/KWS because it has no active Assist run.
                 boolean playbackWakeMonitor = playbackRequested || interruptibleReply;
                 if(!playbackWakeMonitor) {
+                    directBargeGate.reset();
+                    directBargeBlockReason = directBargeGate.blockReason();
                     replyAnalysisHistory.clear();
                     replyReplayDelayFrames = -1;
                     if (rawReplyActive) {
@@ -946,6 +953,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     boolean vendorReferenceReady = false;
                     boolean vendorAecDetection = false;
                     float vendorAecDetectionScore = 0.0f;
+                    boolean vendorAecOutputReady = false;
+                    boolean vendorAecOutputSaturated = false;
                     if (vendorAec != null && vendorAecHealthy) {
                         vendorReferenceReady = vendorAecReferenceActive
                                 ? promptReference.copyNextContinuousVendorReference(vendorAecReference)
@@ -974,6 +983,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                                     vendorAecAnalysis);
                             updateVendorAecAdapterMetrics(vendorAec);
                             if (aecOutputReady) {
+                                vendorAecOutputReady = true;
                                 long outputEnergy = 0;
                                 int outputPeak = 0;
                                 for (short sample : vendorAecAnalysis) {
@@ -981,8 +991,10 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                                     outputPeak = Math.max(outputPeak, absolute);
                                     vendorAecOutputMin = Math.min(vendorAecOutputMin, sample);
                                     vendorAecOutputMax = Math.max(vendorAecOutputMax, sample);
-                                    if (sample == Short.MIN_VALUE || sample == Short.MAX_VALUE)
+                                    if (sample == Short.MIN_VALUE || sample == Short.MAX_VALUE) {
                                         vendorAecOutputSaturatedSamples++;
+                                        vendorAecOutputSaturated = true;
+                                    }
                                     outputEnergy += (long) sample * sample;
                                 }
                                 vendorAecOutputSamples += vendorAecAnalysis.length;
@@ -1080,6 +1092,10 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     }
                     boolean rawBargeSpeech = vad.speechForQuietR1(bargeAnalysis);
                     boolean qualifiedBargeSpeech = evidence.accept(bargeAnalysis, rawBargeSpeech, false);
+                    PlaybackBargeInGate.Decision directBargeGateDecision = directBargeGate.observe(
+                            vendorAecOutputReady, promptReference.lastFrameMatched(),
+                            qualifiedBargeSpeech, evidence.strong(), vendorAecOutputSaturated);
+                    directBargeBlockReason = directBargeGate.blockReason();
                     if (bargeWindow == null) {
                         bargeWindow = settings.window(false);
                         windowSource = "direct_barge_in";
@@ -1121,10 +1137,11 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                         }
                     }
                     if (!bargePending && bargeDecision == CommandWindow.Decision.START
-                            && !DIRECT_BARGE_IN_ENABLED) {
+                            && (!DIRECT_BARGE_IN_ENABLED
+                            || directBargeGateDecision != PlaybackBargeInGate.Decision.ACCEPT)) {
                         directBargeRejections++;
                         replyReplayDelayFrames=REPLY_REPLAY_DELAY_FRAMES;
-                        diagnosticEvent("direct_barge_rejected,reason=playback_echo_guard_unverified"
+                        diagnosticEvent("direct_barge_rejected,reason=" + directBargeBlockReason
                                 +",replay_after_frames="+REPLY_REPLAY_DELAY_FRAMES);
                     } else if (!bargePending && bargeDecision == CommandWindow.Decision.START
                             && dialogueGuard.mayStartAnother()) {
