@@ -68,6 +68,8 @@ class AlarmVoiceGrammarTest(unittest.TestCase):
         self.assertEqual(AlarmVoiceCommand('update','起床',8,0),
                          parse_alarm_voice('把起床闹钟改到早上八点',today))
         self.assertEqual(AlarmVoiceCommand('delete','起床'),parse_alarm_voice('取消起床闹钟',today))
+        self.assertEqual(AlarmVoiceCommand('delete',date_value='2026-09-13'),
+                         parse_alarm_voice('关闭明天的闹钟',today))
         self.assertEqual(AlarmVoiceCommand('enable','起床',enabled=True),
                          parse_alarm_voice('打开起床闹钟',today))
         self.assertEqual(AlarmVoiceCommand('enable','起床',enabled=False),

@@ -49,6 +49,9 @@ public final class NativeMediaController {
     private long requests;
     private long rejected;
     private long failures;
+    private long stopRequests;
+    private long stopConfirmed;
+    private long stopFailures;
     private String lastFailure = "none";
     private final EnumSet<Interruption> interruptions = EnumSet.noneOf(Interruption.class);
     private boolean resumePending;
@@ -90,6 +93,9 @@ public final class NativeMediaController {
         if (command.getKey() != KEY) return false;
         requests++;
         if (command.getDeviceId() != 0) { reject("media_device_id_invalid"); publish(true); return true; }
+        boolean stopRequested = command.getHasCommand()
+                && command.getCommand() == EsphomeApi.MediaPlayerCommand.MEDIA_PLAYER_COMMAND_STOP;
+        if (stopRequested) stopRequests++;
         try {
             Float requestedVolume = command.getHasVolume() ? checkedVolume(command.getVolume()) : null;
             String requestedUrl = command.getHasMediaUrl() ? checkedUrl(command.getMediaUrl()) : null;
@@ -107,10 +113,15 @@ public final class NativeMediaController {
                 prepareStartedMs = backend.waitingForPreparation() ? clock.nowMs() : -1;
             }
             if (command.getHasCommand()) apply(command.getCommand());
+            if (stopRequested) {
+                if (backend.state() == State.IDLE) stopConfirmed++;
+                else throw new IOException("media_stop_not_idle");
+            }
             if (requestedUrl == null && requestedVolume == null && !command.getHasCommand())
                 throw new IOException("media_empty_command");
             lastFailure = "none";
         } catch (IOException | RuntimeException error) {
+            if (stopRequested) stopFailures++;
             reject(safeFailure(error));
         }
         publish(true);
@@ -201,6 +212,9 @@ public final class NativeMediaController {
     public synchronized long requests() { return requests; }
     public synchronized long rejected() { return rejected; }
     public synchronized long failures() { return failures; }
+    public synchronized long stopRequests() { return stopRequests; }
+    public synchronized long stopConfirmed() { return stopConfirmed; }
+    public synchronized long stopFailures() { return stopFailures; }
     public synchronized String lastFailure() { return lastFailure; }
 
     private void publish(boolean force) throws IOException {

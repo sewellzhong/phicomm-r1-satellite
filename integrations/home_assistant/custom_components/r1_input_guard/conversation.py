@@ -6,7 +6,7 @@ import unicodedata
 from uuid import uuid4
 from homeassistant.components import conversation
 from homeassistant.components.conversation.chat_log import current_chat_log
-from homeassistant.helpers import entity_registry as er, intent
+from homeassistant.helpers import entity_registry as er, device_registry as dr, area_registry as ar, intent
 from homeassistant.helpers import chat_session
 from homeassistant.exceptions import HomeAssistantError
 
@@ -63,6 +63,102 @@ class NativeConversation(conversation.ConversationEntity):
                 or not hasattr(target, "internal_async_process")):
             return None
         return target
+
+    @staticmethod
+    def _norm_target(value):
+        return "".join(char for char in unicodedata.normalize("NFKC", value or "").casefold()
+                       if not char.isspace() and unicodedata.category(char)[0] != "P")
+
+    def _resolve_stop_targets(self, owner, target):
+        """Resolve one explicit HA entity by device, area, entity and domain words."""
+        wanted = self._norm_target(target)
+        registry = er.async_get(self.hass)
+        devices = dr.async_get(self.hass)
+        areas = ar.async_get(self.hass)
+        candidates = []
+        domain_words = {
+            "media_player": ("播放", "音乐", "音箱", "电视", "媒体"),
+            "light": ("灯", "灯光"),
+            "cover": ("窗帘", "晾衣架", "卷帘", "床帘"),
+            "assist_satellite": ("卫星", "音箱", "会话"),
+        }
+        for item in registry.entities.values():
+            if item.disabled_by is not None or item.domain not in domain_words or not item.device_id:
+                continue
+            device = devices.async_get(item.device_id)
+            area = areas.async_get(device.area_id) if device and device.area_id else None
+            labels = [item.name, item.original_name,
+                      device.name if device else None,
+                      device.name_by_user if device else None,
+                      area.name if area else None]
+            labels = [self._norm_target(value) for value in labels if value]
+            if not any(label and (label in wanted or wanted in label) for label in labels):
+                continue
+            if not any(word in wanted for word in domain_words[item.domain]):
+                # A unique named device is enough; a room-only target remains
+                # constrained by the entity domain when there is only one match.
+                if not any(label and label == wanted for label in labels):
+                    continue
+            candidates.append(item)
+        return sorted(candidates, key=lambda item: item.entity_id)
+
+    def _resolve_r1_stop_owners(self, target):
+        """Resolve a named R1 by device/area, not by its implementation entities."""
+        if not hasattr(self.hass, 'data') or not isinstance(self.hass.data, dict):
+            return []
+        wanted = self._norm_target(target)
+        registry = er.async_get(self.hass)
+        devices = dr.async_get(self.hass)
+        areas = ar.async_get(self.hass)
+        owners = self.hass.data.get('r1_input_guard_interaction', {})
+        matches = []
+        for candidate in owners.values():
+            candidate.resolve()
+            device = devices.async_get(candidate.device_id) if candidate.device_id else None
+            area = areas.async_get(device.area_id) if device and device.area_id else None
+            labels = [device.name if device else None,
+                      device.name_by_user if device else None,
+                      area.name if area else None]
+            if candidate.device_id:
+                labels.extend(item.name for item in registry.entities.values()
+                              if item.device_id == candidate.device_id)
+                labels.extend(item.original_name for item in registry.entities.values()
+                              if item.device_id == candidate.device_id)
+            labels = [self._norm_target(value) for value in labels if value]
+            if any(label and (label in wanted or wanted in label) for label in labels):
+                matches.append(candidate)
+        return matches
+
+    async def _stop_entity(self, item, operation, context):
+        domain = item.domain
+        if domain == "media_player":
+            service = "media_stop"
+        elif domain == "light":
+            service = "turn_off"
+        elif domain == "cover":
+            service = "close_cover" if operation == "close" else "stop_cover"
+        elif domain == "assist_satellite":
+            service = "stop_conversation"
+        else:
+            raise HomeAssistantError("r1_stop_domain_unsupported")
+        await self.hass.services.async_call(domain, service,
+                                            {"entity_id": item.entity_id},
+                                            blocking=True, context=context)
+        if domain == "media_player":
+            expected = ("idle", "off")
+        elif domain == "light":
+            expected = ("off",)
+        elif domain == "cover":
+            expected = ("open", "closed", "unknown", "unavailable")
+        else:
+            return
+        for _ in range(30):
+            state = self.hass.states.get(item.entity_id)
+            if state is not None and state.state in expected:
+                if domain != "cover" or state.state != "unknown":
+                    return
+            await asyncio.sleep(.1)
+        raise HomeAssistantError("r1_stop_not_confirmed")
 
     @property
     def supports_streaming(self):
@@ -152,6 +248,96 @@ class NativeConversation(conversation.ConversationEntity):
         from .interaction import bridge
         from .controls import parse_control
         owner = bridge(self.hass, self._entry_id) if hasattr(self.hass, 'data') else None
+        from .media_voice import is_stop_current, is_stop_media, parse_explicit_target_stop
+        if is_stop_current(user_input.text):
+            self._last_control_diagnostic = {"matched": True, "kind": "stop_current_device",
+                "device_id": user_input.device_id, "satellite_id": user_input.satellite_id,
+                "bound_device": owner.device_id if owner else None}
+            response = intent.IntentResponse(language=user_input.language)
+            if not owner or not owner.device_id or user_input.device_id != owner.device_id:
+                response.async_set_speech('无法确定当前设备。')
+                return conversation.ConversationResult(response=response, conversation_id=outer,
+                                                         continue_conversation=True)
+            self._busy.add(key)
+            try:
+                results = await owner.stop_current_device(user_input.context)
+                success = [name for name, value in results if value is True]
+                failed = [name for name, value in results if value is False]
+                if failed:
+                    response.async_set_speech('已停止' + '、'.join(success) + '；未能确认' + '、'.join(failed) + '。')
+                elif success:
+                    response.async_set_speech('已停止' + '、'.join(success) + '。')
+                else:
+                    response.async_set_speech('当前设备没有正在进行的可停止操作。')
+            except HomeAssistantError:
+                response.async_set_speech('未能确认当前设备已停止，请稍后重试。')
+            finally:
+                self._busy.discard(key)
+            self._sessions.pop(key, None)
+            return conversation.ConversationResult(response=response, conversation_id=outer,
+                                                     continue_conversation=False)
+        if is_stop_media(user_input.text):
+            self._last_control_diagnostic = {"matched": True, "kind": "media_stop",
+                "device_id": user_input.device_id, "satellite_id": user_input.satellite_id,
+                "bound_device": owner.device_id if owner else None}
+            response = intent.IntentResponse(language=user_input.language)
+            if not owner or not owner.device_id or user_input.device_id != owner.device_id:
+                response.async_set_speech('无法确定要停止的R1媒体播放器。')
+                return conversation.ConversationResult(response=response, conversation_id=outer,
+                                                         continue_conversation=True)
+            self._busy.add(key)
+            try:
+                await owner.stop_media(user_input.context)
+                response.async_set_speech('已停止播放。')
+            except HomeAssistantError:
+                response.async_set_speech('未能确认已停止播放，请稍后重试。')
+            finally:
+                self._busy.discard(key)
+            return conversation.ConversationResult(response=response, conversation_id=outer,
+                                                     continue_conversation=True)
+        explicit = parse_explicit_target_stop(user_input.text)
+        if explicit:
+            self._last_control_diagnostic = {"matched": True, "kind": "stop_explicit_target",
+                "target": explicit["target"], "operation": explicit["operation"],
+                "device_id": user_input.device_id, "satellite_id": user_input.satellite_id}
+            response = intent.IntentResponse(language=user_input.language)
+            r1_matches = self._resolve_r1_stop_owners(explicit["target"])
+            if len(r1_matches) == 1:
+                try:
+                    results = await r1_matches[0].stop_current_device(user_input.context)
+                    success = [name for name, value in results if value is True]
+                    failed = [name for name, value in results if value is False]
+                    if failed:
+                        response.async_set_speech('已停止' + '、'.join(success) + '；未能确认' + '、'.join(failed) + '。')
+                    elif success:
+                        response.async_set_speech('已停止' + '、'.join(success) + '。')
+                    else:
+                        response.async_set_speech('目标设备没有正在进行的可停止操作。')
+                except HomeAssistantError:
+                    response.async_set_speech('未能确认目标设备已停止。')
+                return conversation.ConversationResult(response=response, conversation_id=outer,
+                                                         continue_conversation=True)
+            if len(r1_matches) > 1:
+                response.async_set_speech('找到多个停止目标，请说出更具体的设备名称。')
+                return conversation.ConversationResult(response=response, conversation_id=outer,
+                                                         continue_conversation=True)
+            try:
+                matches = self._resolve_stop_targets(owner, explicit["target"])
+            except HomeAssistantError:
+                matches = []
+            if len(matches) != 1:
+                response.async_set_speech('没有找到唯一的停止目标，请说明设备名称或房间。' if not matches
+                                          else '找到多个停止目标，请说出更具体的设备名称。')
+                return conversation.ConversationResult(response=response, conversation_id=outer,
+                                                         continue_conversation=True)
+            entity = matches[0]
+            try:
+                await self._stop_entity(entity, explicit["operation"], user_input.context)
+                response.async_set_speech('已停止。')
+            except HomeAssistantError:
+                response.async_set_speech('未能确认目标设备已停止。')
+            return conversation.ConversationResult(response=response, conversation_id=outer,
+                                                     continue_conversation=True)
         from .system_voice import parse_system_voice, execute_system_voice
         system_command = parse_system_voice(user_input.text)
         if system_command:

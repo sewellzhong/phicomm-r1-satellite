@@ -417,6 +417,9 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("media_state", media.state().name().toLowerCase(java.util.Locale.ROOT))
                 .put("media_requests", media.requests()).put("media_rejected", media.rejected())
                 .put("media_failures", media.failures()).put("media_last_failure", media.lastFailure())
+                .put("media_stop_requests", media.stopRequests())
+                .put("media_stop_confirmed", media.stopConfirmed())
+                .put("media_stop_failures", media.stopFailures())
                 .put("do_not_disturb", dnd == null ? org.json.JSONObject.NULL : dnd.snapshot())
                 .put("timers", timers == null ? org.json.JSONObject.NULL : timers.snapshot())
                 .put("tts_stream_start_ms", ttsStreamStartMillis)
@@ -1142,7 +1145,9 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     }
                     CommandWindow.Decision bargeDecision = bargeWindow.acceptQualified(
                             qualifiedBargeSpeech, rawBargeSpeech && evidence.strong());
-                    if (vendorAecDetection && REPLY_WAKE_CANCEL_ENABLED && qualifiedBargeSpeech) {
+                    if (dev.sewellzhong.r1probe.assist.PlaybackWakeCancelGate.allow(
+                            vendorAecDetection, REPLY_WAKE_CANCEL_ENABLED,
+                            vendorAecOutputReady, vendorAecOutputSaturated)) {
                         if (coordinator.requestCancel(NativeAudioCoordinator.CancelReason.NEW_WAKE)) {
                             vendorAecKwsCancelled++;
                             replyWakeInterruptions++; wakes++; controls.wake();

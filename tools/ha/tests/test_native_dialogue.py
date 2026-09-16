@@ -183,7 +183,9 @@ class ConversationTest(unittest.IsolatedAsyncioTestCase):
         result=await self.agent.async_process(self.user('结束对话。'))
         self.assertFalse(result.continue_conversation);self.assertEqual('好的',result.response.speech['plain']['speech'])
         self.assertEqual(1,len(self.inner))
-        for text in ['取消播放','停止播放','取消计时器','取消闹钟','好','是','嗯','客厅','５']:
+        # Media stop is a source-bound native fast path; the remaining object
+        # commands still reach the normal HA delegate.
+        for text in ['取消计时器','取消闹钟','好','是','嗯','客厅','５']:
             await self.agent.async_process(self.user(text))
             self.assertEqual(text,self.inner[-1]['text'])
         self.assertNotEqual(self.inner[0]['conversation_id'],self.inner[1]['conversation_id'])

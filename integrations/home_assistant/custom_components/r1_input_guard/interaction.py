@@ -100,6 +100,76 @@ class Interaction:
         except ValueError: return None
         return value if math.isfinite(value) else None
 
+    def media_player_entities(self):
+        """Return the native playback entity, not the volume-only wrapper."""
+        registry = self.resolve()
+        if not self.device_id:
+            return []
+        entities = [item for item in registry.entities.values()
+                    if item.domain == 'media_player' and item.device_id == self.device_id
+                    and item.disabled_by is None]
+        native = [item for item in entities
+                  if item.platform == 'esphome'
+                  and (item.unique_id or '').endswith('/media_player/R1 媒体播放器')]
+        # The r1_input_guard media_player entity is deliberately volume-only;
+        # never send media_stop to it.  Keep a fallback for older ESPHome
+        # registries whose unique_id predates the native display label.
+        if not native:
+            native = [item for item in entities if item.platform == 'esphome']
+        return sorted(item.entity_id for item in native)
+
+    async def stop_media(self, context=None):
+        """Stop this R1's media player and confirm its real HA state."""
+        targets = self.media_player_entities()
+        if len(targets) != 1:
+            raise HomeAssistantError('r1_media_player_unavailable')
+        target = targets[0]
+        await self.hass.services.async_call(
+            'media_player', 'media_stop', {'entity_id': target},
+            blocking=True, context=context)
+        for _ in range(30):
+            state = self.hass.states.get(target)
+            if state is not None and state.state in ('idle', 'off'):
+                return target
+            await asyncio.sleep(.1)
+        raise HomeAssistantError('r1_media_stop_not_confirmed')
+
+    async def stop_current_device(self, context=None):
+        """Stop active R1-owned actions; future alarm schedules remain intact."""
+        results = []
+        try:
+            await self.stop_media(context)
+            results.append(('音乐播放', True))
+        except HomeAssistantError as error:
+            results.append(('音乐播放', False if str(error) not in ('r1_media_player_unavailable',) else None))
+        state = self.alarm_state or {}
+        if state.get('ringing_count', 0):
+            try:
+                await self.alarm_request('stop', context=context)
+                results.append(('正在响的闹钟', True))
+            except HomeAssistantError:
+                results.append(('正在响的闹钟', False))
+        else:
+            results.append(('正在响的闹钟', None))
+        satellite = self.entity('assist_satellite', 'assist_satellite')
+        if satellite:
+            try:
+                await self.hass.services.async_call(
+                    'assist_satellite', 'stop_conversation', {'entity_id': satellite},
+                    blocking=True, context=context)
+                results.append(('持续会话', True))
+            except HomeAssistantError:
+                results.append(('持续会话', False))
+        return results
+
+    def all_owned_entities(self):
+        registry = self.resolve()
+        if not self.device_id:
+            return []
+        return [item for item in registry.entities.values()
+                if item.domain in ('media_player', 'light', 'cover', 'assist_satellite')
+                and item.device_id == self.device_id]
+
     def select(self, suffix):
         entity_id = self.entity(suffix, 'select')
         state = self.hass.states.get(entity_id) if entity_id else None

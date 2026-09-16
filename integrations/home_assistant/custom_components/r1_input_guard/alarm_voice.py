@@ -173,6 +173,10 @@ def parse_alarm_voice(text, today=None):
         return AlarmVoiceCommand("sound", name=match[1].removeprefix("我的"),
                                  volume_percent=volume,
                                  issue="volume_invalid" if volume is None or not 1 <= volume <= 100 else None)
+    match = re.fullmatch(r"(?:取消|关闭)(今天|明天|后天)(?:的)?闹钟", text)
+    if match:
+        offset = {"今天": 0, "明天": 1, "后天": 2}[match[1]]
+        return AlarmVoiceCommand("delete", date_value=(today + timedelta(days=offset)).isoformat())
     match = re.fullmatch(r"(?:取消|删除)(.+?)闹钟", text)
     if match:
         name = match[1].removeprefix("我的")
@@ -295,12 +299,18 @@ async def execute_alarm_voice(owner, command, context=None):
                   'expected_version': owner.alarm_state['version']}
         action = "创建"
     else:
-        matches = [item for item in alarms if item.get('name') == command.name]
+        if command.operation == "delete" and command.date_value:
+            matches = [item for item in alarms if item.get('date') == command.date_value]
+        else:
+            matches = [item for item in alarms if item.get('name') == command.name]
         if not matches:
-            return f"没有找到名为{command.name}的闹钟，没有修改。"
+            return (f"没有找到{command.date_value}的闹钟，没有修改。"
+                    if command.date_value else f"没有找到名为{command.name}的闹钟，没有修改。")
         if len(matches) > 1:
             choices = "、".join(_schedule_text(item) for item in matches[:4])
-            return f"找到多个名为{command.name}的闹钟：{choices}。请先在HA中使用唯一名称，没有修改。"
+            return (f"找到多个{command.date_value}的闹钟：{choices}。请补充闹钟名称，没有修改。"
+                    if command.date_value else
+                    f"找到多个名为{command.name}的闹钟：{choices}。请先在HA中使用唯一名称，没有修改。")
         current = matches[0]
         if command.operation == "delete":
             values = {'id': current['id'], 'expected_version': owner.alarm_state['version']}

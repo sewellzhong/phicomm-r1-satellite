@@ -10,7 +10,7 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class NativeMediaControllerTest {
-    static final class Backend implements NativeMediaController.Backend {
+    static class Backend implements NativeMediaController.Backend {
         NativeMediaController.State state = NativeMediaController.State.IDLE;
         String url, failure = "none";
         float volume;
@@ -69,6 +69,9 @@ public final class NativeMediaControllerTest {
         assertEquals(NativeMediaController.State.IDLE,backend.state);
         assertTrue(sent.stream().allMatch(value->value instanceof EsphomeApi.MediaPlayerStateResponse));
         assertEquals(4,controller.requests());assertEquals(0,controller.rejected());
+        assertEquals(1,controller.stopRequests());
+        assertEquals(1,controller.stopConfirmed());
+        assertEquals(0,controller.stopFailures());
     }
 
     @Test public void invalidOrBusyStartFailsClosedWithoutChangingPlayback() throws Exception {
@@ -97,6 +100,20 @@ public final class NativeMediaControllerTest {
         assertEquals(NativeMediaController.State.IDLE,backend.state);
         assertEquals(1,controller.failures());
         assertEquals("media_prepare_timeout",controller.lastFailure());
+    }
+
+    @Test public void stopRequestFailsWhenBackendDoesNotReachIdle() throws Exception {
+        connect();
+        NativeMediaController.Backend stuck = new Backend() {
+            @Override public void stop() { state = NativeMediaController.State.PAUSED; }
+        };
+        NativeMediaController value = new NativeMediaController(stuck, volume, () -> true, () -> nowMs);
+        value.message(MessageIds.MediaPlayerCommandRequest,
+                request(EsphomeApi.MediaPlayerCommand.MEDIA_PLAYER_COMMAND_STOP));
+        assertEquals(1, value.stopRequests());
+        assertEquals(0, value.stopConfirmed());
+        assertEquals(1, value.stopFailures());
+        assertEquals(1, value.rejected());
     }
 
     @Test public void foreignKeyAndUnsupportedCommandsCannotControlBackend() throws Exception {
