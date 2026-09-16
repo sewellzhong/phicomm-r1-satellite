@@ -23,6 +23,21 @@ BACKUPS = ROOT / "test-results/2026-09-01-r1-sample01/stage0/current-installed-a
 def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def installed_apk_path(device, package):
+    """Resolve one base APK on 3448; pm path may return closed/CRLF output."""
+    result = device.adb('shell', 'pm', 'path', package).replace('\r', '').strip()
+    if re.fullmatch(r'/data/app/[A-Za-z0-9_.-]+-[0-9]+/base\.apk', result.removeprefix('package:')):
+        return result.removeprefix('package:')
+    dump = device.adb('shell', 'dumpsys', 'package', package).replace('\r', '')
+    code = re.search(r'codePath=(/data/app/' + re.escape(package) + r'-[0-9]+)\s', dump)
+    if not code:
+        raise RuntimeError('installed_package_path_unavailable')
+    path = code[1] + '/base.apk'
+    if not re.fullmatch(r'/data/app/[A-Za-z0-9_.-]+-[0-9]+/base\.apk', path):
+        raise RuntimeError('unexpected_package_path')
+    return path
+
+
 def verify_packages(device):
     expected = {}
     for line in (BACKUPS / "SHA256SUMS").read_text().splitlines():
@@ -228,7 +243,7 @@ def main():
         if not args.apk.is_file(): raise RuntimeError('apk_missing')
         packages = verify_packages(device)
         before = device.adb('shell','dumpsys','package',admin.PACKAGE)
-        old_path = device.adb('shell','pm','path',admin.PACKAGE).removeprefix('package:').strip()
+        old_path = installed_apk_path(device, admin.PACKAGE)
         if not re.fullmatch(r'/data/app/dev\.sewellzhong\.r1probe-[0-9]+/base.apk',old_path): raise RuntimeError('unexpected_satellite_path')
         old_apk = args.evidence / 'previous-satellite.apk'
         if not baseline.exists():
