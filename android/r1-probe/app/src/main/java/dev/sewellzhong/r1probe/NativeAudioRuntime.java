@@ -34,7 +34,14 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     // v133 also proved that using the same candidate for stop-only truncates TTS.
     // Keep the entire unverified path failed closed.
     private static final boolean DIRECT_BARGE_IN_ENABLED = false;
-    private static final boolean REPLY_WAKE_CANCEL_ENABLED = false;
+    // Experimental playback-only path. Normal idle Alexa remains at 229/255;
+    // only the vendor-AEC reply model may cancel a reply, after VAD confirms speech.
+    private static final boolean REPLY_WAKE_CANCEL_ENABLED = true;
+    // Controlled playback-only experiment. The normal idle threshold remains 229.
+    // One-round A/B experiment: use the normal Alexa cutoff during playback. This is
+    // deliberately not a production conclusion; the previous run only proved a peak
+    // of 246, not five consecutive outputs at or above 229.
+    private static final int PLAYBACK_REPLY_KWS_CUTOFF = 229;
     private static final boolean AUTOMATIC_FOLLOWUP_ENABLED = true;
     private static final long FOLLOWUP_SETTLE_NANOS = 1_200_000_000L;
     private static final int REPLY_REPLAY_DELAY_FRAMES = 40;
@@ -48,6 +55,13 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     }
     private void diagnosticEvent(String detail) {
         if(diagnostic!=null) diagnostic.event(System.nanoTime(),detail);
+    }
+    private void recordWake(String source, long sampleIndex, float score) {
+        lastWakeSource = source;
+        lastWakeSampleIndex = sampleIndex;
+        lastWakeMonotonicMs = System.nanoTime() / 1_000_000L;
+        lastWakeWallMs = System.currentTimeMillis();
+        lastWakeScore = score;
     }
     private final boolean listen;
     interface AudioPermission { boolean allowed(); }
@@ -78,6 +92,11 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private volatile String lastPromptKind = "none";
     private volatile long promptDrainedAt;
     private volatile int lastPromptIndex;
+    private volatile String lastWakeSource = "none";
+    private volatile long lastWakeSampleIndex = -1;
+    private volatile long lastWakeMonotonicMs;
+    private volatile long lastWakeWallMs;
+    private volatile float lastWakeScore;
     private final dev.sewellzhong.r1probe.assist.PromptReference promptReference = new dev.sewellzhong.r1probe.assist.PromptReference();
     private final dev.sewellzhong.r1probe.assist.ContinuousDialogueGuard dialogueGuard =
             new dev.sewellzhong.r1probe.assist.ContinuousDialogueGuard();
@@ -204,7 +223,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private volatile boolean authenticated;
     public boolean authenticated() { return authenticated; }
     public String failureCode() { return failure; }
-    private volatile long frames, wakes, replyWakeInterruptions, directBargeInterruptions,
+    private volatile long frames, wakes, replyWakeInterruptions, announcementWakeInterruptions,
+            directBargeInterruptions,
             directBargeRejections, commands, transcripts, replies, completed, noInputs;
     private volatile long replyContinuousObservedDetections, replyReplayAttempts,
             replyReplayDetections, replyReplayMaxMicros;
@@ -215,6 +235,25 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private volatile long replyRawContinuousFrames, replyRawContinuousInferences,
             replyRawContinuousDetections, replyRawContinuousMaxMicros;
     private volatile int replyRawContinuousPeakRaw;
+    private volatile long vendorAecKwsFrames, vendorAecKwsDetections, vendorAecKwsFailures,
+            vendorAecKwsCancelled, vendorAecKwsScoreFramesAt8, vendorAecKwsScoreFramesAt12,
+            vendorAecKwsScoreFramesAt16, vendorAecKwsScoreFramesAt32;
+    private volatile int vendorAecKwsPeakRaw;
+    private volatile int vendorAecKwsOutputPeak;
+    private volatile double vendorAecKwsOutputRms;
+    private volatile long vendorAecKwsOutputNonzeroFrames;
+    private volatile int vendorAecInputPeak, vendorAecReferencePeak;
+    private volatile int vendorAecOutputMin = 32767, vendorAecOutputMax = -32768;
+    private volatile long vendorAecOutputSamples, vendorAecOutputSaturatedSamples;
+    private volatile long vendorAecInputSamples, vendorAecAdapterOutputSamples,
+            vendorAecInputSaturatedSamples, vendorAecAdapterOutputSaturatedSamples,
+            vendorAecChunks;
+    private volatile int vendorAecAdapterInputPeak, vendorAecAdapterOutputPeak;
+    private volatile int vendorAecAdapterOutputMin = 32767, vendorAecAdapterOutputMax = -32768;
+    private volatile int captureInputPeak;
+    private volatile long captureInputFrames, captureInputSamples, captureInputSaturatedSamples;
+    private volatile boolean vendorAecKwsAvailable;
+    private volatile String vendorAecKwsLastFailure = "none";
     private final dev.sewellzhong.r1probe.assist.SpeechEvidence evidence = new dev.sewellzhong.r1probe.assist.SpeechEvidence();
     private DiagnosticWindowRequest diagnosticWindow;
     private volatile String windowSource = "none";
@@ -259,6 +298,12 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("rms", Math.round(rms)).put("noise_floor", Math.round(noiseFloor))
                 .put("commands", commands).put("stt_results", transcripts).put("tts_streams", replies)
                 .put("reply_wake_interruptions", replyWakeInterruptions)
+                .put("announcement_wake_interruptions", announcementWakeInterruptions)
+                .put("last_wake_source", lastWakeSource)
+                .put("last_wake_sample_index", lastWakeSampleIndex)
+                .put("last_wake_monotonic_ms", lastWakeMonotonicMs)
+                .put("last_wake_wall_ms", lastWakeWallMs)
+                .put("last_wake_score", lastWakeScore)
                 .put("reply_wake_cancel_enabled", REPLY_WAKE_CANCEL_ENABLED)
                 .put("reply_continuous_observed_detections", replyContinuousObservedDetections)
                 .put("reply_replay_attempts", replyReplayAttempts)
@@ -274,6 +319,45 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("reply_raw_continuous_detections", replyRawContinuousDetections)
                 .put("reply_raw_continuous_peak_raw", replyRawContinuousPeakRaw)
                 .put("reply_raw_continuous_max_us", replyRawContinuousMaxMicros)
+                .put("vendor_aec_kws_frames", vendorAecKwsFrames)
+                .put("vendor_aec_kws_detections", vendorAecKwsDetections)
+                .put("vendor_aec_kws_cancelled", vendorAecKwsCancelled)
+                .put("vendor_aec_kws_cutoff_raw", PLAYBACK_REPLY_KWS_CUTOFF)
+                .put("vendor_aec_kws_score_frames_at_8", vendorAecKwsScoreFramesAt8)
+                .put("vendor_aec_kws_score_frames_at_12", vendorAecKwsScoreFramesAt12)
+                .put("vendor_aec_kws_score_frames_at_16", vendorAecKwsScoreFramesAt16)
+                .put("vendor_aec_kws_score_frames_at_32", vendorAecKwsScoreFramesAt32)
+                .put("playback_kws_detections", vendorAecKwsDetections)
+                .put("playback_kws_cancelled", vendorAecKwsCancelled)
+                .put("vendor_aec_kws_peak_raw", vendorAecKwsPeakRaw)
+                .put("vendor_aec_kws_output_peak", vendorAecKwsOutputPeak)
+                .put("vendor_aec_kws_output_rms", vendorAecKwsOutputRms)
+                .put("vendor_aec_kws_output_nonzero_frames", vendorAecKwsOutputNonzeroFrames)
+                .put("vendor_aec_input_peak", vendorAecInputPeak)
+                .put("vendor_aec_reference_peak", vendorAecReferencePeak)
+                .put("vendor_aec_reference_source", "pre_volume_playback_pcm")
+                .put("vendor_aec_output_min", vendorAecOutputSamples == 0 ? 0 : vendorAecOutputMin)
+                .put("vendor_aec_output_max", vendorAecOutputSamples == 0 ? 0 : vendorAecOutputMax)
+                .put("vendor_aec_output_samples", vendorAecOutputSamples)
+                .put("vendor_aec_output_saturated_samples", vendorAecOutputSaturatedSamples)
+                .put("vendor_aec_adapter_input_samples", vendorAecInputSamples)
+                .put("vendor_aec_adapter_output_samples", vendorAecAdapterOutputSamples)
+                .put("vendor_aec_adapter_input_saturated_samples", vendorAecInputSaturatedSamples)
+                .put("vendor_aec_adapter_output_saturated_samples", vendorAecAdapterOutputSaturatedSamples)
+                .put("vendor_aec_adapter_chunks", vendorAecChunks)
+                .put("vendor_aec_adapter_input_peak", vendorAecAdapterInputPeak)
+                .put("vendor_aec_adapter_output_peak", vendorAecAdapterOutputPeak)
+                .put("vendor_aec_adapter_output_min", vendorAecAdapterOutputSamples == 0 ? 0 : vendorAecAdapterOutputMin)
+                .put("vendor_aec_adapter_output_max", vendorAecAdapterOutputSamples == 0 ? 0 : vendorAecAdapterOutputMax)
+                .put("capture_input_peak", captureInputPeak)
+                .put("capture_input_frames", captureInputFrames)
+                .put("capture_input_samples", captureInputSamples)
+                .put("capture_input_saturated_samples", captureInputSaturatedSamples)
+                .put("vendor_aec_kws_failures", vendorAecKwsFailures)
+                .put("vendor_aec_kws_last_failure", vendorAecKwsLastFailure)
+                .put("vendor_aec_kws_enabled", vendorAecKwsAvailable)
+                .put("vendor_aec_kws_purpose", "playback_cancel_candidate")
+                .put("vendor_aec_kws_cancel_authorized", REPLY_WAKE_CANCEL_ENABLED)
                 .put("direct_barge_interruptions", directBargeInterruptions)
                 .put("direct_barge_in_enabled", DIRECT_BARGE_IN_ENABLED)
                 .put("direct_barge_rejections", directBargeRejections)
@@ -616,23 +700,44 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
             Arrays.fill(recent,(byte)0);Arrays.fill(scratch,(short)0);
         }
     }
+    private void updateVendorAecAdapterMetrics(VendorAecLiveProcessor processor) {
+        vendorAecInputSamples = processor.inputSamples();
+        vendorAecAdapterOutputSamples = processor.outputSamples();
+        vendorAecInputSaturatedSamples = processor.inputSaturatedSamples();
+        vendorAecAdapterOutputSaturatedSamples = processor.outputSaturatedSamples();
+        vendorAecChunks = processor.chunks();
+        vendorAecAdapterInputPeak = processor.inputPeak();
+        vendorAecAdapterOutputPeak = processor.outputPeak();
+        vendorAecAdapterOutputMin = processor.outputMinimum();
+        vendorAecAdapterOutputMax = processor.outputMaximum();
+    }
     private void captureLoop() {
         short[] frame = new short[320];
         short[] bargeAnalysis = new short[320];
+        short[] vendorAecReference = new short[320];
+        short[] vendorAecAnalysis = new short[320];
         byte[] pcm = new byte[640];
         PcmPrebuffer history = new PcmPrebuffer();
         PcmPrebuffer replyAnalysisHistory = new PcmPrebuffer();
         short[] replayScratch = new short[320];
         BargeInCapture bargeCapture = new BargeInCapture();
         AcknowledgementSelector selector = new AcknowledgementSelector(new Random());
-        try (AlexaKwsEngine engine = new AlexaKwsEngine(context.getAssets());
+                try (AlexaKwsEngine engine = new AlexaKwsEngine(context.getAssets());
                 AlexaKwsEngine rawReplyEngine = new AlexaKwsEngine(context.getAssets());
+                AlexaKwsEngine vendorAecReplyEngine = new AlexaKwsEngine(context.getAssets(),
+                        PLAYBACK_REPLY_KWS_CUTOFF);
+                VendorAecLiveProcessor vendorAec = VendorAecLiveProcessor.tryCreate();
                 CommandVad vad = new CommandVad()) {
             long index = 0;
             long rawReplyIndex = 0;
+            long vendorAecReplyIndex = 0;
             int fill = 0;
             boolean waiting = false, busy = false, commandActive = false, following = false;
             boolean rawReplyActive = false;
+            boolean vendorAecReplyActive = false;
+            boolean vendorAecHealthy = vendorAec != null;
+            boolean vendorAecReferenceActive = false;
+            vendorAecKwsAvailable = vendorAecHealthy;
             long followupNotBefore = 0;
             int replyReplayDelayFrames = -1;
             boolean bargePending = false, bargeEnded = false;
@@ -766,9 +871,25 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 if (count <= 0) throw new IOException("native_capture_read_failed");
                 lastRead = System.nanoTime(); fill += count;
                 if (fill < frame.length) continue;
+                if (!replayed) {
+                    int framePeak = 0;
+                    long saturated = 0;
+                    for (short sample : frame) {
+                        int absolute = Math.abs((int) sample);
+                        framePeak = Math.max(framePeak, absolute);
+                        if (sample == Short.MIN_VALUE || sample == Short.MAX_VALUE) saturated++;
+                    }
+                    captureInputPeak = Math.max(captureInputPeak, framePeak);
+                    captureInputFrames++;
+                    captureInputSamples += frame.length;
+                    captureInputSaturatedSamples += saturated;
+                }
                 fill = 0; frames++; promptReference.expire(lastRead);
                 boolean interruptibleReply = busy && !commandActive && !coordinator.acceptingInput();
-                if(!interruptibleReply) {
+                // Announcements and TTS share the playback/reference path. Previously an
+                // announcement bypassed AEC/KWS because it has no active Assist run.
+                boolean playbackWakeMonitor = playbackRequested || interruptibleReply;
+                if(!playbackWakeMonitor) {
                     replyAnalysisHistory.clear();
                     replyReplayDelayFrames = -1;
                     if (rawReplyActive) {
@@ -776,8 +897,15 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                         rawReplyIndex = 0;
                         rawReplyActive = false;
                     }
+                    if (vendorAecReplyActive || vendorAecReferenceActive) {
+                        vendorAec.reset();
+                        vendorAecReplyEngine.reset();
+                        vendorAecReplyActive = false;
+                        vendorAecReplyIndex = 0;
+                        vendorAecReferenceActive = false;
+                    }
                 }
-                if (interruptibleReply) {
+                if (playbackWakeMonitor) {
                     history.append(frame);
                     if (!rawReplyActive) {
                         rawReplyEngine.reset();
@@ -800,6 +928,8 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     }
                     if(rawContinuousDetection.detected) {
                         replyRawContinuousDetections++;
+                        recordWake("reply_raw_continuous", rawReplyIndex,
+                                rawContinuousDetection.score);
                         diagnosticEvent("reply_wake_observed,mode=raw_continuous,score="
                                 +rawContinuousDetection.score);
                     }
@@ -812,6 +942,92 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     if (promptReference.lastFrameMatched()) {
                         playbackReferenceSuppressedFrames++;
                         if (!playbackRequested) playbackTailSuppressedFrames++;
+                    }
+                    boolean vendorReferenceReady = false;
+                    boolean vendorAecDetection = false;
+                    float vendorAecDetectionScore = 0.0f;
+                    if (vendorAec != null && vendorAecHealthy) {
+                        vendorReferenceReady = vendorAecReferenceActive
+                                ? promptReference.copyNextContinuousVendorReference(vendorAecReference)
+                                : promptReference.lastFrameMatched()
+                                && promptReference.beginContinuousVendorReference(vendorAecReference);
+                        if (!vendorReferenceReady && vendorAecReferenceActive) {
+                            vendorAec.reset();
+                            vendorAecReplyEngine.reset();
+                            vendorAecReplyActive = false;
+                            vendorAecReplyIndex = 0;
+                            vendorAecReferenceActive = false;
+                        }
+                        vendorAecReferenceActive = vendorReferenceReady;
+                    }
+                    if (vendorReferenceReady) {
+                        try {
+                            for (short sample : frame) {
+                                vendorAecInputPeak = Math.max(vendorAecInputPeak,
+                                        Math.abs((int) sample));
+                            }
+                            for (short sample : vendorAecReference) {
+                                vendorAecReferencePeak = Math.max(vendorAecReferencePeak,
+                                        Math.abs((int) sample));
+                            }
+                            boolean aecOutputReady = vendorAec.process(frame, vendorAecReference,
+                                    vendorAecAnalysis);
+                            updateVendorAecAdapterMetrics(vendorAec);
+                            if (aecOutputReady) {
+                                long outputEnergy = 0;
+                                int outputPeak = 0;
+                                for (short sample : vendorAecAnalysis) {
+                                    int absolute = Math.abs((int) sample);
+                                    outputPeak = Math.max(outputPeak, absolute);
+                                    vendorAecOutputMin = Math.min(vendorAecOutputMin, sample);
+                                    vendorAecOutputMax = Math.max(vendorAecOutputMax, sample);
+                                    if (sample == Short.MIN_VALUE || sample == Short.MAX_VALUE)
+                                        vendorAecOutputSaturatedSamples++;
+                                    outputEnergy += (long) sample * sample;
+                                }
+                                vendorAecOutputSamples += vendorAecAnalysis.length;
+                                vendorAecKwsOutputPeak = Math.max(vendorAecKwsOutputPeak,
+                                        outputPeak);
+                                vendorAecKwsOutputRms = Math.sqrt(outputEnergy
+                                        / (double) vendorAecAnalysis.length);
+                                if (outputPeak > 0) vendorAecKwsOutputNonzeroFrames++;
+                                if (!vendorAecReplyActive) {
+                                    vendorAecReplyEngine.reset();
+                                    vendorAecReplyIndex = 0;
+                                    vendorAecReplyActive = true;
+                                }
+                                long vendorInferencesBefore = vendorAecReplyEngine.inferenceCount();
+                                KwsDetection vendorDetection = vendorAecReplyEngine.acceptFrame(
+                                        vendorAecAnalysis, 0, vendorAecAnalysis.length,
+                                        vendorAecReplyIndex);
+                                vendorAecReplyIndex += vendorAecAnalysis.length;
+                                vendorAecKwsFrames++;
+                                int vendorRawScore = vendorAecReplyEngine.lastRawScore();
+                                vendorAecKwsPeakRaw = Math.max(vendorAecKwsPeakRaw, vendorRawScore);
+                                if (vendorAecReplyEngine.inferenceCount() > vendorInferencesBefore) {
+                                    if (vendorRawScore >= 8) vendorAecKwsScoreFramesAt8++;
+                                    if (vendorRawScore >= 12) vendorAecKwsScoreFramesAt12++;
+                                    if (vendorRawScore >= 16) vendorAecKwsScoreFramesAt16++;
+                                    if (vendorRawScore >= 32) vendorAecKwsScoreFramesAt32++;
+                                }
+                                if (vendorDetection.detected) {
+                                    vendorAecKwsDetections++;
+                                    vendorAecDetection = true;
+                                    vendorAecDetectionScore = vendorDetection.score;
+                                    recordWake("reply_vendor_aec", vendorAecReplyIndex,
+                                            vendorDetection.score);
+                                    diagnosticEvent("reply_wake_observed,mode=vendor_aec,score="
+                                            +vendorDetection.score);
+                                }
+                            }
+                        } catch (RuntimeException error) {
+                            vendorAecKwsFailures++;
+                            vendorAecHealthy = false;
+                            vendorAecKwsAvailable = false;
+                            vendorAecKwsLastFailure = error.getMessage() == null
+                                    ? error.getClass().getSimpleName() : error.getMessage();
+                            diagnosticEvent("vendor_aec_kws_failed,reason=" + error.getMessage());
+                        }
                     }
                     if (replyReplayDelayFrames > 0) replyReplayDelayFrames--;
                     if (replyReplayDelayFrames == 0) {
@@ -856,17 +1072,10 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                             replyKwsInferences += newInferences;
                             replyKwsPeakRaw = Math.max(replyKwsPeakRaw, engine.lastRawScore());
                         }
-                        if (replyDetection.detected && !REPLY_WAKE_CANCEL_ENABLED) {
+                        if (replyDetection.detected) {
                             replyContinuousObservedDetections++;
+                            recordWake("reply_continuous_observed", index, replyDetection.score);
                             diagnosticEvent("reply_wake_observed,mode=continuous,score=" + replyDetection.score);
-                        } else if (replyDetection.detected
-                                && coordinator.requestCancel(NativeAudioCoordinator.CancelReason.NEW_WAKE)) {
-                            replyWakeInterruptions++; wakes++; controls.wake();
-                            playbackInput.clear(); history.clear();
-                            bargeWindow = null; bargeCapture.clear();
-                            status = "interrupting_reply";
-                            diagnosticEvent("reply_wake_detected,score=" + replyDetection.score);
-                            continue;
                         }
                     }
                     boolean rawBargeSpeech = vad.speechForQuietR1(bargeAnalysis);
@@ -879,6 +1088,38 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     }
                     CommandWindow.Decision bargeDecision = bargeWindow.acceptQualified(
                             qualifiedBargeSpeech, rawBargeSpeech && evidence.strong());
+                    if (vendorAecDetection && REPLY_WAKE_CANCEL_ENABLED && qualifiedBargeSpeech) {
+                        if (coordinator.requestCancel(NativeAudioCoordinator.CancelReason.NEW_WAKE)) {
+                            vendorAecKwsCancelled++;
+                            replyWakeInterruptions++; wakes++; controls.wake();
+                            recordWake("reply_vendor_aec_cancel", index, vendorAecDetectionScore);
+                            playbackInput.clear(); history.clear();
+                            bargeWindow = null; bargeCapture.clear();
+                            status = "interrupting_reply";
+                            diagnosticEvent("reply_vendor_aec_cancel,score=" + vendorAecDetectionScore);
+                            continue;
+                        }
+                        // HA announcements have no active voice run to cancel. Stop the
+                        // local announcement and enter the normal Alexa acknowledgement path.
+                        if (playbackRequested && announcements.active()) {
+                            announcements.interrupt();
+                            media.release(NativeMediaController.Interruption.ANNOUNCEMENT);
+                            playbackInput.clear(); history.clear();
+                            bargeWindow = null; bargeCapture.clear();
+                            announcementWakeInterruptions++; wakes++; controls.wake();
+                            recordWake("announcement_vendor_aec_cancel", index,
+                                    vendorAecDetectionScore);
+                            releaseRecorder(); status = "acknowledging";
+                            requireAudioPermission();
+                            prompt("ack", selector.next());
+                            following = false; vad.reset(); engine.reset(); index = 0; fill = 0;
+                            window = settings.window(following); openedWindow(window, following);
+                            waiting = true; status = "waiting_command";
+                            diagnosticEvent("announcement_vendor_aec_cancel,score="
+                                    + vendorAecDetectionScore);
+                            continue;
+                        }
+                    }
                     if (!bargePending && bargeDecision == CommandWindow.Decision.START
                             && !DIRECT_BARGE_IN_ENABLED) {
                         directBargeRejections++;
@@ -988,6 +1229,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 KwsDetection detection = engine.acceptFrame(frame, 0, frame.length, index);
                 index += frame.length;
                 if (coordinator.ready() && detection.detected) {
+                    recordWake("normal_listening", index, detection.score);
                     if(diagnostic!=null && diagnostic.armed() && diagnostic.activateOnWake())
                         diagnosticEvent("capture_trigger=alexa,format=PCM_S16LE,rate=16000,channels=1,purpose=post_wake_silence,utc_ms="+System.currentTimeMillis());
                     windowSource = "alexa"; wakes++; controls.wake();
@@ -1006,6 +1248,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
         } finally {
             releaseRecorder(); history.clear(); replyAnalysisHistory.clear(); bargeCapture.clear(); playbackInput.clear(); promptReference.clear();
             Arrays.fill(frame, (short) 0); Arrays.fill(bargeAnalysis, (short) 0);
+            Arrays.fill(vendorAecReference, (short) 0); Arrays.fill(vendorAecAnalysis, (short) 0);
             Arrays.fill(replayScratch,(short)0);Arrays.fill(pcm, (byte) 0); Arrays.fill(promptHandoff,(short)0);
         }
     }

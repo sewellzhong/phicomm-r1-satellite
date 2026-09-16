@@ -13,7 +13,7 @@ final class AlexaKwsEngine implements KwsEngine {
     private final ByteBuffer model;
     private Interpreter interpreter;
     private MicroFrontendNative frontend;
-    private final AlexaDecision decision = new AlexaDecision();
+    private final AlexaDecision decision;
     private final short[] chunk = new short[160];
     private final byte[] feature = new byte[40];
     private final ByteBuffer input = ByteBuffer.allocateDirect(120).order(ByteOrder.nativeOrder());
@@ -30,7 +30,12 @@ final class AlexaKwsEngine implements KwsEngine {
     private boolean closed;
 
     AlexaKwsEngine(AssetManager assets) throws Exception {
+        this(assets, AlexaDecision.CUTOFF);
+    }
+
+    AlexaKwsEngine(AssetManager assets, int cutoff) throws Exception {
         model = MicroWakeWordLoadProbe.readAsset(assets, "alexa_microwakeword.tflite");
+        decision = new AlexaDecision(cutoff);
         initialize();
     }
 

@@ -149,6 +149,10 @@ void test_parse_not_apk_uses_bounded_legacy_window_and_restores_modes() {
   Fixture fixture;
   const std::string bridge = fixture.directory + "_install";
   assert(mkdir(bridge.c_str(), 0711) == 0);
+  // mkdir applies the process umask; make the fixture match the exact
+  // init-created production bridge mode instead of depending on the host
+  // user's umask.
+  assert(chmod(bridge.c_str(), 0711) == 0);
   const std::string archive = fixture.directory
       + "/candidate-cccccccccccccccccccccccccccccccc.apk";
   {

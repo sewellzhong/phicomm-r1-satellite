@@ -6,6 +6,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -198,9 +199,23 @@ def main():
     parser.add_argument("serial")
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--apk", type=Path, default=ROOT / "android/r1-probe/app/build/outputs/apk/debug/app-debug.apk")
+    parser.add_argument("--previous-apk", type=Path,
+                        help="Use a previously verified local rollback APK instead of pulling it from the device")
+    parser.add_argument("--previous-apk-sha256", type=str,
+                        help="Required SHA-256 for --previous-apk")
     args = parser.parse_args()
     if args.action == "install":
         verify_deployable_apk(args.apk)
+        if (args.previous_apk is None) != (args.previous_apk_sha256 is None):
+            raise RuntimeError('previous_apk_and_sha256_required_together')
+        if args.previous_apk is not None:
+            if not args.previous_apk.is_file() or args.previous_apk.is_symlink():
+                raise RuntimeError('previous_apk_must_be_regular_file')
+            if not re.fullmatch(r'[0-9a-f]{64}', args.previous_apk_sha256):
+                raise RuntimeError('previous_apk_sha256_invalid')
+            if digest(args.previous_apk) != args.previous_apk_sha256:
+                raise RuntimeError('previous_apk_sha256_mismatch')
+            verify_deployable_apk(args.previous_apk)
     device = admin.Device(args.serial); device.verify()
     args.evidence.mkdir(parents=True, exist_ok=True)
     if args.action == 'diagnose':
@@ -217,7 +232,18 @@ def main():
         if not re.fullmatch(r'/data/app/dev\.sewellzhong\.r1probe-[0-9]+/base.apk',old_path): raise RuntimeError('unexpected_satellite_path')
         old_apk = args.evidence / 'previous-satellite.apk'
         if not baseline.exists():
-            device.adb('pull',old_path,str(old_apk))
+            expected_old_hash = args.previous_apk_sha256
+            if args.previous_apk is not None:
+                # 3448 may hang while reading the installed APK over ADB even
+                # though shell diagnostics work. The source is pre-hashed and
+                # copied into the evidence directory for the normal rollback path.
+                shutil.copyfile(args.previous_apk, old_apk)
+                old_apk.chmod(0o600)
+            else:
+                device.adb('pull',old_path,str(old_apk))
+                expected_old_hash = digest(old_apk)
+            if digest(old_apk) != expected_old_hash:
+                raise RuntimeError('previous_apk_copy_mismatch')
             package_states = {}
             for package in PACKAGES:
                 info = device.adb('shell','dumpsys','package',package)

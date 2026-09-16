@@ -5,7 +5,12 @@ import java.util.Arrays;
 /** Two-second playback reference. Conservative linear subtraction, never a silence gate. */
 public final class PromptReference {
     private final short[] ring = new short[32000];
+    // Post-volume reference for software subtraction; pre-volume source for vendor AEC.
+    private final short[] vendorRing = new short[32000];
     private long written, head, headAt, endedAt;
+    private long lastMatchedStart = -1;
+    private long lastBestStart = -1;
+    private long continuousStart = -1;
     private boolean active;
     private volatile boolean lastFrameMatched;
     private int consecutive, previousDelay = -1, lockedDelay = -1, lockRemaining;
@@ -20,14 +25,79 @@ public final class PromptReference {
         if(!active) return;
         for(int i=offset;i<offset+length;i+=2) {
             short sample=(short)((bytes[i]&255)|(bytes[i+1]<<8));
-            ring[(int)(written++%ring.length)]=(short)Math.round(sample*gain);
+            ring[(int)(written%ring.length)]=(short)Math.round(sample*gain);
+            vendorRing[(int)(written%vendorRing.length)]=sample;
+            written++;
         }
     }
     public synchronized void position(long frames,long now) { if(active) {head=frames;headAt=now;} }
     public synchronized void finish(long now) { if(active) {head=written;headAt=now;endedAt=now;} }
     public synchronized void clear() {
-        Arrays.fill(ring,(short)0);written=head=headAt=endedAt=0;active=false;consecutive=0;previousDelay=-1;
+        Arrays.fill(ring,(short)0);Arrays.fill(vendorRing,(short)0);
+        written=head=headAt=endedAt=0;active=false;consecutive=0;previousDelay=-1;
+        lastMatchedStart=lastBestStart=continuousStart=-1;
         lastFrameMatched=false;lockedDelay=-1;lockRemaining=0;
+    }
+    /** Copies the exact speaker-reference frame used by the last successful match. */
+    public synchronized boolean copyMatchedReference(short[] output) {
+        if (output == null || output.length != 320 || lastMatchedStart < 0 || !lastFrameMatched) {
+            return false;
+        }
+        for (int i = 0; i < output.length; i++) {
+            output[i] = ring[(int)((lastMatchedStart + i) % ring.length)];
+        }
+        return true;
+    }
+    /** Copies the best bounded candidate for observation-only vendor AEC probing. */
+    public synchronized boolean copyBestReference(short[] output) {
+        if (output == null || output.length != 320 || lastBestStart < 0) return false;
+        for (int i = 0; i < output.length; i++) {
+            output[i] = ring[(int)((lastBestStart + i) % ring.length)];
+        }
+        return true;
+    }
+    /** Starts a fixed-step reference stream from the last reliable match. */
+    public synchronized boolean beginContinuousReference(short[] output) {
+        if (!lastFrameMatched || lastMatchedStart < 0
+                || !copyReferenceAt(lastMatchedStart, output)) return false;
+        continuousStart = lastMatchedStart + 320;
+        return true;
+    }
+    /** Starts a fixed-step pre-volume source stream for the vendor AEC. */
+    public synchronized boolean beginContinuousVendorReference(short[] output) {
+        if (!lastFrameMatched || lastMatchedStart < 0
+                || !copyVendorReferenceAt(lastMatchedStart, output)) return false;
+        continuousStart = lastMatchedStart + 320;
+        return true;
+    }
+    /** Advances the fixed-step stream without reselecting a correlation peak. */
+    public synchronized boolean copyNextContinuousReference(short[] output) {
+        if (continuousStart < 0 || !copyReferenceAt(continuousStart, output)) return false;
+        continuousStart += 320;
+        return true;
+    }
+    /** Advances the pre-volume vendor AEC source stream. */
+    public synchronized boolean copyNextContinuousVendorReference(short[] output) {
+        if (continuousStart < 0 || !copyVendorReferenceAt(continuousStart, output)) return false;
+        continuousStart += 320;
+        return true;
+    }
+    public synchronized void stopContinuousReference() { continuousStart = -1; }
+    private boolean copyReferenceAt(long start, short[] output) {
+        return copyRingAt(ring, start, output);
+    }
+    private boolean copyVendorReferenceAt(long start, short[] output) {
+        return copyRingAt(vendorRing, start, output);
+    }
+    private boolean copyRingAt(short[] source, long start, short[] output) {
+        if (output == null || output.length != 320 || start < 0
+                || start < Math.max(0, written - ring.length) || start + 320 > written) {
+            return false;
+        }
+        for (int i = 0; i < output.length; i++) {
+            output[i] = source[(int)((start + i) % source.length)];
+        }
+        return true;
     }
     public boolean lastFrameMatched() { return lastFrameMatched; }
     public synchronized void expire(long now) {
@@ -53,6 +123,7 @@ public final class PromptReference {
     public synchronized void process(short[] frame,long now) {
         if(frame.length!=320) throw new IllegalArgumentException("reference_frame_size");
         lastFrameMatched=false;
+        lastBestStart=-1;
         if(!active) return;
         if(endedAt!=0 && now-endedAt>1_000_000_000L) {clear();return;}
         if(headAt==0 || written<320) return;
@@ -69,20 +140,35 @@ public final class PromptReference {
         }
         coarsePower-=coarseSum*coarseSum/10;fullPower-=fullSum*fullSum/320;
         Arrays.fill(candidateScores,0);Arrays.fill(candidatePositions,-1);
-        for(long pos=low;pos<=high;pos++) {
-            double score=score(frame,pos,32);
-            for(int k=0;k<4;k++) if(score>candidateScores[k]) {
-                for(int j=3;j>k;j--) {candidateScores[j]=candidateScores[j-1];candidatePositions[j]=candidatePositions[j-1];}
-                candidateScores[k]=score;candidatePositions[k]=pos;break;
-            }
-        }
         double exact=0;long exactStart=-1;
-        for(long candidate:candidatePositions) if(candidate>=0)
-            for(long pos=Math.max(low,candidate-4);pos<=Math.min(high,candidate+4);pos++) {
-                double score=score(frame,pos,1);
-                if(score>exact) {exact=score;exactStart=pos;}
+        long fastHeldStart=expected-lockedDelay;
+        boolean fastLocked=lockedDelay>=0 && lockRemaining>0
+                && fastHeldStart>=Math.max(0,written-ring.length)
+                && fastHeldStart<=written-320;
+        if (fastLocked) {
+            // Once the delay is locked, avoid rescanning 500 ms of reference on every
+            // 20 ms frame. This is the normal playback steady state; a later mismatch
+            // expires the lock and returns to the bounded search below.
+            exactStart=fastHeldStart;
+            // Validate only the locked position. This keeps double-talk detection while
+            // avoiding the full 500 ms scan in the steady state.
+            exact=Math.sqrt(Math.min(1,score(frame,fastHeldStart,1)));
+        } else {
+            for(long pos=low;pos<=high;pos++) {
+                double score=score(frame,pos,32);
+                for(int k=0;k<4;k++) if(score>candidateScores[k]) {
+                    for(int j=3;j>k;j--){candidateScores[j]=candidateScores[j-1];candidatePositions[j]=candidatePositions[j-1];}
+                    candidateScores[k]=score;candidatePositions[k]=pos;break;
+                }
             }
-        exact=Math.sqrt(Math.min(1,exact));
+            for(long candidate:candidatePositions) if(candidate>=0)
+                for(long pos=Math.max(low,candidate-4);pos<=Math.min(high,candidate+4);pos++) {
+                    double score=score(frame,pos,1);
+                    if(score>exact){exact=score;exactStart=pos;}
+                }
+            exact=Math.sqrt(Math.min(1,exact));
+        }
+        lastBestStart=exactStart;
         correlation=exact;delaySamples=exactStart<0 ? -1 : (int)(expected-exactStart);
         double mean=0,power=0;for(short sample:frame){mean+=sample;power+=(double)sample*sample;}
         mean/=320;beforeRms=Math.sqrt(Math.max(0,power/320-mean*mean));afterRms=beforeRms;
@@ -111,6 +197,7 @@ public final class PromptReference {
             }
         }
         if(subtractionStart>=0) {
+            lastMatchedStart=subtractionStart;
             double rm=0,rr=0,rx=0;
             for(int i=0;i<320;i++) rm+=ring[(int)((subtractionStart+i)%ring.length)];rm/=320;
             for(int i=0;i<320;i++) {double v=ring[(int)((subtractionStart+i)%ring.length)]-rm;rr+=v*v;rx+=v*(frame[i]-mean);}
@@ -124,6 +211,8 @@ public final class PromptReference {
             afterRms=Math.sqrt(Math.max(0,square/320-(sum/320)*(sum/320)));
             if(heldMatch) heldMatchedFrames++; else matchedFrames++;
             lastFrameMatched=true;
+        } else {
+            lastMatchedStart=-1;
         }
         processedFrames++;long elapsed=System.nanoTime()-started;
         maxProcessNanos=Math.max(maxProcessNanos,elapsed);if(elapsed>20_000_000L)overBudgetFrames++;

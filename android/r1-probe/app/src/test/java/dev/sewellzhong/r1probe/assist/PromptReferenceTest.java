@@ -27,6 +27,37 @@ public class PromptReferenceTest {
         }
         assertTrue(p.matchedFrames>0);assertTrue(p.lastFrameMatched());
     }
+    @Test public void bestReferenceIsAvailableBeforeConservativeSubtractionGate() {
+        short[] ref=source();PromptReference p=prepared(ref);
+        int end=1600,offset=end-320-333;short[] frame=new short[320];
+        for(int i=0;i<320;i++)frame[i]=(short)Math.round(ref[offset+i]*.25);
+        p.position(end,1_000_000_000L);p.process(frame,1_000_000_000L);
+        short[] candidate=new short[320];
+        assertTrue(p.copyBestReference(candidate));
+        assertFalse(p.lastFrameMatched());
+    }
+    @Test public void continuousReferenceAdvancesWithoutRescoring() {
+        short[] ref=source(); PromptReference p=prepared(ref); short[] frame=new short[320];
+        int end=1600, offset=end-320-333;
+        for(int i=0;i<320;i++) frame[i]=(short)Math.round(ref[offset+i]*.25);
+        for(int n=0;n<3;n++) { p.position(end+n*320,1_000_000_000L+n*20_000_000L); p.process(frame,1_000_000_000L+n*20_000_000L); }
+        short[] first=new short[320], next=new short[320];
+        assertTrue(p.beginContinuousReference(first));
+        assertTrue(p.copyNextContinuousReference(next));
+        assertEquals((int)Math.round(ref[offset+320]*.5), (int)next[0]);
+        p.stopContinuousReference();
+    }
+    @Test public void vendorReferenceKeepsPreVolumeSourceWhileSoftwareReferenceIsAttenuated() {
+        short[] ref=source(); PromptReference p=prepared(ref); short[] frame=new short[320];
+        int end=1600, offset=end-320-333;
+        for(int i=0;i<320;i++) frame[i]=(short)Math.round(ref[offset+i]*.25);
+        for(int n=0;n<3;n++) { p.position(end+n*320,1_000_000_000L+n*20_000_000L); p.process(frame,1_000_000_000L+n*20_000_000L); }
+        short[] software=new short[320], vendor=new short[320];
+        assertTrue(p.beginContinuousReference(software));
+        assertTrue(p.beginContinuousVendorReference(vendor));
+        assertEquals((int)Math.round(ref[offset]*.5), (int)software[0]);
+        assertEquals((int)ref[offset], (int)vendor[0]);
+    }
     @Test public void unrelatedInputIsNeverErased() {
         short[] ref=source();PromptReference p=prepared(ref);Random r=new Random(91);
         for(int n=0;n<5;n++) {short[] f=new short[320];for(int i=0;i<320;i++)f[i]=(short)(r.nextInt(500)-250);short[] original=f.clone();p.position(3000+n*320,1_000_000_000L);p.process(f,1_000_000_000L);assertArrayEquals(original,f);}

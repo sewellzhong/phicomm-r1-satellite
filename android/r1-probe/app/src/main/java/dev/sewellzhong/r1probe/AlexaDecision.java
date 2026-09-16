@@ -8,12 +8,21 @@ final class AlexaDecision {
     static final int WINDOW = 5;
     static final int COOL_OFF_FEATURES = 100;
     private final int[] recent = new int[WINDOW];
+    private final int cutoff;
     private int index;
     private int last;
     private int coolOff;
     private float detectedScore;
 
     AlexaDecision() {
+        this(CUTOFF);
+    }
+
+    AlexaDecision(int cutoff) {
+        if (cutoff < 0 || cutoff > 255) {
+            throw new IllegalArgumentException("cutoff_out_of_range");
+        }
+        this.cutoff = cutoff;
         reset();
     }
 
@@ -35,7 +44,7 @@ final class AlexaDecision {
             recent[index] = output;
             index = (index + 1) % WINDOW;
         }
-        if (last < CUTOFF && coolOff > 0) {
+        if (last < cutoff && coolOff > 0) {
             coolOff--;
         }
         if (!newOutput || coolOff > 0) {
@@ -45,7 +54,7 @@ final class AlexaDecision {
         for (int score : recent) {
             sum += score;
         }
-        if (sum <= CUTOFF * WINDOW) {
+        if (sum <= cutoff * WINDOW) {
             return false;
         }
         float score = sum / (WINDOW * 256.0f);

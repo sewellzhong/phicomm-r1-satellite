@@ -47,4 +47,22 @@ public final class AlexaDecisionTest {
     public void rejectsInvalidQuantizedOutput() {
         new AlexaDecision().acceptFeature(256, true);
     }
+
+    @Test public void playbackCutoffCanBeLowerThanNormalWithoutChangingDefault() {
+        AlexaDecision normal = new AlexaDecision();
+        AlexaDecision playback = new AlexaDecision(32);
+        warm(normal);
+        warm(playback);
+        for (int i = 0; i < 4; i++) {
+            assertFalse(normal.acceptFeature(32, true));
+            assertFalse(playback.acceptFeature(32, true));
+        }
+        assertFalse(normal.acceptFeature(32, true));
+        assertTrue(playback.acceptFeature(33, true));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void rejectsCutoffOutsideByteRange() {
+        new AlexaDecision(256);
+    }
 }

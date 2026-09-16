@@ -4,6 +4,27 @@
 
 ## 当前状态
 
+- 2026-09-16 播放中低阈值打断实验候选已优化为 v171：空闲 Alexa 阈值保持 `229/255`，仅原厂 AEC 播放通道使用受控 `16/255`；新增播放候选分数分档统计，并修复 HA `announce` 播放未进入 AEC/KWS 监测链的问题。命中且通过语音 VAD 后，Assist 回复走取消当前会话，独立 HA 播报走停止播报并重新进入 Alexa 流程；普通无 Alexa 直接插话仍关闭。v171 APK SHA-256 为 `6a9043c018718081f2e84d8c3a2a2c93cf301b8ea0c3627a3fa1a7e9cc4e1c7b`，已安装到首台。真实太阳系长回答播放期间，用户多次说 Alexa，累计 2 次 AEC KWS 检测、2 次实际回复取消，候选峰值 `140`，16阈值以上11个推理帧，输入/输出削波统计均为0；该轮证明播放中打断链路可工作，但仍属于首台受控真人诊断结果，不等于最终声学门槛通过。
+- 2026-09-16 第一阶段 AEC 输入输出修复已完成主机实现：原厂 300 样本 ABI 适配器新增连续输入/输出样本、块数、输入/输出削波、峰值、范围和 reset 后清零统计，并通过运行时诊断 JSON 暴露；Android AEC/参考路径单测、Lint、Debug 构建及完整 `tools/dev/check.sh` 通过。真实 Audio HAL 回采增益、参考对齐、AEC 输出缩放和播放期效果仍待 `r1-sample01` 验证。
+- 2026-09-16 v162已加入唤醒来源归因字段：`last_wake_source`、sample index、单调时钟/墙上时钟和分数，可区分`normal_listening`、`reply_raw_continuous`、`reply_continuous_observed`、`reply_vendor_aec`及取消路径。Android单测/lint/构建通过，已安装到`r1-sample01`并恢复监听；APK SHA-256为`4831a748e3d5501eb029a577a22c0e60797e662b6e02a3f34bc713a44f3d6a15`。当前尚未重新触发真人播放测试，播放取消继续关闭。
+- 2026-09-16 v162来源归因实机复测：一次真实回答播放期间再次说Alexa，最终仅记录`wake_detections=1`，`last_wake_source=normal_listening`，播放期间原厂AEC连续处理775帧但`vendor_aec_kws_detections=0`、失败0；没有证据表明第二次Alexa进入播放中AEC KWS，也没有发生播放取消。证据见`test-results/2026-09-16-r1-sample01-scheme-a/status-source-attribution-v162.json`。
+- 2026-09-16 v162播放/AEC诊断采集完成两轮：均捕获真实Alexa、HA播放参考、raw/processed PCM和播放头事件；第二轮播放无欠载，原始采样约47万点，AEC参考最大处理耗时21.780 ms、1帧超20 ms诊断预算，故诊断性能不通过。两轮都没有形成可归因的播放中第二次Alexa事件，不能据此开启取消；原始诊断文件已保留在本地证据目录并按校验清理设备副本。见`test-results/2026-09-16-r1-sample01-playback-aec-diagnostic-v162-02/analysis.json`。
+- 2026-09-16 v163对PromptReference增加锁定延迟后的单点快速校验，避免稳定播放期间每帧扫描完整500 ms窗口；回归保留双讲锁定/统计语义。298项Android单测、lint/构建通过。首台真实HA播放验证：参考处理最大15.241 ms、超预算0帧，AEC连续输出479帧、失败0、播放欠载0；该次仅验证性能，播放取消继续关闭。APK SHA-256为`4d3f6ba70465c7321d0626da110d8ffd1b8d4e3fccf13934122a94269a6dd126`，证据见`test-results/2026-09-16-r1-sample01-scheme-a/status-performance-v163.json`。
+- 2026-09-16 v163再次进行播放中Alexa受控复测：播放期间AEC连续处理1424帧，最大参考处理14.799 ms、超预算0帧、AEC失败0；最终来源仍为`normal_listening`，`reply_continuous_observed_detections=0`、`vendor_aec_kws_detections=0`、取消0次。两次普通唤醒/命令发生在播放链外，不能作为播放中打断通过。证据见`test-results/2026-09-16-r1-sample01-scheme-a/status-barge-in-v163.json`。
+- 2026-09-16 v164新增原厂AEC清理输出能量统计。真实HA播放期间输出非零帧553、输出RMS约1358、最大峰值32767（出现饱和峰），AEC失败0、参考处理最大13.260 ms且超预算0帧，但KWS检测仍为0。说明原厂AEC确实有非空输出，却不能据此证明输出是可用的人声；下一步需针对饱和/ABI输出形状做数值审计，取消继续关闭。APK SHA-256为`d2c5963a0efe3feb41ce986360d6ead54c4d362c2197ac041578e6939eb9e581`，证据见`test-results/2026-09-16-r1-sample01-scheme-a/status-output-metrics-v164.json`。
+- 2026-09-16 v165完成ABI数值审计：真实HA播放期间输入麦克风峰值达到32768（存在`-32768`削波），参考峰值约1632；AEC输出范围`-32767..32767`，累计231040样本中1631个饱和样本，AEC失败0、KWS检测0。由此确认饱和首先与麦克风输入削波/原厂输出数值链相关，不能把输出非空当作人声清理有效；参考处理最大13.611 ms、超预算0帧。取消继续关闭。APK SHA-256为`3485b5268871da6d530e76af743b4c0cf309d6d32642df45131eea37d4fa8912`，证据见`test-results/2026-09-16-r1-sample01-scheme-a/status-abi-audit-v165.json`。
+- 2026-09-16 v166增加全局原始AudioRecord输入基线统计；首台空闲监听3014帧，峰值3723，削波样本0，证明v165播放期间的`-32768`并非静态底噪或持续硬件削波，而是在特定播放/回声场景出现。该轮未触发真人回答，未形成播放对照；证据见`test-results/2026-09-16-r1-sample01-scheme-a/status-input-baseline-v166.json`。下一步需在同一v166上完成一次真实播放对照，区分扬声器回声/增益路径与AudioRecord输入链。
+- 2026-09-16 v166播放对照完成：空闲基线3014帧/削波0；随后真实HA播放阶段累计到6776帧，新增削波11595样本，原始输入峰值32768，AEC输入峰值32768，AEC输出饱和644样本，AEC连续输出395帧；参考处理最大12.910 ms、超预算0帧。削波只在播放对照阶段出现，已确认与扬声器回声/播放增益路径相关，但尚不能判断是Audio HAL回采增益还是AEC ABI增益。证据见`test-results/2026-09-16-r1-sample01-scheme-a/status-playback-input-audit-v166.json`。
+- 2026-09-16 v166音量矩阵完成：从5%改为1%后重复播放，累计削波计数在低音量播放期间保持11595不变，AEC输出饱和仍为644；恢复5%并播放设置确认后削波增至16312。说明降低应用播放音量可避免新增回采削波，但5%仍存在回声/增益饱和，不能作为AEC有效或播放打断通过。测试结束已恢复音量5%。证据见`test-results/2026-09-16-r1-sample01-scheme-a/status-volume-matrix-v166.json`。
+- 2026-09-16 用户确认音量1%后进行低音量播放中Alexa复测：本轮播放期间原始削波计数未再增加，AEC连续处理1686帧、失败0、参考处理最大12.598 ms且超预算0帧；但`vendor_aec_kws_detections=0`、`reply_continuous_observed_detections=0`、播放取消0次。低音量解决了新增削波，却没有证明播放中唤醒链可用。证据见`test-results/2026-09-16-r1-sample01-scheme-a/status-volume1-barge-in-v166.json`；音量保持用户设置的1%。
+- 2026-09-16 用户补充“介绍一下太阳系”以延长回答后重测：音量1%下播放持续时间足够，AEC连续处理2527帧、失败0、参考最大11.147 ms且超预算0帧；原始削波未新增，但`vendor_aec_kws_detections=0`、`reply_continuous_observed_detections=0`、播放取消0次。播放中再次Alexa仍未被检测。证据见`test-results/2026-09-16-r1-sample01-scheme-a/status-solar-system-v166-volume1.json`。
+- 2026-09-16 v161方案A连续流实机验证通过观测门槛：真实Alexa唤醒、中文STT/HA流式回答和播放均完成；原厂AEC观测输出连续增长至374帧，`vendor_aec_kws_failures=0`、最后失败为`none`。根因修正为AEC输出间歇时使用独立连续KWS sample index，而不是全局采集索引。原厂AEC仍仅观测，未授权播放取消；`REPLY_WAKE_CANCEL_ENABLED=false`，尚未完成“播放中再次说Alexa实际取消播放”的功能验收。v161 APK SHA-256为`9180e25d73fc2700ffb30f0ba079063a846c042c5eb2a33ec54f4a4c29366182`，最终状态见`test-results/2026-09-16-r1-sample01-scheme-a/status-final-v161.json`。
+- 2026-09-16 v161受控长回答/播放中再次说Alexa：同一运行记录到`wake_detections=2`、`commands=2`、`stt_results=2`，播放期间AEC连续处理至4359帧且失败0；但`vendor_aec_kws_detections=0`、`reply_continuous_observed_detections=0`、`reply_wake_interruptions=0`，无法证明第二次唤醒来自播放中AEC链，也没有停止播放。证据见`test-results/2026-09-16-r1-sample01-scheme-a/status-barge-in-v161.json`；取消继续关闭。
+- 2026-09-16 v159诊断实验：对每个300样本ABI块单独reset后，真实HA回答播放期间不再出现`invalid_or_discontinuous_pcm_frame`，但原厂始终处于块级warm-up，完整AEC KWS输出仍为0帧。该路径仅证明错误来自跨块连续状态/参考对齐，不能作为生产方案；取消继续关闭。v159 APK SHA-256为`53a58e07224c71ece49f437419b0f5b5814f63ef26f46fbf4e60c88fcd55770f`。
+- 2026-09-16 v158真实HA链路已触发：Alexa唤醒、中文STT/意图/TTS及播放完成，播放参考匹配持续增加（最高54帧）；原厂AEC实时适配器实际产生1帧输出后报告`invalid_or_discontinuous_pcm_frame`并熔断。问题已收敛到300样本原厂ABI与连续播放参考的对齐，尚不能宣称AEC清理连续或支持播放中打断；`REPLY_WAKE_CANCEL_ENABLED`继续为`false`。v158 APK SHA-256为`58144a464c33559e3c577bc57ddab4723663ea93643b1d3595de2894af9a984a`，证据见`test-results/2026-09-16-r1-sample01-scheme-a/`。
+- 2026-09-16 v152继续方案A实机观测：为避免软件三帧匹配门槛遮蔽原厂AEC，新增仅观测用途的最佳播放参考旁路，软件回声消除与取消授权不变；Android单测/lint通过并已安装回读v152（APK SHA-256 `88930d28f807f11c289bb46d5497b107455505724ac728c6100a666292d9f8ae`）。本轮固定PCM请求未形成有效播放写入，AEC计数仍为0；真实HA流式回答和播放中Alexa仍待触发，取消保持关闭。
+- 2026-09-16 已从本地历史证据恢复 `r1-sample01` 目标（serial `CBEAU1116K01314`、地址 `192.168.94.169:5555`），只读身份匹配3448/API22/Enforcing。方案A观测候选已安装到v151（APK SHA-256 `2cad05365cda0ee2cd702be4c88352de13c445639bae79bdeb4036d92550292c`）；部署工具新增已核验本地回退APK入口，避开3448 `adb pull`卡死。真实设备状态保持listening/音频打开/错误0。受控固定PCM播放通过，播放欠载0、参考处理39帧，但参考匹配0帧、AEC KWS输出0帧；`vendor_aec_kws_enabled=true`仅证明实时适配器创建成功，尚未证明播放参考实际进入AEC或支持Alexa打断。生产取消仍关闭，详见`test-results/2026-09-16-r1-sample01-scheme-a/`。
+- 2026-09-16 方案A已接入主机实现：播放中沿用当前 Alexa 连续 KWS/取消状态机，并新增基于设备 `/system/lib/libaec.so` 的实时原厂 AEC 观测候选；AEC 清理后的 KWS 仅记录帧数、峰值、检测和失败，不授权取消播放，`REPLY_WAKE_CANCEL_ENABLED` 仍为 `false`。新增适配器及单元测试已通过 Android 295 项测试/lint 与全量主机门禁；原厂 AEC 是否在 `r1-sample01` 实际加载、输出连续且足以支持 Alexa 打断仍待实机验证，当前不能宣称播放中打断已交付。
 - 2026-09-14～15 v129～v149已完成对话卡顿、自循环与持续窗口修复收敛。200 ms启动预缓冲解决卡顿；v133及v135～v137的播放中人声停止方案均在安静时误停，只播放“太阳”两个字，v138完整播放后又把尾音识别成“我”。v141通过更严格的持续窗口准入，使静默正常超时且真人免Alexa接话成功。v142～v145保持取消关闭并确认真人Alexa原始峰值仍只有12/255。v146～v149进一步实际加载3448原厂`libaec.so`，还原`[mic,echo]`交织ABI并对四麦×双硬件参考做16组真机矩阵；静默为2～8、真人最佳20，2×增益最佳54，仍远低于229门槛，4×/8×已削波。恢复4%音量后，v149真人回归以2次Alexa唤醒完成3条命令，免Alexa接话正常，3次完整回答后静默均未形成额外轮次，播放欠载0。当前v149诊断包`10b63f94…4811ac`双读一致、Enforcing/listening且无错误，生产取消继续关闭。播放中Alexa立即打断仍阻塞，不能降低阈值或重新开放VAD取消；见[对话实机记录](docs/2026-09-14-r1-v129-v130-human-voice-device.md)与[原厂AEC实机记录](docs/2026-09-15-r1-v149-vendor-aec-device.md)。
 - 2026-09-15 v149已完成首台一次真实同签名更新回滚烟测：v149→仅版本变化的v150→v149，固定3448 PackageManager argv升级/显式降级均返回`Success`，每阶段独立回读版本与APK哈希，最终v149哈希精确恢复，设备`listening`/连接1/音频打开/无错误/音量4%。该结果是包管理后端证据，不等同公网OTA；详见[更新回滚实机记录](docs/2026-09-15-r1-v149-update-device.md)。
 - 2026-09-15 v149最终候选自动回归完成：`tools/dev/check.sh`主机门禁通过（公开596/0、凭据0、Android/Native/Recovery/原厂音频/更新/系统控制/HA容器测试通过）；首台只读状态、能力、闹钟和DND回读保持监听、连接1、音频打开、错误0、欠载0。HA容器明确为测试替身，实体环输入/LED写权限仍报告不可用，未把它们升格为通过。下一步是网络/IP变化恢复，再做72小时稳定性；详见[自动回归记录](docs/2026-09-15-r1-v149-automatic-regression.md)。
@@ -12,7 +33,7 @@
 
 - 2026-09-14 v129 主机候选已针对用户报告的“回答一卡一卡并自问自答循环”增加固定 200 ms（6,400字节）TTS 启动预缓冲、较宽但仍要求三帧稳定延迟的播放参考匹配，以及每次 Alexa 唤醒最多 10 轮免唤醒对话的确定性上限。短回答、100 ms突发分块、预缓冲取消、尾音参考和轮次重置均有主机测试；完整门禁及最终公开589/0、凭据0复扫通过，hostcheck APK不得部署。尚未连接或更新 `r1-sample01`，真实流畅度、尾音误触发、立即接话及10轮终止均保持待验证，见[v129主机记录](docs/2026-09-14-r1-v129-dialogue-continuity-host.md)。
 
-- 2026-09-14 用户恢复真人语音验收，并规划 3～8 台部署；当前先只完成 `r1-sample01`，通过单台 release gate 后才接入其他设备。功能验收采用自然使用与受控复现混合方式，覆盖 Alexa 唤醒、中文 STT/意图/TTS、流式回答、播放中打断、主动播报、计时器、闹钟、媒体、免打扰和软件静音；方向、距离、唤醒率、识别率、AEC/DOA 和主观听感只作诊断，不作为本轮功能门槛。每台设备必须独立建立 serial、3448/API 22、固件、APK/Noise 摘要、恢复基线、HA 身份和回滚证据，见[真人功能与多台部署计划](docs/2026-09-14-r1-human-voice-multi-device-plan.md)。
+- 2026-09-16 用户确认此前部分测试中 R1 麦克风朝下，相关真人、方向、距离、声学和体感结果需标记为姿态受影响并重新真机验收。当前恢复正确姿态下的 Alexa 唤醒、中文 STT/意图/TTS、流式回答、播放中打断、方向/DOA、距离、唤醒率、识别率、AEC/声学和主观体感测试；先完成 `r1-sample01`，通过单台 release gate 后才接入其他设备。详见[姿态纠正与真机验收恢复决定](docs/2026-09-16-r1-repositioned-microphone-revalidation-plan.md)和[真人功能与多台部署计划](docs/2026-09-14-r1-human-voice-multi-device-plan.md)。
 
 - 2026-09-08 用户将[原厂四麦与音频调校优先路线](docs/2026-09-08-r1-factory-audio-root-plan.md)提升为最高开发优先级：先为 `r1-sample01` 建立完整 eMMC 备份和受控回刷，再使用 Root、特权代理、受限 SELinux、定制系统及必要刷机实际复用 MicArray、DOA、AEC和DSP处理。标准 AudioRecord和自研处理只作对照及最终降级候选。
 - R0 主机端清单、复读校验、门槛报告、现场模板和一键合成演练已实现；默认仍要求两份加密副本。工具也记录用户针对 `r1-sample01` 明确接受的“当前单主机、明文”高风险例外，只有完整回刷全部验证后才会得到 `pass_with_exception`，绝不伪装成普通 `pass`。完整 eMMC、低层恢复入口和受控回刷仍为“待验证”。操作边界见 [R0 恢复手册](docs/2026-09-08-r1-r0-recovery-runbook.md)。
@@ -30,7 +51,7 @@
 - 保留 Android 5.1.1 / API 22、ARMv7、固件 3448 的原厂音频底层，独立包名 `dev.sewellzhong.r1probe`。原生链路使用固定 ESPHome 2026.8.0 协议及 Noise PSK。
 - 唤醒词仅为英文 `Alexa`，使用现有 microWakeWord v2 模型；STT、对话、TTS 固定中文。停止 Camila 训练、模型选型及 KWS 专项声学测试。
 - 阶段 0 和阶段 1 音频子门槛已通过；原包非 root 持久隔离与三次重启恢复有实机证据。阶段 2/3 正式量化验收未完成。
-- v62真人交互结果继续作为历史诊断：“是→4”、提问理解偏差、偶发误触发和“好”复测均未闭环。按2026-09-12决定不再安排用户真人复测，也不把旧结果继承为当前通过；对应功能改用固定输入、协议事件和状态机回读验证。详见[短句失败](docs/2026-09-07-r1-short-reply-failures.md)和[现行验证边界](docs/2026-09-12-r1-vendor-native-functional-validation.md)。
+- v62真人交互结果继续作为历史诊断：“是→4”、提问理解偏差、偶发误触发和“好”复测均未闭环。此前“用户跳过真人复测”的边界已由2026-09-16姿态纠正决定取代；正确摆放下的真人、方向、距离、声学和体感项目恢复重测。详见[短句失败](docs/2026-09-07-r1-short-reply-failures.md)、[姿态纠正决定](docs/2026-09-16-r1-repositioned-microphone-revalidation-plan.md)和[现行验证边界](docs/2026-09-12-r1-vendor-native-functional-validation.md)。
 
 ## 当前开发顺序
 
@@ -94,7 +115,9 @@ v126标准计时器/普通媒体所有权也已通过：真实HA中文入口创�
 
 2026-09-07 已完成[功能盘点与需求合并](docs/2026-09-07-r1-feature-requirements.md)文档。WAN 阻断下的可回退原厂链窗口已经完成；Android布局盘点及Loader可见7.814 GB image空间的双读、逐块和整体校验均已完成。免拆软件Maskrom可达，但三枚不同官方RAM Loader候选均未进入Loader，且已禁止重发；设备已恢复Android。共同失败离线审计排除主机工具核心传输算法差异。只有以后取得缺失首4 MiB、合成完整eMMC副本并复读，且验证不依赖Android的恢复入口后，才能把R0写成通过并进行受控完整回刷。后续开发按2026-09-11免拆分级授权，可在R0 pending时依据最小必要证据推进精确命名的boot/system/recovery操作；这不改变R0状态，也不授权Loader、分区表、首4 MiB、擦除或格式化。热点网页配网保留 v79 待复测状态，不因权限放宽自动绕过配网安全门槛。
 
-历史上曾暂停意图与语音链路调试并限制为首台；现行顺序恢复真人功能回归，先逐台完成 3～8 台单机验收，再做多台并发回归，最后按“最终候选版本功能/数据/链路 → 网络/IP 恢复 → 72 小时稳定性”验收。技术方案第 14 章声学指标仍保留，但本轮只作诊断，不扩大到同步音乐或左右声道实验。
+历史上曾暂停意图与语音链路调试并限制为首台；现行顺序恢复正确姿态下的真人功能、方向、距离、声学和体感回归，先完成 `r1-sample01`，再逐台完成 3～8 台单机验收，最后做多台并发回归。技术方案第 14 章声学指标恢复为真机验收项目；同步音乐或左右声道实验仍不在当前范围。
+
+2026-09-16 姿态纠正补充决定：此前麦克风朝下期间的方向、距离、声学和主观体验结果仅作历史证据，正确摆放后恢复真人真机验收；旧条目中的“用户跳过/停止”不再是当前执行规则。当前重测入口见[姿态纠正与真机验收恢复决定](docs/2026-09-16-r1-repositioned-microphone-revalidation-plan.md)。
 
 ## Git 与开发流程
 
@@ -130,3 +153,5 @@ python3 tools/native/manage-r1-native.py status <adb-serial>
 - [Alexa 来源与许可边界](docs/2026-09-05-alexa-pretrained.md)、[原包隔离证据](docs/2026-09-06-r1-nonroot-isolation.md)、[原厂音频 Root 路线](docs/2026-09-08-r1-factory-audio-root-plan.md)、[免拆分级授权](docs/2026-09-11-r1-no-disassembly-authorization.md)。
 
 不保存凭据或新增家庭对话录音。原厂库、APK、DSP固件、校准、备份和修改镜像不进入公开仓库；任何分区修改都必须使用与目标范围相称的设备双读备份和写后读回门禁，完整恢复能力仍按R0单独记录。代码支持、主机测试通过和实机验收通过分别记录。
+- 2026-09-16 v172 将播放中候选阈值调整为 `32/255`。首台 R1 有效长回答播放测试中，播放中 KWS 峰值 `246`，达到32的推理帧3，AEC KWS检测1、实际回复取消1，输入/输出削波0、播放欠载0；说明32在本次低回声条件下可触发。后续输入虽形成多个命令窗口，但未形成新的TTS播放，不能计为独立阈值轮次，仍需补足多轮有效播放和纯回声误触发测试。APK SHA-256 为 `4282817bed18c8165f0755443324e30a45064ee8f2b4fa1d967558c4dc6a38dd`。
+- 2026-09-16 v173 对照测试将播放中 KWS 阈值临时设为与首次唤醒相同的 `229/255`。首台长回答播放期间用户说 Alexa，AEC KWS 最高分 `246`，达到 `229` 的推理帧7，检测1次并实际取消回复1次；输入/输出削波0、播放欠载0，打断后恢复到后续命令处理。该结果支持将播放中默认阈值设为 `229`，但仍需低音量/远距离和纯回声负例复测。详见[阈值229对照测试归档](docs/2026-09-16-r1-playback-wake-threshold-229.md)。
