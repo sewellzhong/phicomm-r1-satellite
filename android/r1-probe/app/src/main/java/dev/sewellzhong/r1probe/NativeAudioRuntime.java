@@ -9,6 +9,7 @@ import dev.sewellzhong.r1probe.assist.CommandWindow;
 import dev.sewellzhong.r1probe.assist.DiagnosticWindowRequest;
 import dev.sewellzhong.r1probe.assist.PcmPrebuffer;
 import dev.sewellzhong.r1probe.assist.PlaybackBargeInGate;
+import dev.sewellzhong.r1probe.assist.PromptSettleGate;
 import dev.sewellzhong.r1probe.assist.TtsRuntimeStats;
 import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
 import dev.sewellzhong.r1probe.esphome.NativeAnnouncementController;
@@ -83,6 +84,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private volatile long emptyResumes, endingPrompts;
     private volatile boolean followupArming;
     private volatile long followupSettleEvents, followupDiscardedFrames;
+    private volatile long promptSettleEvents, promptSettleDiscardedFrames;
     private volatile long playbackReferenceSuppressedFrames, playbackTailSuppressedFrames;
     private volatile long replyKwsFrames, replyKwsInferences;
     private volatile int replyKwsPeakRaw;
@@ -105,6 +107,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private final dev.sewellzhong.r1probe.assist.ContinuousDialogueGuard dialogueGuard =
             new dev.sewellzhong.r1probe.assist.ContinuousDialogueGuard();
     private final TtsRuntimeStats ttsStats = new TtsRuntimeStats();
+    private final PromptSettleGate promptSettle = new PromptSettleGate(FOLLOWUP_SETTLE_NANOS);
     private dev.sewellzhong.r1probe.esphome.NativePcmPlayback.Sink referenceSink() {
         NativeVolume volume = new NativeVolume(context, settings);
         NativeAudioTrackSink sink = new NativeAudioTrackSink(volume);
@@ -193,6 +196,11 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
             Arrays.fill(discard,(short)0);
             if(stopping.get()) worker.join(1500);
         }
+    }
+    private void armPromptSettle() {
+        promptSettle.arm(System.nanoTime());
+        promptSettleEvents = promptSettle.events();
+        diagnosticEvent("prompt_settle_armed,ms=" + FOLLOWUP_SETTLE_NANOS / 1_000_000L);
     }
     private void endingPrompt() throws Exception {
         int next = promptRandom.nextInt(lastEndingPrompt < 0 ? 4 : 3);
@@ -377,6 +385,10 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                         ? "none" : "playback_tail_echo_unverified")
                 .put("followup_settle_ms", FOLLOWUP_SETTLE_NANOS / 1_000_000L)
                 .put("followup_arming", followupArming)
+                .put("prompt_settle_ms", FOLLOWUP_SETTLE_NANOS / 1_000_000L)
+                .put("prompt_settle_arming", promptSettle.armed())
+                .put("prompt_settle_events", promptSettleEvents)
+                .put("prompt_settle_discarded_frames", promptSettleDiscardedFrames)
                 .put("followup_settle_events", followupSettleEvents)
                 .put("followup_discarded_frames", followupDiscardedFrames)
                 .put("followup_onset_voiced_frames", 15)
@@ -780,7 +792,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     if (!following) dialogueGuard.reset();
                     status = "diagnostic_prompt";
                     if (following) { startRecorder(); }
-                    else { controls.wake(); prompt("ack", requestedWindow.select(selector)); }
+                    else { controls.wake(); prompt("ack", requestedWindow.select(selector)); armPromptSettle(); }
                     windowSource = "local_admin_diagnostic";
                     window = settings.window(following); openedWindow(window,following); waiting = true;
                     status = following ? "waiting_followup" : "waiting_command";
@@ -822,7 +834,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                         bargePending = bargeEnded = false; bargeWindow = null; bargeCapture.clear();
                         playbackInput.clear();
                         releaseRecorder(); status = "acknowledging_interrupt";
-                        prompt("ack", selector.next());
+                        prompt("ack", selector.next()); armPromptSettle();
                         following = false;
                         window = settings.window(false); openedWindow(window, false);
                         waiting = true; status = "waiting_command";
@@ -1150,7 +1162,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                                     vendorAecDetectionScore);
                             releaseRecorder(); status = "acknowledging";
                             requireAudioPermission();
-                            prompt("ack", selector.next());
+                            prompt("ack", selector.next()); armPromptSettle();
                             following = false; vad.reset(); engine.reset(); index = 0; fill = 0;
                             window = settings.window(following); openedWindow(window, following);
                             waiting = true; status = "waiting_command";
@@ -1204,9 +1216,16 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     if (!interruptibleReply) history.clear();
                     continue;
                 }
-                if (waiting && followupArming) {
-                    history.clear(); vad.reset(); followupDiscardedFrames++;
-                    if (lastRead < followupNotBefore) continue;
+                if (waiting && (followupArming || promptSettle.armed())) {
+                    history.clear(); vad.reset();
+                    if (followupArming) followupDiscardedFrames++;
+                    if (promptSettle.armed()) {
+                        promptSettleDiscardedFrames = promptSettle.discardedFrames();
+                        if (promptSettle.discard(lastRead)) continue;
+                        promptSettleDiscardedFrames = promptSettle.discardedFrames();
+                        diagnosticEvent("prompt_settle_complete");
+                    }
+                    if (followupArming && lastRead < followupNotBefore) continue;
                     followupArming = false; promptReference.clear(); engine.reset(); index = 0;
                     window = settings.window(true); openedWindow(window, true);
                     status = "waiting_followup";
@@ -1278,7 +1297,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     media.interrupt(NativeMediaController.Interruption.VOICE);
                     releaseRecorder(); history.clear(); status = "acknowledging";
                     requireAudioPermission();
-                    prompt("ack", selector.next());
+                    prompt("ack", selector.next()); armPromptSettle();
                     following = false;
                     vad.reset(); engine.reset(); index = 0; fill = 0;
                     window = settings.window(following); openedWindow(window,following); waiting = true; status = "waiting_command";
