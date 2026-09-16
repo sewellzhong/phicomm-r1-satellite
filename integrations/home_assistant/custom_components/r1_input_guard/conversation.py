@@ -10,7 +10,13 @@ from homeassistant.helpers import entity_registry as er, intent
 from homeassistant.helpers import chat_session
 from homeassistant.exceptions import HomeAssistantError
 
-_END = {"结束对话", "取消本次对话", "取消这次对话", "不用回答了"}
+# These are deliberately whole-command matches. Object-bearing commands such as
+# "停止播放" and "取消计时器" must still reach their normal HA handlers.
+_END = {
+    "停止", "取消", "结束", "结束会话", "结束对话", "结束当前会话", "结束当前对话",
+    "停止当前会话", "停止当前对话", "取消当前会话", "取消当前对话",
+    "取消本次对话", "取消这次对话", "不用回答了", "不用继续了", "不继续了", "不用等了",
+}
 
 def is_end(text):
     value = unicodedata.normalize("NFKC", text).casefold()
@@ -131,11 +137,17 @@ class NativeConversation(conversation.ConversationEntity):
             if victim is None:
                 raise HomeAssistantError("r1_conversation_capacity")
             del self._sessions[victim]
-        if is_end(user_input.text):
+        # End words are special only inside an existing continuous session or
+        # pending control context. On the first turn, a bare "停止" or "取消"
+        # remains an ordinary HA command (for example, stopping media).
+        if (key in self._sessions or key in self._controls) and is_end(user_input.text):
             self._controls.pop(key, None)
             self._sessions.pop(key, None)
             response = intent.IntentResponse(language=user_input.language)
-            response.async_set_speech("")
+            # The caller selected confirmation feedback. This is the only output
+            # for an end intent; the conversation is not continued and the text
+            # is never delegated to HA or the model.
+            response.async_set_speech("好的")
             return conversation.ConversationResult(response=response, conversation_id=outer, continue_conversation=False)
         from .interaction import bridge
         from .controls import parse_control

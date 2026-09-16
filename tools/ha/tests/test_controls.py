@@ -74,7 +74,7 @@ class ControlTest(unittest.IsolatedAsyncioTestCase):
         await self.ask('音量调到100%')
         self.assertIn('上限',await self.ask('音量大一点'))
         self.assertIn('请说明',await self.ask('再小一点',session='new'))
-        await self.ask('结束对话')
+        await self.ask('结束当前会话')
         self.assertIn('请说明',await self.ask('再小一点'))
         self.owner.set_volume.side_effect=HomeAssistantError('offline')
         self.assertIn('未能确认',await self.ask('音量调到35%'))

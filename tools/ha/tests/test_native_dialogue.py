@@ -178,15 +178,36 @@ class ConversationTest(unittest.IsolatedAsyncioTestCase):
         self.clock.return_value=991;await self.agent.async_process(self.user())
         self.assertNotEqual(self.inner[1]['conversation_id'],self.inner[2]['conversation_id'])
 
-    async def test_explicit_end_clears_but_cancel_and_short_answers_delegate(self):
+    async def test_explicit_end_clears_with_one_confirmation_but_object_commands_delegate(self):
         await self.agent.async_process(self.user())
         result=await self.agent.async_process(self.user('结束对话。'))
-        self.assertFalse(result.continue_conversation);self.assertEqual('',result.response.speech['plain']['speech'])
+        self.assertFalse(result.continue_conversation);self.assertEqual('好的',result.response.speech['plain']['speech'])
         self.assertEqual(1,len(self.inner))
-        for text in ['取消','停止','好','是','嗯','客厅','５']:
+        for text in ['取消播放','停止播放','取消计时器','取消闹钟','好','是','嗯','客厅','５']:
             await self.agent.async_process(self.user(text))
             self.assertEqual(text,self.inner[-1]['text'])
         self.assertNotEqual(self.inner[0]['conversation_id'],self.inner[1]['conversation_id'])
+
+    async def test_all_explicit_end_variants_clear_session_and_do_not_delegate(self):
+        for text in ['停止','取消','结束','结束会话','停止当前会话','取消当前对话',
+                     '不用继续了','不用等了']:
+            self.inner.clear()
+            result=await self.agent.async_process(self.user())
+            self.assertTrue(result.continue_conversation)
+            delegated_before_end=len(self.inner)
+            result=await self.agent.async_process(self.user(text))
+            with self.subTest(text=text):
+                self.assertFalse(result.continue_conversation)
+                self.assertEqual('好的',result.response.speech['plain']['speech'])
+                self.assertEqual(delegated_before_end,len(self.inner))
+
+    async def test_end_words_without_continuous_session_remain_normal_commands(self):
+        for text in ['停止', '取消', '结束']:
+            self.inner.clear()
+            result=await self.agent.async_process(self.user(text,satellite='first-' + text))
+            with self.subTest(text=text):
+                self.assertTrue(result.continue_conversation)
+                self.assertEqual(text,self.inner[-1]['text'])
 
     async def test_users_and_satellites_are_isolated(self):
         await self.agent.async_process(self.user())
