@@ -19,11 +19,11 @@
 
 ## 首台候选构建
 
-- 当前工作树 `HEAD`：`0b6f2dac401c063ef66b7019a39668f95b5f3105`；工作树仍有未提交功能改动，不能把该 SHA 单独作为候选源码标识。
+- 候选源码提交：`d7cb438f74a756af26d650a33d1921b9051f42ac`；该提交包含本次播放中打断门控、配网状态实现和验证记录。
 - 生产包构建参数：`-PprobeVersionCode=172 -PprobeVersionName=1.72-playback-barge-provisioning assembleDebug`。
 - APK：包名 `dev.sewellzhong.r1probe`，API 22，versionCode `172`，SHA-256 `57417123e6cbad67e3528ed9df58950be9456a67fb055c3d56f73d37b3a055f0`。
 - 签名证书 SHA-256：`0be7a3643442658354c185ec53cb50e73bc1516a56f2760ca46f2c932c1d2639`，与现有设备候选签名一致。
-- 当前状态：未部署、未连接 ADB/HA、未形成首台实机证据。
+- 当前状态：候选已冻结并提交；未部署、未连接 ADB/HA、未形成首台实机证据。
 
 ## 未验证项
 
