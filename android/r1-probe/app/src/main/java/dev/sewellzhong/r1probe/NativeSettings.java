@@ -66,7 +66,10 @@ public final class NativeSettings {
     dev.sewellzhong.r1probe.assist.CommandWindow window(boolean followup) {
         return followup
                 ? new dev.sewellzhong.r1probe.assist.CommandWindow(
-                        followupWaitSeconds(), quietSeconds(), commandSeconds(), 6, 15, 10)
+                        // A short post-prompt environmental burst can remain VAD-positive
+                        // for several frames. Require ~300 ms of strong evidence before
+                        // taking the fast onset path; sustained speech still uses 15/15.
+                        followupWaitSeconds(), quietSeconds(), commandSeconds(), 6, 15, 15)
                 : new dev.sewellzhong.r1probe.assist.CommandWindow(
                         waitSeconds(), quietSeconds(), commandSeconds(), 6);
     }

@@ -48,7 +48,10 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     // of 246, not five consecutive outputs at or above 229.
     private static final int PLAYBACK_REPLY_KWS_CUTOFF = 229;
     private static final boolean AUTOMATIC_FOLLOWUP_ENABLED = true;
-    private static final long FOLLOWUP_SETTLE_NANOS = 1_200_000_000L;
+    // The measured prompt tail is below 300 ms. Keep a bounded 500 ms guard so
+    // the tail cannot start VAD, while a user who speaks after the prompt is
+    // not silently discarded for the former 1.2 s fixed interval.
+    private static final long FOLLOWUP_SETTLE_NANOS = 500_000_000L;
     private static final int REPLY_REPLAY_DELAY_FRAMES = 40;
     private final Context context;
     private AudioDiagnostic diagnostic;
@@ -392,7 +395,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("followup_settle_events", followupSettleEvents)
                 .put("followup_discarded_frames", followupDiscardedFrames)
                 .put("followup_onset_voiced_frames", 15)
-                .put("followup_onset_strong_frames", 10)
+                .put("followup_onset_strong_frames", 15)
                 .put("fixed_pcm_runs", fixedPcmRuns).put("fixed_pcm_cancels", fixedPcmCancels)
                 .put("playback_requested_ms", playback.requestedMillis())
                 .put("playback_first_write_ms", playback.firstWriteMillis())

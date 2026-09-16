@@ -45,13 +45,19 @@ public final class CommandWindowTest {
         assertEquals(END, w.accept(true));
     }
     @Test public void followupRejectsShortTailButAcceptsClearShortReply() {
-        CommandWindow tail = new CommandWindow(10,1.8f,30,6,15,10);
-        for(int i=0;i<9;i++)assertEquals(WAIT,tail.acceptQualified(true,true));
+        CommandWindow tail = new CommandWindow(10,1.8f,30,6,15,15);
+        for(int i=0;i<14;i++)assertEquals(WAIT,tail.acceptQualified(true,true));
         for(int i=0;i<20;i++)assertEquals(WAIT,tail.acceptQualified(false,false));
-        CommandWindow clear = new CommandWindow(10,1.8f,30,6,15,10);
-        for(int i=0;i<9;i++)assertEquals(WAIT,clear.acceptQualified(true,true));
+        CommandWindow clear = new CommandWindow(10,1.8f,30,6,15,15);
+        for(int i=0;i<14;i++)assertEquals(WAIT,clear.acceptQualified(true,true));
         assertEquals(START,clear.acceptQualified(true,true));
         assertEquals("strong_voice",clear.onsetReason());
+    }
+
+    @Test public void tenFrameEnvironmentalBurstDoesNotStartFastPath() {
+        CommandWindow window = new CommandWindow(10,1.8f,30,6,15,15);
+        for (int i=0;i<10;i++) assertEquals(WAIT, window.acceptQualified(true,true));
+        assertEquals(WAIT, window.acceptQualified(false,false));
     }
     @Test public void followupStillAcceptsSustainedQuietReply() {
         CommandWindow quiet = new CommandWindow(10,1.8f,30,6,15,10);

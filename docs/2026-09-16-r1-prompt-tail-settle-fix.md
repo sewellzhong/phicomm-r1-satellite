@@ -8,7 +8,7 @@ V175 六轮静默负向在首轮约 120 ms 处判定 `speech`，峰值 RMS 约 6
 
 ## 修复
 
-所有本地提示音完成后统一进入 1.2 秒 `PromptSettleGate`：
+所有本地提示音完成后统一进入 500 ms `PromptSettleGate`：
 
 - 丢弃提示音尾部和 `promptHandoff` 帧；
 - 不运行命令 VAD、起音判断或 Assist 上传；
@@ -21,3 +21,4 @@ V175 六轮静默负向在首轮约 120 ms 处判定 `speech`，峰值 RMS 约 6
 - `PromptSettleGateTest` 覆盖保护期内丢弃、到期开放和重复 arm。
 - Android `testDebugUnitTest`、`lintDebug`、`assembleDebug` 通过。
 - V175 失败证据原样保留；V176 需重新安装后执行六轮静默和真人回归。
+- V177 真人回归显示原 1.2 秒保护期会吞掉确认音后的短命令；当前缩短为 500 ms，仍覆盖已观测的 300 ms 内提示音尾部。

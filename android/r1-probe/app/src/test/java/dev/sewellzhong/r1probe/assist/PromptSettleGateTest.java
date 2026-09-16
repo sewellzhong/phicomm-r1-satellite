@@ -5,11 +5,11 @@ import static org.junit.Assert.*;
 
 public final class PromptSettleGateTest {
     @Test public void dropsPromptTailUntilDeadlineThenOpens() {
-        PromptSettleGate gate = new PromptSettleGate(1_200_000_000L);
+        PromptSettleGate gate = new PromptSettleGate(500_000_000L);
         gate.arm(10_000_000_000L);
         assertTrue(gate.discard(10_000_000_001L));
-        assertTrue(gate.discard(11_199_999_999L));
-        assertFalse(gate.discard(11_200_000_000L));
+        assertTrue(gate.discard(10_499_999_999L));
+        assertFalse(gate.discard(10_500_000_000L));
         assertFalse(gate.armed());
         assertEquals(1, gate.events());
         assertEquals(2, gate.discardedFrames());
