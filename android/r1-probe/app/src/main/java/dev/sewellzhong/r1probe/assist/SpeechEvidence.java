@@ -22,7 +22,11 @@ public final class SpeechEvidence {
             else floor += (rms < floor ? .15 : .005) * (rms - floor);
         }
         // R1 raw speech is quiet (~54 RMS in the accepted recording); preserve it.
-        // 24 PCM RMS minimum and 6 dB above ambient; VAD alone is not proof of speech.
-        return vad && rms >= Math.max(24, floor * 2);
+        // The previous 24-RMS floor let learned ambient levels around 11 accept
+        // short VAD-positive noise bursts (observed as a 220 ms silent-window
+        // false start). VAD alone is not proof of speech: retain the ambient
+        // rise check, but impose a conservative raw-PCM floor below the measured
+        // quiet speech level. This is an implementation guard, not an OEM spec.
+        return vad && rms >= Math.max(48, floor * 2);
     }
 }

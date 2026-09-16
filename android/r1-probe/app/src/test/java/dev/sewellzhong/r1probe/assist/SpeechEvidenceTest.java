@@ -84,6 +84,17 @@ public class SpeechEvidenceTest {
         for(int i=0;i<5;i++) assertEquals(CommandWindow.Decision.WAIT,window.accept(gate.accept(tone(76),true,false)));
         assertEquals(CommandWindow.Decision.START,window.accept(gate.accept(tone(76),true,false)));
     }
+
+    @Test public void lowLevelVadNoiseDoesNotStartWindow() {
+        SpeechEvidence gate = new SpeechEvidence();
+        CommandWindow window = new CommandWindow(20,1.8f,30,6);
+        gate.accept(tone(20), false, true);
+        for (int i = 0; i < 11; i++) {
+            boolean speech = gate.accept(tone(50), true, false); // ~35 RMS, VAD false-positive range.
+            assertFalse(speech);
+            assertEquals(CommandWindow.Decision.WAIT, window.acceptQualified(speech, false));
+        }
+    }
     @Test public void learnedAmbientRequiresEnergyRiseAndVad() {
         SpeechEvidence gate = new SpeechEvidence();
         gate.accept(tone(400),false,true);
