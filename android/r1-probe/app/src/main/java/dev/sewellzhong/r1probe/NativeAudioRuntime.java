@@ -9,6 +9,7 @@ import dev.sewellzhong.r1probe.assist.CommandWindow;
 import dev.sewellzhong.r1probe.assist.DiagnosticWindowRequest;
 import dev.sewellzhong.r1probe.assist.PcmPrebuffer;
 import dev.sewellzhong.r1probe.assist.PlaybackBargeInGate;
+import dev.sewellzhong.r1probe.assist.TtsRuntimeStats;
 import dev.sewellzhong.r1probe.esphome.NativeApiConnection;
 import dev.sewellzhong.r1probe.esphome.NativeAnnouncementController;
 import dev.sewellzhong.r1probe.esphome.NativeAlarmController;
@@ -103,6 +104,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     private final dev.sewellzhong.r1probe.assist.PromptReference promptReference = new dev.sewellzhong.r1probe.assist.PromptReference();
     private final dev.sewellzhong.r1probe.assist.ContinuousDialogueGuard dialogueGuard =
             new dev.sewellzhong.r1probe.assist.ContinuousDialogueGuard();
+    private final TtsRuntimeStats ttsStats = new TtsRuntimeStats();
     private dev.sewellzhong.r1probe.esphome.NativePcmPlayback.Sink referenceSink() {
         NativeVolume volume = new NativeVolume(context, settings);
         NativeAudioTrackSink sink = new NativeAudioTrackSink(volume);
@@ -228,7 +230,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
     public String failureCode() { return failure; }
     private volatile long frames, wakes, replyWakeInterruptions, announcementWakeInterruptions,
             directBargeInterruptions,
-            directBargeRejections, commands, transcripts, replies, completed, noInputs;
+            directBargeRejections, commands, transcripts, completed, noInputs;
     private volatile String directBargeBlockReason = "awaiting_aec";
     private volatile long replyContinuousObservedDetections, replyReplayAttempts,
             replyReplayDetections, replyReplayMaxMicros;
@@ -300,7 +302,10 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 .put("window_wait_ms", windowWaitMillis).put("window_kind", windowKind).put("window_source", windowSource).put("window_id", windowId).put("onset_trace_ms_peak_vad_speech_strong", onsetTraceJson()).put("onset_reason", onsetReason).put("onset_ms", onsetMillis).put("voiced_ms", voicedMillis)
                 .put("command_ms", commandMillis).put("input_bytes", inputBytes).put("end_reason", endReason)
                 .put("rms", Math.round(rms)).put("noise_floor", Math.round(noiseFloor))
-                .put("commands", commands).put("stt_results", transcripts).put("tts_streams", replies)
+                .put("commands", commands).put("stt_results", transcripts).put("tts_streams", ttsStats.streams())
+                .put("tts_responses", ttsStats.responses())
+                .put("tts_playback_completed", ttsStats.playbackCompleted())
+                .put("tts_playback_failed", ttsStats.playbackFailed())
                 .put("reply_wake_interruptions", replyWakeInterruptions)
                 .put("announcement_wake_interruptions", announcementWakeInterruptions)
                 .put("last_wake_source", lastWakeSource)
@@ -543,6 +548,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
             media.release(NativeMediaController.Interruption.VOICE);
             throw error;
         }
+        ttsStats.beginRun();
         fixedPcmRun = true; fixedPcmRuns++; inputBytes = 0;
         ttsStreamStartMillis = haRunEndMillis = 0;
         status = "injecting_fixed_pcm";
@@ -629,12 +635,17 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                             dev.sewellzhong.r1probe.esphome.proto.EsphomeApi.VoiceAssistantEventResponse
                                     .parseFrom(payload).getDataList()) {
                         if ("tts_start_streaming".equals(data.getName()) && "1".equals(data.getValue())) {
-                            replies++; ttsStreamStartMillis = eventMillis;
+                            ttsStats.response(true); ttsStreamStartMillis = eventMillis;
                         }
                     }
                     break;
+                case VOICE_ASSISTANT_TTS_START:
+                    ttsStats.response(false); break;
+                case VOICE_ASSISTANT_TTS_END:
+                    if (!ttsStats.responseSeen()) ttsStats.response(false);
+                    break;
                 case VOICE_ASSISTANT_TTS_STREAM_START:
-                    replies++; ttsStreamStartMillis = eventMillis; break;
+                    ttsStats.response(true); ttsStreamStartMillis = eventMillis; break;
                 case VOICE_ASSISTANT_RUN_END: haRunEndMillis = eventMillis; break;
                 default: break;
             }
@@ -752,6 +763,10 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                 if (fixedPcmRun && coordinator.ready()) {
                     NativeVoiceSession.Outcome fixedOutcome = coordinator.outcome();
                     if (fixedOutcome == NativeVoiceSession.Outcome.COMPLETE) completed++;
+                    if (fixedOutcome == NativeVoiceSession.Outcome.COMPLETE)
+                        ttsStats.finish(true);
+                    else if (fixedOutcome == NativeVoiceSession.Outcome.FAILED)
+                        ttsStats.finish(false);
                     fixedPcmRun = false;
                     media.release(NativeMediaController.Interruption.VOICE);
                     status = fixedOutcome == NativeVoiceSession.Outcome.FAILED
@@ -770,11 +785,18 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                     window = settings.window(following); openedWindow(window,following); waiting = true;
                     status = following ? "waiting_followup" : "waiting_command";
                 }
-                if (coordinator.failure() != null) throw new IOException("native_transport_failed");
+                if (coordinator.failure() != null) {
+                    ttsStats.finish(false);
+                    throw new IOException("native_transport_failed");
+                }
                 if (busy && coordinator.ready()) {
                     NativeVoiceSession.Outcome outcome = coordinator.outcome();
                     NativeAudioCoordinator.RestartReason restart = coordinator.takeRestart();
                     if (outcome == NativeVoiceSession.Outcome.COMPLETE) completed++;
+                    if (outcome == NativeVoiceSession.Outcome.COMPLETE)
+                        ttsStats.finish(true);
+                    else if (outcome == NativeVoiceSession.Outcome.FAILED)
+                        ttsStats.finish(false);
                     busy = false; commandActive = false;
                     if (restart == NativeAudioCoordinator.RestartReason.DIRECT_SPEECH
                             && outcome == NativeVoiceSession.Outcome.CANCELLED && bargePending
@@ -782,6 +804,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                         playbackInput.clear();
                         byte[] buffered = bargeCapture.snapshot();
                         inputBytes = buffered.length;
+                        ttsStats.beginRun();
                         try { coordinator.begin(buffered); } finally { Arrays.fill(buffered, (byte) 0); }
                         dialogueGuard.commandStarted();
                         commands++; busy = true; commandActive = !bargeEnded;
@@ -1216,6 +1239,7 @@ public final class NativeAudioRuntime implements NativeApiConnection.Handler {
                         onsetMillis = window.waitingMillis(); onsetReason = window.onsetReason(); endReason = "speech";
                         byte[] onset = history.snapshot(15);
                         inputBytes = onset.length;
+                        ttsStats.beginRun();
                         try { coordinator.begin(onset); } finally { Arrays.fill(onset, (byte) 0); }
                         dialogueGuard.commandStarted();
                         diagnosticEvent("command_start,window="+windowId+",onset_ms="+onsetMillis);
